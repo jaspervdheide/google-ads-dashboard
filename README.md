@@ -1,98 +1,137 @@
 # Google Ads Dashboard
 
-A comprehensive PPC management tool for managing Google Ads campaigns across multiple countries.
+A modern, comprehensive PPC management tool for managing Google Ads campaigns across multiple countries.
 
-## Project Structure
+## 🚀 Features
 
-This project contains two implementations of the Google Ads dashboard:
+* **Multi-Country Support**: Manage campaigns for 14 different countries
+* **Real-time Data**: Live Google Ads API integration
+* **Modern UI**: Built with Next.js, TypeScript, and Tailwind CSS
+* **Security**: Environment variable-based configuration
+* **Campaign Metrics**: View impressions, clicks, and costs
+* **Interactive Interface**: Easy country selection and data visualization
 
-### 📊 [Streamlit/](./Streamlit/) - Python Implementation
-- **Status**: ✅ **Production Ready**
-- **Technology**: Python + Streamlit
-- **Features**: Multi-country campaign management, real-time metrics
-- **Port**: 8501
+## 🛠️ Technology Stack
 
-### ⚛️ [Next.js/](./Next.js/) - Modern Web Implementation  
-- **Status**: ✅ **API Working** - Ready for dashboard development
-- **Technology**: Next.js + TypeScript + Tailwind CSS
-- **Features**: Modern React-based UI, API-first architecture
-- **Port**: 3000
+* **Frontend**: Next.js 14 + TypeScript + Tailwind CSS
+* **API**: Google Ads API integration
+* **Authentication**: OAuth 2.0 with Google Ads API
+* **Deployment**: Vercel-ready
 
-## Quick Start
+## 🏃 Quick Start
 
-### Run Streamlit Version
 ```bash
-cd Streamlit
-source .venv/bin/activate
-streamlit run mcc_dashboard.py --server.port 8501
-```
+# Clone the repository
+git clone https://github.com/jaspervdheide/google-ads-dashboard.git
+cd google-ads-dashboard
 
-### Run Next.js Version
-```bash
+# Navigate to the project directory
 cd Next.js
+
+# Install dependencies
+npm install
+
+# Set up environment variables (see below)
+cp .env.local.example .env.local
+
+# Run the development server
 npm run dev
 ```
 
-## Google Ads API Integration
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-Both implementations successfully connect to the Google Ads API using:
-- **MCC Account**: Multi-country management
-- **Countries**: NL, DE, BE, FR, UK
-- **Real-time Data**: Campaign performance, metrics, account info
+## 🔧 Environment Variables
 
-## Environment Variables
+Create a `.env.local` file in the `Next.js` directory with the following variables:
 
-Both implementations use the same credentials stored in `.env` files:
-- `DEVELOPER_TOKEN`
-- `CLIENT_ID` 
-- `CLIENT_SECRET`
-- `REFRESH_TOKEN`
-- `MCC_CUSTOMER_ID`
+```env
+DEVELOPER_TOKEN=your_developer_token
+CLIENT_ID=your_client_id
+CLIENT_SECRET=your_client_secret
+REFRESH_TOKEN=your_refresh_token
+MCC_CUSTOMER_ID=your_mcc_customer_id
+```
 
-## Next Steps
-
-Choose your preferred implementation:
-- **Streamlit**: For quick data analysis and reporting
-- **Next.js**: For building a modern, scalable web application
-
-Both are fully functional and ready for further development!
-
-## Features
-
-- **Multi-Country Support**: Manage campaigns for 14 different countries
-- **Real-time Data**: Live Google Ads API integration
-- **Security**: Environment variable-based configuration
-- **Campaign Metrics**: View impressions, clicks, and costs
-- **Interactive Interface**: Easy country selection and data visualization
-
-## Country Accounts
+## 🌍 Supported Countries
 
 The dashboard supports the following country accounts:
-- Netherlands (NL)
-- Belgium (BE) 
-- Germany (DE)
-- Denmark (DK)
-- Spain (ES)
-- Finland (FI)
-- France - Ravann (FR)
-- France - Tapis (FR)
-- Italy (IT)
-- Norway (NO)
-- Poland (PL)
-- Sweden (SE)
-- European Union (EU)
-- United Kingdom (UK)
 
-## Usage
+* Netherlands (NL)
+* Belgium (BE)
+* Germany (DE)
+* Denmark (DK)
+* Spain (ES)
+* Finland (FI)
+* France - Ravann (FR)
+* France - Tapis (FR)
+* Italy (IT)
+* Norway (NO)
+* Poland (PL)
+* Sweden (SE)
+* European Union (EU)
+* United Kingdom (UK)
 
-1. Open your browser to `http://localhost:8501`
-2. Select a country from the sidebar
-3. View campaign performance metrics
-4. Analyze campaign data in the interactive table
+## 📁 Project Structure
 
-## Files
+```
+Next.js/
+├── src/
+│   ├── app/
+│   │   ├── api/          # API routes
+│   │   │   └── ...
+│   │   ├── components/   # React components
+│   │   └── page.tsx      # Main dashboard page
+│   └── lib/              # Utilities and configurations
+├── public/               # Static assets
+└── ...config files
+```
 
-- `mcc_dashboard.py` - Main Streamlit application
-- `setup_credentials.py` - Helper script for credential setup
-- `.env` - Environment variables (keep secure)
-- `requirements.txt` - Python dependencies 
+## 🔌 API Endpoints
+
+* `/api/accounts` - Get MCC account information
+* `/api/campaigns` - Get campaign data for selected country
+* `/api/ad-groups` - Get ad group metrics
+* `/api/historical-data` - Get historical performance data
+* `/api/anomalies` - Detect performance anomalies
+
+## 🚀 Deployment
+
+This project is configured for easy deployment on Vercel:
+
+```bash
+# Deploy to Vercel
+npm run build
+vercel --prod
+```
+
+Make sure to add your environment variables in the Vercel dashboard.
+
+## 📊 Google Ads API Integration
+
+This dashboard uses the Google Ads API to fetch real-time data:
+
+* **MCC Account**: Multi-country management capability
+* **Real-time Metrics**: Campaign performance, impressions, clicks, costs
+* **Secure Authentication**: OAuth 2.0 flow with refresh token storage
+
+## 🔒 Security
+
+* All sensitive credentials are stored in environment variables
+* API keys and tokens are never committed to the repository
+* Proper `.gitignore` configuration prevents accidental credential exposure
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📝 License
+
+This project is private and proprietary.
+
+---
+
+**Status**: ✅ Production Ready - Modern React-based dashboard with full Google Ads API integration 
