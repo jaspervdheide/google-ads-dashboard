@@ -1,0 +1,3820 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { 
+  LayoutDashboard, 
+  Target, 
+  Search, 
+  FileBarChart, 
+  Settings, 
+  Bell, 
+  User,
+  TrendingUp,
+  ChevronDown,
+  Plus,
+  ChevronRight,
+  AlertTriangle,
+  AlertCircle,
+  Info,
+  ExternalLink,
+  X,
+  Award,
+  Package,
+  MousePointer,
+  Eye,
+  Euro,
+  CreditCard,
+  CheckCircle,
+  BarChart3,
+  Calculator,
+  Trophy,
+  ArrowUp,
+  ArrowDown,
+  Calendar,
+  Clock,
+  History,
+  CalendarDays,
+  ArrowUpDown,
+  Filter,
+  MoreHorizontal,
+  Play,
+  Pause,
+  Edit,
+  Zap
+} from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+
+// Custom Kovvar Icon Component
+const KovvarIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <g>
+      {/* Large curved arrow */}
+      <path d="M2 18 C2 10, 8 5, 16 8 C18 9, 19 10, 19 12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round"/>
+      
+      {/* Medium curved arrow */}
+      <path d="M5 16 C5 12, 9 9, 14 10 C15.5 10.5, 16 11.5, 16 13" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+      
+      {/* Arrow head pointing right */}
+      <path d="M16 10 L20 12 L16 14 Z" fill="currentColor"/>
+      
+      {/* Small curved element */}
+      <path d="M8 14 C8 12, 10 11, 12 12" stroke="currentColor" strokeWidth="1" fill="none" strokeLinecap="round"/>
+    </g>
+  </svg>
+);
+
+interface Account {
+  id: string;
+  name: string;
+  currency: string;
+  timeZone: string;
+  countryCode: string;
+  totalClicks?: number; // Add total clicks for filtering
+}
+
+interface Campaign {
+  id: string;
+  name: string;
+  status: string;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  ctr: number;
+  avgCpc: number;
+  conversions: number;
+  conversionsValue: number;
+  conversionRate: number;
+  cpa: number;
+  roas: number;
+}
+
+interface AdGroup {
+  id: string;
+  name: string;
+  status: string;
+  campaignId: string;
+  campaignName?: string;
+  campaignType?: string;
+  groupType?: 'ad_group' | 'asset_group';
+  impressions: number;
+  clicks: number;
+  cost: number;
+  ctr: number;
+  avgCpc: number;
+  conversions: number;
+  conversionsValue: number;
+  conversionRate?: number;
+  cpa: number;
+  roas: number;
+  // Performance Max specific fields
+  adStrength?: 'Poor' | 'Good' | 'Excellent';
+  assetCoverage?: number;
+}
+
+interface CampaignData {
+  campaigns: Campaign[];
+  totals: {
+    impressions: number;
+    clicks: number;
+    cost: number;
+    ctr: number;
+    avgCpc: number;
+    conversions: number;
+    conversionsValue: number;
+    conversionRate: number;
+    cpa: number;
+    roas: number;
+  };
+  dateRange: {
+    days: number;
+    startDate: string;
+    endDate: string;
+  };
+  customerId: string;
+}
+
+interface AdGroupData {
+  adGroups: AdGroup[];
+  campaignId: string;
+  dateRange: {
+    days: number;
+    startDate: string;
+    endDate: string;
+  };
+  customerId: string;
+}
+
+interface Anomaly {
+  id: string;
+  accountId: string;
+  accountName: string;
+  countryCode: string;
+  severity: 'high' | 'medium' | 'low';
+  type: 'business' | 'statistical';
+  category: string;
+  title: string;
+  description: string;
+  metric?: string;
+  currentValue?: number;
+  expectedValue?: number;
+  deviation?: number;
+  detectedAt: string;
+}
+
+interface AnomalyData {
+  anomalies: Anomaly[];
+  summary: {
+    total: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+}
+
+interface DateRange {
+  id: string;
+  name: string;
+  icon: React.ComponentType<{ className?: string }>;
+  startDate: Date;
+  endDate: Date;
+  apiDays?: number; // For API compatibility
+}
+
+interface CustomDateRange {
+  startDate: Date;
+  endDate: Date;
+}
+
+// Premium navigation structure
+const navigationItems = [
+  { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
+  { id: 'campaigns', name: 'Ad Groups', icon: Target },
+  { id: 'keywords', name: 'Keywords', icon: Search },
+  { id: 'brands', name: 'Brands', icon: Award },
+  { id: 'products', name: 'Products', icon: Package },
+  { id: 'poas', name: 'POAS', icon: TrendingUp },
+];
+
+export default function Dashboard() {
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
+  const [filteredAccounts, setFilteredAccounts] = useState<Account[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<string>('');
+  const [campaignData, setCampaignData] = useState<CampaignData | null>(null);
+  const [todayMetrics, setTodayMetrics] = useState<{clicks: number, spend: number}>({ clicks: 0, spend: 0 });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
+  const [anomalyData, setAnomalyData] = useState<AnomalyData | null>(null);
+  const [anomalyDropdownOpen, setAnomalyDropdownOpen] = useState(false);
+  const [anomalyLoading, setAnomalyLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState<string>('dashboard');
+  const [selectedChartMetrics, setSelectedChartMetrics] = useState<string[]>(['clicks']);
+  const [chartType, setChartType] = useState<'line' | 'bar'>('line');
+  const [kpiPercentageChanges, setKpiPercentageChanges] = useState<{[key: string]: number}>({});
+  
+  // Enhanced date range state
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRange | null>(null);
+  const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
+  const [customDateModalOpen, setCustomDateModalOpen] = useState(false);
+  const [customDateRange, setCustomDateRange] = useState<CustomDateRange>({
+    startDate: new Date(),
+    endDate: new Date()
+  });
+
+  // Enhanced chart state for multi-KPI comparison
+  const [historicalData, setHistoricalData] = useState<any[]>([]);
+  const [historicalDataLoading, setHistoricalDataLoading] = useState(false);
+  const [dateGranularity, setDateGranularity] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [manualGranularityOverride, setManualGranularityOverride] = useState<boolean>(false);
+
+  // Premium campaign table state
+  const [campaignSearch, setCampaignSearch] = useState<string>('');
+  const [campaignSort, setCampaignSort] = useState<{field: string, direction: 'asc' | 'desc' | null}>({field: '', direction: null});
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all'>('active');
+  const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
+  const [bulkActionOpen, setBulkActionOpen] = useState<boolean>(false);
+
+  // Campaign drill-down state
+  const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
+  const [adGroupData, setAdGroupData] = useState<{[campaignId: string]: AdGroupData}>({});
+  const [adGroupLoading, setAdGroupLoading] = useState<{[campaignId: string]: boolean}>({});
+
+  // Pagination state
+  const [tablePage, setTablePage] = useState<number>(1);
+  const [itemsPerPage] = useState<number>(10);
+
+  // Date range utility functions
+  const formatDateForDisplay = (date: Date): string => {
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric'
+    });
+  };
+
+  const formatDateForAPI = (date: Date): string => {
+    return date.toISOString().split('T')[0].replace(/-/g, '');
+  };
+
+  const formatDateRangeDisplay = (range: DateRange): string => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    switch (range.id) {
+      case 'today':
+        return formatDateForDisplay(today);
+      case 'yesterday':
+        return formatDateForDisplay(yesterday);
+      case 'last-year':
+        return range.startDate.getFullYear().toString();
+      default:
+        if (range.startDate.getFullYear() === range.endDate.getFullYear()) {
+          return `${formatDateForDisplay(range.startDate)} - ${formatDateForDisplay(range.endDate)}, ${range.endDate.getFullYear()}`;
+        } else {
+          return `${formatDateForDisplay(range.startDate)}, ${range.startDate.getFullYear()} - ${formatDateForDisplay(range.endDate)}, ${range.endDate.getFullYear()}`;
+        }
+    }
+  };
+
+  // Generate date range options
+  const generateDateRanges = (): DateRange[] => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    const last7Days = new Date(today);
+    last7Days.setDate(today.getDate() - 7);
+
+    const last30Days = new Date(today);
+    last30Days.setDate(today.getDate() - 30);
+
+    const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+
+    const lastQuarterStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 - 3, 1);
+    const lastQuarterEnd = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 0);
+
+    const lastYearStart = new Date(today.getFullYear() - 1, 0, 1);
+    const lastYearEnd = new Date(today.getFullYear() - 1, 11, 31);
+
+    return [
+      {
+        id: 'today',
+        name: 'Today',
+        icon: Clock,
+        startDate: today,
+        endDate: today,
+        apiDays: 1
+      },
+      {
+        id: 'yesterday',
+        name: 'Yesterday',
+        icon: History,
+        startDate: yesterday,
+        endDate: yesterday,
+        apiDays: 1
+      },
+      {
+        id: 'last-7-days',
+        name: 'Last 7 days',
+        icon: CalendarDays,
+        startDate: last7Days,
+        endDate: today,
+        apiDays: 7
+      },
+      {
+        id: 'last-30-days',
+        name: 'Last 30 days',
+        icon: Calendar,
+        startDate: last30Days,
+        endDate: today,
+        apiDays: 30
+      },
+      {
+        id: 'last-month',
+        name: 'Last month',
+        icon: Calendar,
+        startDate: lastMonthStart,
+        endDate: lastMonthEnd
+      },
+      {
+        id: 'last-quarter',
+        name: 'Last quarter',
+        icon: BarChart3,
+        startDate: lastQuarterStart,
+        endDate: lastQuarterEnd
+      },
+      {
+        id: 'last-year',
+        name: 'Last year',
+        icon: Calendar,
+        startDate: lastYearStart,
+        endDate: lastYearEnd
+      }
+    ];
+  };
+
+  // Initialize date ranges
+  const dateRanges = generateDateRanges();
+
+  // Set default date range on component mount
+  useEffect(() => {
+    if (!selectedDateRange) {
+      const defaultRange = dateRanges.find(range => range.id === 'last-30-days');
+      if (defaultRange) {
+        setSelectedDateRange(defaultRange);
+      }
+    }
+  }, []);
+
+  // Calculate date range for API calls
+  const getApiDateRange = (range: DateRange | null): { days: number, startDate: string, endDate: string } => {
+    if (!range) {
+      return { days: 30, startDate: formatDateForAPI(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)), endDate: formatDateForAPI(new Date()) };
+    }
+
+    if (range.apiDays) {
+      return { 
+        days: range.apiDays, 
+        startDate: formatDateForAPI(range.startDate), 
+        endDate: formatDateForAPI(range.endDate) 
+      };
+    }
+
+    // Calculate days between start and end date
+    const diffTime = Math.abs(range.endDate.getTime() - range.startDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+    return { 
+      days: diffDays, 
+      startDate: formatDateForAPI(range.startDate), 
+      endDate: formatDateForAPI(range.endDate) 
+    };
+  };
+
+  // Intelligent date granularity detection
+  const getOptimalGranularity = (dateRange: DateRange | null): 'daily' | 'weekly' | 'monthly' => {
+    if (!dateRange) return 'daily';
+    
+    const apiDateRange = getApiDateRange(dateRange);
+    const days = apiDateRange.days;
+    
+    // Automatic granularity rules:
+    // <= 30 days: daily
+    // 31-90 days: weekly  
+    // > 90 days: monthly
+    if (days <= 30) return 'daily';
+    if (days <= 90) return 'weekly';
+    return 'monthly';
+  };
+
+  // Auto-detect granularity when date range changes (unless manually overridden)
+  useEffect(() => {
+    if (!manualGranularityOverride && selectedDateRange) {
+      const optimalGranularity = getOptimalGranularity(selectedDateRange);
+      setDateGranularity(optimalGranularity);
+    }
+  }, [selectedDateRange, manualGranularityOverride]);
+
+  // Custom date picker handlers
+  const handleCustomDateApply = () => {
+    const customRange: DateRange = {
+      id: 'custom',
+      name: 'Custom',
+      icon: Calendar,
+      startDate: customDateRange.startDate,
+      endDate: customDateRange.endDate
+    };
+    setSelectedDateRange(customRange);
+    setCustomDateModalOpen(false);
+    setDateDropdownOpen(false);
+  };
+
+  const isValidDateRange = (start: Date, end: Date): boolean => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+    return start <= end && end <= today;
+  };
+
+  // Clean country code display - remove parentheses content
+  const cleanCountryCode = (countryCode: string) => {
+    // "FR (Tapis)" → "FR", "NL" → "NL"
+    return countryCode.split(' ')[0];
+  };
+
+  // Clean account name display - remove country prefix if it already exists
+  const getDisplayName = (account: Account) => {
+    const cleanCode = cleanCountryCode(account.countryCode);
+    // If name already starts with country code, use as is
+    // Otherwise, prepend the country code
+    if (account.name.startsWith(cleanCode + ' - ')) {
+      return account.name;
+    }
+    return `${cleanCode} - ${account.name}`;
+  };
+
+  // Data aggregation functions
+  const aggregateDataByWeek = (dailyData: any[]): any[] => {
+    const weeklyData: { [key: string]: any } = {};
+    
+    dailyData.forEach(day => {
+      const date = new Date(day.date);
+      // Get Monday of the week (ISO week)
+      const dayOfWeek = date.getDay();
+      const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      const monday = new Date(date.setDate(diff));
+      const weekKey = monday.toISOString().split('T')[0];
+      
+      if (!weeklyData[weekKey]) {
+        weeklyData[weekKey] = {
+          date: weekKey,
+          dateFormatted: `Week of ${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+          impressions: 0,
+          clicks: 0,
+          cost: 0,
+          conversions: 0,
+          conversionsValue: 0,
+          count: 0
+        };
+      }
+      
+      // Sum up metrics
+      weeklyData[weekKey].impressions += day.impressions || 0;
+      weeklyData[weekKey].clicks += day.clicks || 0;
+      weeklyData[weekKey].cost += day.cost || 0;
+      weeklyData[weekKey].conversions += day.conversions || 0;
+      weeklyData[weekKey].conversionsValue += day.conversionsValue || 0;
+      weeklyData[weekKey].count += 1;
+    });
+    
+    // Calculate derived metrics
+    return Object.values(weeklyData).map((week: any) => {
+      week.ctr = week.impressions > 0 ? (week.clicks / week.impressions) * 100 : 0;
+      week.avgCpc = week.clicks > 0 ? week.cost / week.clicks : 0;
+      week.conversionRate = week.clicks > 0 ? (week.conversions / week.clicks) * 100 : 0;
+      week.cpa = week.conversions > 0 ? week.cost / week.conversions : 0;
+      week.roas = week.cost > 0 ? week.conversionsValue / week.cost : 0;
+      week.poas = week.cost > 0 ? (week.conversionsValue / week.cost) * 100 : 0;
+      delete week.count;
+      return week;
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
+
+  const aggregateDataByMonth = (dailyData: any[]): any[] => {
+    const monthlyData: { [key: string]: any } = {};
+    
+    dailyData.forEach(day => {
+      const date = new Date(day.date);
+      const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-01`;
+      
+      if (!monthlyData[monthKey]) {
+        monthlyData[monthKey] = {
+          date: monthKey,
+          dateFormatted: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          impressions: 0,
+          clicks: 0,
+          cost: 0,
+          conversions: 0,
+          conversionsValue: 0,
+          count: 0
+        };
+      }
+      
+      // Sum up metrics
+      monthlyData[monthKey].impressions += day.impressions || 0;
+      monthlyData[monthKey].clicks += day.clicks || 0;
+      monthlyData[monthKey].cost += day.cost || 0;
+      monthlyData[monthKey].conversions += day.conversions || 0;
+      monthlyData[monthKey].conversionsValue += day.conversionsValue || 0;
+      monthlyData[monthKey].count += 1;
+    });
+    
+    // Calculate derived metrics
+    return Object.values(monthlyData).map((month: any) => {
+      month.ctr = month.impressions > 0 ? (month.clicks / month.impressions) * 100 : 0;
+      month.avgCpc = month.clicks > 0 ? month.cost / month.clicks : 0;
+      month.conversionRate = month.clicks > 0 ? (month.conversions / month.clicks) * 100 : 0;
+      month.cpa = month.conversions > 0 ? month.cost / month.conversions : 0;
+      month.roas = month.cost > 0 ? month.conversionsValue / month.cost : 0;
+      month.poas = month.cost > 0 ? (month.conversionsValue / month.cost) * 100 : 0;
+      delete month.count;
+      return month;
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  };
+
+  // Get chart data with appropriate granularity
+  const getChartDataWithGranularity = (data: any[], granularity: 'daily' | 'weekly' | 'monthly'): any[] => {
+    if (!data || data.length === 0) return [];
+    
+    switch (granularity) {
+      case 'weekly':
+        return aggregateDataByWeek(data);
+      case 'monthly':
+        return aggregateDataByMonth(data);
+      case 'daily':
+      default:
+        return data;
+    }
+  };
+
+  // Fetch today's campaign data for an account
+  const fetchTodayClicks = async (accountId: string): Promise<{clicks: number, spend: number}> => {
+    try {
+      const response = await fetch(`/api/campaigns?customerId=${accountId}&dateRange=1`);
+      const result = await response.json();
+      if (result.success) {
+        return { 
+          clicks: result.data.totals.clicks || 0,
+          spend: result.data.totals.cost || 0
+        };
+      }
+      return { clicks: 0, spend: 0 };
+    } catch (err) {
+      console.error(`Error fetching today's data for account ${accountId}:`, err);
+      return { clicks: 0, spend: 0 };
+    }
+  };
+
+  // Fetch campaign data for an account to get click count (30-day for filtering)
+  const fetchAccountClicks = async (accountId: string): Promise<number> => {
+    try {
+      const response = await fetch(`/api/campaigns?customerId=${accountId}&dateRange=30`);
+      const result = await response.json();
+      if (result.success) {
+        return result.data.totals.clicks || 0;
+      }
+      return 0;
+    } catch (err) {
+      console.error(`Error fetching clicks for account ${accountId}:`, err);
+      return 0;
+    }
+  };
+
+  // Filter accounts with clicks > 0
+  const filterActiveAccounts = async (accounts: Account[]) => {
+    const accountsWithClicks = await Promise.all(
+      accounts.map(async (account) => {
+        const clicks = await fetchAccountClicks(account.id);
+        return { ...account, totalClicks: clicks };
+      })
+    );
+
+    // Filter accounts with clicks > 0
+    const activeAccounts = accountsWithClicks.filter(account => account.totalClicks! > 0);
+    return activeAccounts;
+  };
+
+  // Calculate today's performance - actual today's clicks
+  const calculateTodayMetrics = async () => {
+    if (selectedAccount) {
+      // Fetch actual today's data for selected account
+      const todayData = await fetchTodayClicks(selectedAccount);
+      return todayData;
+    } else if (filteredAccounts.length > 0) {
+      // Fetch today's data for all active accounts and sum them
+      const todayPromises = filteredAccounts.map(account => fetchTodayClicks(account.id));
+      const todayResults = await Promise.all(todayPromises);
+      
+      const totalTodayClicks = todayResults.reduce((sum, result) => sum + result.clicks, 0);
+      const totalTodaySpend = todayResults.reduce((sum, result) => sum + result.spend, 0);
+      
+      return { clicks: totalTodayClicks, spend: totalTodaySpend };
+    }
+    return { clicks: 0, spend: 0 };
+  };
+
+  // Fetch accounts on component mount
+  useEffect(() => {
+    fetchAccounts();
+  }, []);
+
+  // Fetch campaign data when account or date range changes
+  useEffect(() => {
+    if (selectedAccount) {
+      fetchCampaignData();
+      fetchHistoricalData(); // Fetch real historical data for charts
+    }
+  }, [selectedAccount, selectedDateRange]);
+
+  // Fetch today's metrics when account changes or filtered accounts change
+  useEffect(() => {
+    const fetchTodayData = async () => {
+      const metrics = await calculateTodayMetrics();
+      setTodayMetrics(metrics);
+    };
+    
+    if (selectedAccount || filteredAccounts.length > 0) {
+      fetchTodayData();
+    }
+  }, [selectedAccount, filteredAccounts]);
+
+  // Fetch anomalies on component mount and periodically
+  useEffect(() => {
+    fetchAnomalies();
+    
+    // Refresh anomalies every 5 minutes
+    const interval = setInterval(fetchAnomalies, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.anomaly-dropdown') && !target.closest('.anomaly-button')) {
+        setAnomalyDropdownOpen(false);
+      }
+      if (!target.closest('.account-dropdown') && !target.closest('.account-button')) {
+        setAccountDropdownOpen(false);
+      }
+      if (!target.closest('.date-dropdown') && !target.closest('.date-button')) {
+        setDateDropdownOpen(false);
+      }
+    };
+
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setAnomalyDropdownOpen(false);
+        setAccountDropdownOpen(false);
+        setDateDropdownOpen(false);
+        setCustomDateModalOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscapeKey);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, []);
+
+  const fetchAccounts = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/accounts');
+      const result = await response.json();
+      
+      if (result.success) {
+        setAllAccounts(result.data);
+        
+        // Filter accounts with clicks > 0
+        const activeAccounts = await filterActiveAccounts(result.data);
+        setFilteredAccounts(activeAccounts);
+        
+        // Auto-select first active account
+        if (activeAccounts.length > 0) {
+          setSelectedAccount(activeAccounts[0].id);
+        }
+      } else {
+        setError(result.message || 'Failed to fetch accounts');
+      }
+    } catch (err) {
+      setError('Error fetching accounts');
+      console.error('Error fetching accounts:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCampaignData = async () => {
+    if (!selectedAccount || !selectedDateRange) return;
+    
+    try {
+      setLoading(true);
+      setError('');
+      
+      // Use the proper API format
+      const apiDateRange = getApiDateRange(selectedDateRange);
+      const response = await fetch(`/api/campaigns?customerId=${selectedAccount}&dateRange=${apiDateRange.days}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        // Debug: Log the raw API response
+        console.log('📊 Campaign API Response:', result.data);
+        console.log('📊 Totals:', result.data.totals);
+        console.log('📊 Selected date range:', selectedDateRange);
+        console.log('📊 API date range:', apiDateRange);
+        
+        setCampaignData(result.data);
+        
+        // Generate static percentage changes for KPIs (simulate historical comparison)
+        const percentageChanges: {[key: string]: number} = {};
+        kpiConfig.forEach(kpi => {
+          // Generate realistic percentage changes between -15% and +25%
+          const change = (Math.random() - 0.4) * 40; // Slight bias toward positive
+          percentageChanges[kpi.id] = change;
+        });
+        setKpiPercentageChanges(percentageChanges);
+        
+        console.log('📊 Generated percentage changes:', percentageChanges);
+      } else {
+        setError(result.message || 'Failed to fetch campaign data');
+      }
+    } catch (err) {
+      setError('Error fetching campaign data');
+      console.error('Error fetching campaign data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch real historical data for charts
+  const fetchHistoricalData = async () => {
+    if (!selectedAccount || !selectedDateRange) return;
+    
+    try {
+      setHistoricalDataLoading(true);
+      
+      const apiDateRange = getApiDateRange(selectedDateRange);
+      const response = await fetch(`/api/historical-data?customerId=${selectedAccount}&dateRange=${apiDateRange.days}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('📊 Historical Data Fetched:', result.data);
+        setHistoricalData(result.data);
+      } else {
+        console.error('Failed to fetch historical data:', result.message);
+        setHistoricalData([]); // Fall back to empty array
+      }
+    } catch (err) {
+      console.error('Error fetching historical data:', err);
+      setHistoricalData([]); // Fall back to empty array
+    } finally {
+      setHistoricalDataLoading(false);
+    }
+  };
+
+  // Fetch ad groups for a specific campaign
+  const fetchAdGroups = async (campaignId: string) => {
+    if (!selectedAccount || !selectedDateRange) return;
+    
+    try {
+      setAdGroupLoading(prev => ({ ...prev, [campaignId]: true }));
+      
+      const apiDateRange = getApiDateRange(selectedDateRange);
+      const response = await fetch(`/api/ad-groups?customerId=${selectedAccount}&campaignId=${campaignId}&dateRange=${apiDateRange.days}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log(`📊 Ad Groups Fetched for campaign ${campaignId}:`, result.data);
+        setAdGroupData(prev => ({ ...prev, [campaignId]: result.data }));
+      } else {
+        console.error('Failed to fetch ad groups:', result.message);
+      }
+    } catch (err) {
+      console.error('Error fetching ad groups:', err);
+    } finally {
+      setAdGroupLoading(prev => ({ ...prev, [campaignId]: false }));
+    }
+  };
+
+  const fetchAnomalies = async () => {
+    try {
+      setAnomalyLoading(true);
+      const response = await fetch('/api/anomalies');
+      const result = await response.json();
+      
+      // The anomaly API returns data directly, not wrapped in a success object
+      if (response.ok && result.anomalies) {
+        setAnomalyData(result);
+      } else {
+        console.error('Failed to fetch anomalies:', result.error || 'Unknown error');
+      }
+    } catch (err) {
+      console.error('Error fetching anomalies:', err);
+    } finally {
+      setAnomalyLoading(false);
+    }
+  };
+
+  const formatNumber = (num: number) => {
+    return new Intl.NumberFormat().format(Math.round(num));
+  };
+
+  const formatCurrency = (num: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'EUR',
+      minimumFractionDigits: 2
+    }).format(num);
+  };
+
+  const formatPercentage = (num: number) => {
+    return `${num.toFixed(2)}%`;
+  };
+
+  const selectedAccountData = filteredAccounts.find(acc => acc.id === selectedAccount);
+
+  const getSeverityIcon = (severity: 'high' | 'medium' | 'low') => {
+    switch (severity) {
+      case 'high':
+        return <AlertTriangle className="h-4 w-4 text-red-500" />;
+      case 'medium':
+        return <AlertCircle className="h-4 w-4 text-yellow-500" />;
+      case 'low':
+        return <Info className="h-4 w-4 text-blue-500" />;
+    }
+  };
+
+  const getSeverityColor = (severity: 'high' | 'medium' | 'low') => {
+    switch (severity) {
+      case 'high':
+        return 'border-l-red-500 bg-red-50';
+      case 'medium':
+        return 'border-l-yellow-500 bg-yellow-50';
+      case 'low':
+        return 'border-l-blue-500 bg-blue-50';
+    }
+  };
+
+  const formatTimeAgo = (dateString: string) => {
+    const now = new Date();
+    const time = new Date(dateString);
+    const diffInMinutes = Math.floor((now.getTime() - time.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`;
+    return `${Math.floor(diffInMinutes / 1440)}d ago`;
+  };
+
+  // Helper function to determine if a percentage change is "good" or "bad" for a given metric
+  const isPositiveChange = (kpiId: string, percentageChange: number): boolean => {
+    // Metrics where LOWER is better (decreases should be green)
+    const lowerIsBetter = ['cost', 'avgCpc', 'cpa'];
+    
+    const isLowerBetter = lowerIsBetter.includes(kpiId);
+    
+    // For metrics where lower is better: negative change (decrease) = good (green)
+    // For metrics where higher is better: positive change (increase) = good (green)
+    const result = isLowerBetter ? percentageChange < 0 : percentageChange > 0;
+    
+    return result;
+  };
+
+  // KPI Configuration
+  const kpiConfig = [
+    {
+      id: 'clicks',
+      label: 'Clicks',
+      icon: MousePointer,
+      color: 'blue',
+      bgColor: 'bg-blue-500',
+      textColor: 'text-blue-600',
+      borderColor: 'border-blue-200',
+      gradientFrom: 'from-blue-400',
+      gradientTo: 'to-blue-600'
+    },
+    {
+      id: 'impressions',
+      label: 'Impressions',
+      icon: Eye,
+      color: 'purple',
+      bgColor: 'bg-purple-500',
+      textColor: 'text-purple-600',
+      borderColor: 'border-purple-200',
+      gradientFrom: 'from-purple-400',
+      gradientTo: 'to-purple-600'
+    },
+    {
+      id: 'ctr',
+      label: 'CTR',
+      icon: Target,
+      color: 'green',
+      bgColor: 'bg-green-500',
+      textColor: 'text-green-600',
+      borderColor: 'border-green-200',
+      gradientFrom: 'from-green-400',
+      gradientTo: 'to-green-600'
+    },
+    {
+      id: 'avgCpc',
+      label: 'CPC',
+      icon: Euro,
+      color: 'orange',
+      bgColor: 'bg-orange-500',
+      textColor: 'text-orange-600',
+      borderColor: 'border-orange-200',
+      gradientFrom: 'from-orange-400',
+      gradientTo: 'to-orange-600'
+    },
+    {
+      id: 'cost',
+      label: 'Cost',
+      icon: CreditCard,
+      color: 'red',
+      bgColor: 'bg-red-500',
+      textColor: 'text-red-600',
+      borderColor: 'border-red-200',
+      gradientFrom: 'from-red-400',
+      gradientTo: 'to-red-600'
+    },
+    {
+      id: 'conversions',
+      label: 'Conversions',
+      icon: CheckCircle,
+      color: 'emerald',
+      bgColor: 'bg-emerald-500',
+      textColor: 'text-emerald-600',
+      borderColor: 'border-emerald-200',
+      gradientFrom: 'from-emerald-400',
+      gradientTo: 'to-emerald-600'
+    },
+    {
+      id: 'conversionsValue',
+      label: 'Conversion Value',
+      icon: TrendingUp,
+      color: 'cyan',
+      bgColor: 'bg-cyan-500',
+      textColor: 'text-cyan-600',
+      borderColor: 'border-cyan-200',
+      gradientFrom: 'from-cyan-400',
+      gradientTo: 'to-cyan-600'
+    },
+    {
+      id: 'roas',
+      label: 'ROAS',
+      icon: BarChart3,
+      color: 'indigo',
+      bgColor: 'bg-indigo-500',
+      textColor: 'text-indigo-600',
+      borderColor: 'border-indigo-200',
+      gradientFrom: 'from-indigo-400',
+      gradientTo: 'to-indigo-600'
+    },
+    {
+      id: 'cpa',
+      label: 'CPA',
+      icon: Calculator,
+      color: 'pink',
+      bgColor: 'bg-pink-500',
+      textColor: 'text-pink-600',
+      borderColor: 'border-pink-200',
+      gradientFrom: 'from-pink-400',
+      gradientTo: 'to-pink-600'
+    },
+    {
+      id: 'poas',
+      label: 'POAS',
+      icon: Trophy,
+      color: 'yellow',
+      bgColor: 'bg-yellow-500',
+      textColor: 'text-yellow-600',
+      borderColor: 'border-yellow-200',
+      gradientFrom: 'from-yellow-400',
+      gradientTo: 'to-yellow-600'
+    }
+  ];
+
+  // Calculate POAS (Profit on Ad Spend)
+  const calculatePOAS = (conversionsValue: number, cost: number): number => {
+    if (cost === 0) return 0;
+    // POAS should be calculated as profit margin, assuming 50% profit margin for example
+    // For now, let's show ROAS as percentage until we have actual profit data
+    const roasPercentage = (conversionsValue / cost) * 100;
+    return roasPercentage > 0 ? roasPercentage : 0;
+  };
+
+  // Format KPI values
+  const formatKPIValue = (kpiId: string, value: number): string => {
+    // Debug: Log the values being formatted
+    console.log(`📊 Formatting ${kpiId}:`, value);
+    
+    switch (kpiId) {
+      case 'clicks':
+      case 'impressions':
+      case 'conversions':
+        return formatNumber(value);
+      case 'cost':
+      case 'conversionsValue':
+      case 'avgCpc':
+      case 'cpa':
+        return formatCurrency(value);
+      case 'ctr':
+      case 'conversionRate':
+        return formatPercentage(value);
+      case 'roas':
+        // ROAS should be displayed as multiplier (e.g., 2.45x)
+        return value > 0 ? `${value.toFixed(2)}x` : '0.00x';
+      case 'poas':
+        // POAS as percentage
+        return value > 0 ? `${value.toFixed(1)}%` : '0.0%';
+      default:
+        return value.toString();
+    }
+  };
+
+  // Get KPI value from campaign data
+  const getKPIValue = (kpiId: string, data: CampaignData): number => {
+    const value = (() => {
+      switch (kpiId) {
+        case 'poas':
+          return calculatePOAS(data.totals.conversionsValue, data.totals.cost);
+        default:
+          return data.totals[kpiId as keyof typeof data.totals] as number;
+      }
+    })();
+    
+    // Debug: Log calculated values with more detail
+    console.log(`📊 KPI ${kpiId} calculation:`, {
+      kpiId,
+      calculatedValue: value,
+      conversionsValue: data.totals.conversionsValue,
+      cost: data.totals.cost,
+      roas: data.totals.roas,
+      rawTotals: data.totals
+    });
+    
+    return value;
+  };
+
+  // Premium table helper function - get filtered and sorted campaigns
+  const getFilteredAndSortedCampaigns = () => {
+    if (!campaignData) return [];
+    
+    let campaigns = [...campaignData.campaigns];
+    
+    // Debug: Log all campaigns before filtering
+    console.log('📊 All campaigns before filtering:', campaigns.map(c => ({
+      name: c.name, 
+      status: c.status,
+      clicks: c.clicks,
+      impressions: c.impressions
+    })));
+    
+    // Status filter - "Active Only" means campaigns with actual activity
+    if (statusFilter === 'active') {
+      console.log('📊 Applying ACTIVE filter - filtering for campaigns with activity...');
+      const beforeCount = campaigns.length;
+      campaigns = campaigns.filter(c => {
+        // Consider a campaign "active" if it has impressions OR clicks
+        // This filters out campaigns that are ENABLED but have no traffic
+        const hasActivity = c.impressions > 0 || c.clicks > 0;
+        console.log(`📊 Campaign "${c.name}": impressions=${c.impressions}, clicks=${c.clicks}, hasActivity=${hasActivity}`);
+        return hasActivity;
+      });
+      console.log(`📊 Active filter result: ${beforeCount} -> ${campaigns.length} campaigns (filtered out inactive campaigns)`);
+    } else {
+      console.log('📊 Showing ALL campaigns (including ENABLED campaigns with no activity)');
+    }
+    
+    console.log(`📊 After status filter (${statusFilter}): ${campaigns.length} campaigns`);
+    
+    // Search filter
+    if (campaignSearch.trim()) {
+      const searchTerm = campaignSearch.toLowerCase().trim();
+      const beforeCount = campaigns.length;
+      campaigns = campaigns.filter(c => 
+        c.name.toLowerCase().includes(searchTerm) ||
+        c.id.toLowerCase().includes(searchTerm)
+      );
+      console.log(`📊 Search filter "${searchTerm}": ${beforeCount} -> ${campaigns.length} campaigns`);
+    }
+    
+    // Apply sorting
+    if (campaignSort.field && campaignSort.direction) {
+      campaigns.sort((a, b) => {
+        const field = campaignSort.field;
+        let aValue: any = a[field as keyof Campaign];
+        let bValue: any = b[field as keyof Campaign];
+        
+        // Handle numeric fields properly
+        const numericFields = ['clicks', 'impressions', 'cost', 'ctr', 'avgCpc', 'conversions', 'conversionsValue', 'cpa', 'roas'];
+        
+        if (numericFields.includes(field)) {
+          aValue = Number(aValue) || 0;
+          bValue = Number(bValue) || 0;
+        } else {
+          // String comparison for text fields
+          aValue = String(aValue).toLowerCase();
+          bValue = String(bValue).toLowerCase();
+        }
+        
+        let comparison = 0;
+        if (aValue < bValue) {
+          comparison = -1;
+        } else if (aValue > bValue) {
+          comparison = 1;
+        }
+        
+        return campaignSort.direction === 'asc' ? comparison : -comparison;
+      });
+    }
+    
+    console.log('📊 Final filtered campaigns:', campaigns.length);
+    return campaigns;
+  };
+
+  const handleSort = (field: string) => {
+    setCampaignSort(prev => {
+      if (prev.field !== field) {
+        return { field, direction: 'desc' };
+      }
+      switch (prev.direction) {
+        case null: return { field, direction: 'desc' };
+        case 'desc': return { field, direction: 'asc' };
+        case 'asc': return { field: '', direction: null };
+        default: return { field: '', direction: null };
+      }
+    });
+  };
+
+  const getSortIcon = (field: string) => {
+    if (campaignSort.field !== field || campaignSort.direction === null) {
+      return <ArrowUpDown className="h-4 w-4 text-gray-400" />;
+    }
+    return campaignSort.direction === 'asc' 
+      ? <ArrowUp className="h-4 w-4 text-blue-600" />
+      : <ArrowDown className="h-4 w-4 text-blue-600" />;
+  };
+
+  const selectAllCampaigns = () => {
+    const filteredCampaigns = getFilteredAndSortedCampaigns();
+    setSelectedCampaigns(filteredCampaigns.map(c => c.id));
+  };
+
+  const clearAllCampaigns = () => setSelectedCampaigns([]);
+
+  const toggleCampaignSelection = (campaignId: string) => {
+    setSelectedCampaigns(prev => 
+      prev.includes(campaignId) 
+        ? prev.filter(id => id !== campaignId)
+        : [...prev, campaignId]
+    );
+  };
+
+  const calculateTableTotals = () => {
+    const campaigns = getFilteredAndSortedCampaigns();
+    const totals = campaigns.reduce((acc, campaign) => ({
+      clicks: acc.clicks + campaign.clicks,
+      impressions: acc.impressions + campaign.impressions,
+      cost: acc.cost + campaign.cost,
+      conversions: acc.conversions + campaign.conversions,
+      conversionsValue: acc.conversionsValue + campaign.conversionsValue,
+    }), { clicks: 0, impressions: 0, cost: 0, conversions: 0, conversionsValue: 0 });
+
+    return {
+      ...totals,
+      ctr: totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0,
+      avgCpc: totals.clicks > 0 ? totals.cost / totals.clicks : 0,
+      cpa: totals.conversions > 0 ? totals.cost / totals.conversions : 0,
+      roas: totals.cost > 0 ? totals.conversionsValue / totals.cost : 0,
+    };
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'ENABLED': return <div className="w-2 h-2 bg-green-500 rounded-full" />;
+      case 'PAUSED': return <div className="w-2 h-2 bg-yellow-500 rounded-full" />;
+      case 'REMOVED': return <div className="w-2 h-2 bg-red-500 rounded-full" />;
+      default: return <div className="w-2 h-2 bg-gray-400 rounded-full" />;
+    }
+  };
+
+  const formatLargeNumber = (num: number): string => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return formatNumber(num);
+  };
+
+  const getPerformanceIndicator = (campaign: Campaign, metric: string): 'high' | 'medium' | 'low' => {
+    if (!campaignData) return 'medium';
+    const allCampaigns = campaignData.campaigns;
+    if (allCampaigns.length < 3) return 'medium';
+    const values = allCampaigns.map(c => c[metric as keyof Campaign] as number).sort((a, b) => b - a);
+    const value = campaign[metric as keyof Campaign] as number;
+    const highThreshold = values[Math.floor(values.length * 0.33)];
+    const lowThreshold = values[Math.floor(values.length * 0.67)];
+    if (['cost', 'avgCpc', 'cpa'].includes(metric)) {
+      if (value <= lowThreshold) return 'high';
+      if (value <= highThreshold) return 'medium';
+      return 'low';
+    }
+    if (value >= highThreshold) return 'high';
+    if (value >= lowThreshold) return 'medium';
+    return 'low';
+  };
+
+  const getPerformanceColor = (level: 'high' | 'medium' | 'low'): string => {
+    switch (level) {
+      case 'high': return 'bg-green-100 text-green-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'low': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Generate mock chart data (for now - later can be replaced with real historical data)
+  const generateChartData = (metricId: string, currentValue: number) => {
+    if (!selectedDateRange || !historicalData || historicalData.length === 0) {
+      console.log('📊 No historical data available for single metric chart');
+      return [];
+    }
+    
+    console.log('📊 Generating single metric chart data:', {
+      metricId,
+      historicalDataLength: historicalData.length
+    });
+    
+    // Use real historical data
+    return historicalData.map((day: any) => ({
+      date: day.date,
+      dateFormatted: day.dateFormatted,
+      value: day[metricId] || 0,
+      formattedValue: formatKPIValue(metricId, day[metricId] || 0)
+    }));
+  };
+
+  // Helper function to toggle KPI selection
+  const toggleKpiSelection = (kpiId: string) => {
+    setSelectedChartMetrics(prev => {
+      if (prev.includes(kpiId)) {
+        // Remove if already selected (but keep at least one)
+        if (prev.length > 1) {
+          return prev.filter(id => id !== kpiId);
+        }
+        return prev;
+      } else {
+        // Add if not selected (but max 4 KPIs)
+        if (prev.length < 4) {
+          return [...prev, kpiId];
+        }
+        return prev;
+      }
+    });
+  };
+
+  // Generate multi-metric chart data using real historical data
+  const generateMultiMetricChartData = (selectedMetrics: string[]) => {
+    if (!selectedDateRange || !historicalData || historicalData.length === 0) {
+      console.log('📊 No historical data available, returning empty array');
+      return [];
+    }
+    
+    console.log('📊 Generating chart data from historical data:', {
+      selectedMetrics,
+      historicalDataLength: historicalData.length,
+      firstDataPoint: historicalData[0],
+      lastDataPoint: historicalData[historicalData.length - 1]
+    });
+    
+    // Apply granularity aggregation
+    const aggregatedData = getChartDataWithGranularity(historicalData, dateGranularity);
+    
+    // Use aggregated data directly
+    return aggregatedData.map((day: any) => {
+      const dataPoint: any = {
+        date: day.date,
+        dateFormatted: day.dateFormatted,
+      };
+      
+      // Map each selected metric to the data point
+      selectedMetrics.forEach(metricId => {
+        dataPoint[metricId] = day[metricId] || 0;
+        dataPoint[`${metricId}Formatted`] = formatKPIValue(metricId, day[metricId] || 0);
+      });
+      
+      return dataPoint;
+    });
+  };
+
+  // Get chart colors for KPIs
+  const getKpiChartColor = (kpiId: string): string => {
+    const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b']; // blue, green, purple, orange
+    const index = selectedChartMetrics.indexOf(kpiId);
+    return colors[index % colors.length];
+  };
+
+  // Enhanced Y-axis orientation with intelligent scaling for vastly different metrics
+  const getYAxisOrientation = (metricId: string, selectedMetrics: string[], chartData: any[]): 'left' | 'right' => {
+    // Define metric types and their typical scales
+    const metricScales = {
+      // Large count metrics (typically 1000s-10000s)
+      'clicks': 'large-count',
+      'impressions': 'large-count',
+      
+      // Small count metrics (typically 10s-100s)
+      'conversions': 'small-count',
+      
+      // Currency metrics (typically 100s-1000s)
+      'cost': 'currency',
+      'conversionsValue': 'currency',
+      'avgCpc': 'currency-small',
+      'cpa': 'currency',
+      
+      // Percentage metrics (typically 0-20)
+      'ctr': 'percentage',
+      'conversionRate': 'percentage',
+      'poas': 'percentage',
+      
+      // Ratio metrics (typically 0-10)
+      'roas': 'ratio'
+    };
+
+    // If only one metric, use left axis
+    if (selectedMetrics.length === 1) {
+      return 'left';
+    }
+
+    // Calculate actual ranges for intelligent assignment
+    const metricRanges = selectedMetrics.map(metric => {
+      let maxValue = 0;
+      chartData.forEach(dataPoint => {
+        const value = dataPoint[metric] || 0;
+        if (value > maxValue) maxValue = value;
+      });
+      return { metric, maxValue, scale: metricScales[metric as keyof typeof metricScales] || 'unknown' };
+    });
+
+    // Sort by max value to identify large vs small metrics
+    metricRanges.sort((a, b) => b.maxValue - a.maxValue);
+    
+    // If there's a significant scale difference (>10x), separate them
+    const largestMetric = metricRanges[0];
+    const currentMetric = metricRanges.find(m => m.metric === metricId);
+    
+    if (currentMetric && largestMetric.maxValue > 0) {
+      const scaleDifference = largestMetric.maxValue / currentMetric.maxValue;
+      
+      // If current metric is significantly smaller than the largest, put it on right axis
+      if (scaleDifference >= 10 && currentMetric.metric !== largestMetric.metric) {
+        return 'right';
+      }
+    }
+
+    // Default assignment based on metric type
+    const rightAxisMetrics = ['ctr', 'avgCpc', 'cost', 'roas', 'cpa', 'poas', 'conversionsValue', 'conversionRate'];
+    return rightAxisMetrics.includes(metricId) ? 'right' : 'left';
+  };
+
+  // Helper to check if we need dual Y-axis (updated to use new orientation logic)
+  const needsDualYAxis = (metrics: string[], chartData: any[]): boolean => {
+    if (metrics.length <= 1) return false;
+    
+    const leftMetrics = metrics.filter(m => getYAxisOrientation(m, metrics, chartData) === 'left');
+    const rightMetrics = metrics.filter(m => getYAxisOrientation(m, metrics, chartData) === 'right');
+    
+    return leftMetrics.length > 0 && rightMetrics.length > 0;
+  };
+
+  // Calculate domain for left Y-axis (updated to use new orientation logic)
+  const getLeftAxisDomain = (selectedMetrics: string[], chartData: any[]): [number, number] => {
+    const leftMetrics = selectedMetrics.filter(m => getYAxisOrientation(m, selectedMetrics, chartData) === 'left');
+    if (leftMetrics.length === 0) return [0, 100];
+    
+    let maxValue = 0;
+    chartData.forEach(dataPoint => {
+      leftMetrics.forEach(metric => {
+        const value = dataPoint[metric] || 0;
+        if (value > maxValue) maxValue = value;
+      });
+    });
+    
+    // Add 10% padding to the top
+    const paddedMax = maxValue * 1.1;
+    return [0, Math.ceil(paddedMax)];
+  };
+
+  // Calculate domain for right Y-axis (updated to use new orientation logic)  
+  const getRightAxisDomain = (selectedMetrics: string[], chartData: any[]): [number, number] => {
+    const rightMetrics = selectedMetrics.filter(m => getYAxisOrientation(m, selectedMetrics, chartData) === 'right');
+    if (rightMetrics.length === 0) return [0, 100];
+    
+    let maxValue = 0;
+    chartData.forEach(dataPoint => {
+      rightMetrics.forEach(metric => {
+        const value = dataPoint[metric] || 0;
+        if (value > maxValue) maxValue = value;
+      });
+    });
+    
+    // Add 10% padding to the top
+    const paddedMax = maxValue * 1.1;
+    return [0, Math.ceil(paddedMax)];
+  };
+
+  // Enhanced formatting for left Y-axis
+  const formatLeftYAxis = (value: number, selectedMetrics: string[], chartData: any[]): string => {
+    const leftMetrics = selectedMetrics.filter(m => getYAxisOrientation(m, selectedMetrics, chartData) === 'left');
+    if (leftMetrics.length === 0) return value.toFixed(0);
+    
+    // Format based on the metric type
+    if (value >= 1000000) {
+      return `${(value / 1000000).toFixed(1)}M`;
+    } else if (value >= 1000) {
+      return `${(value / 1000).toFixed(0)}K`;
+    } else {
+      return value.toFixed(0);
+    }
+  };
+
+  // Enhanced formatting for right Y-axis
+  const formatRightYAxis = (value: number, selectedMetrics: string[], chartData: any[]): string => {
+    const rightMetrics = selectedMetrics.filter(m => getYAxisOrientation(m, selectedMetrics, chartData) === 'right');
+    if (rightMetrics.length === 0) return value.toFixed(1);
+    
+    // Determine the primary metric type on right axis for formatting
+    const currencyMetrics = rightMetrics.filter(m => ['cost', 'conversionsValue', 'avgCpc', 'cpa'].includes(m));
+    const percentageMetrics = rightMetrics.filter(m => ['ctr', 'conversionRate', 'poas'].includes(m));
+    const ratioMetrics = rightMetrics.filter(m => ['roas'].includes(m));
+    const countMetrics = rightMetrics.filter(m => ['conversions'].includes(m));
+    
+    // Priority: Count > Currency > Percentage > Ratio
+    if (countMetrics.length > 0) {
+      // Count formatting for conversions on right axis
+      return value.toFixed(0);
+    } else if (currencyMetrics.length > 0) {
+      // Currency formatting
+      if (value >= 1000) {
+        return `€${(value / 1000).toFixed(0)}K`;
+      } else if (value >= 1) {
+        return `€${value.toFixed(0)}`;
+      } else {
+        return `€${value.toFixed(2)}`;
+      }
+    } else if (percentageMetrics.length > 0) {
+      // Percentage formatting
+      return `${value.toFixed(1)}%`;
+    } else if (ratioMetrics.length > 0) {
+      // ROAS formatting (multiplier)
+      return `${value.toFixed(1)}x`;
+    } else {
+      return value.toFixed(1);
+    }
+  };
+
+  // Y-axis formatter based on metric type (for single metric compatibility)
+  const formatYAxis = (value: number, metricId: string): string => {
+    switch (metricId) {
+      case 'cost':
+      case 'conversionsValue':
+      case 'avgCpc':
+      case 'cpa':
+        // Currency formatting
+        if (value >= 1000000) {
+          return `€${(value / 1000000).toFixed(1)}M`;
+        } else if (value >= 1000) {
+          return `€${(value / 1000).toFixed(0)}K`;
+        } else if (value >= 1) {
+          return `€${value.toFixed(0)}`;
+    } else {
+          return `€${value.toFixed(2)}`;
+        }
+      
+      case 'clicks':
+      case 'impressions':
+      case 'conversions':
+        // Count formatting
+        if (value >= 1000000) {
+          return `${(value / 1000000).toFixed(1)}M`;
+        } else if (value >= 1000) {
+          return `${(value / 1000).toFixed(0)}K`;
+        } else {
+          return value.toFixed(0);
+        }
+      
+      case 'ctr':
+      case 'conversionRate':
+      case 'poas':
+        // Percentage formatting
+        return `${value.toFixed(1)}%`;
+      
+      case 'roas':
+        // ROAS formatting (multiplier)
+        return `${value.toFixed(1)}x`;
+      
+      default:
+        return value.toFixed(1);
+    }
+  };
+
+  // Render page content based on current page
+  const renderPageContent = () => {
+    switch (currentPage) {
+      case 'dashboard':
+        return renderDashboard();
+      case 'campaigns':
+        return renderAdGroupsPage();
+      case 'keywords':
+        return (
+          <div className="text-center py-16">
+            <Search className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Keywords</h2>
+            <p className="text-gray-600">Keyword research and analysis coming soon...</p>
+          </div>
+        );
+      case 'brands':
+        return (
+          <div className="text-center py-16">
+            <Award className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Brands</h2>
+            <p className="text-gray-600">Brand performance analytics coming soon...</p>
+          </div>
+        );
+      case 'products':
+        return (
+          <div className="text-center py-16">
+            <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Products</h2>
+            <p className="text-gray-600">Product performance insights coming soon...</p>
+          </div>
+        );
+      case 'poas':
+        return (
+          <div className="text-center py-16">
+            <TrendingUp className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">POAS</h2>
+            <p className="text-gray-600">Profit on Ad Spend analysis coming soon...</p>
+          </div>
+        );
+      default:
+        return renderDashboard();
+    }
+  };
+
+  // Original dashboard content
+  const renderDashboard = () => (
+    <>
+      {/* Page Title */}
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Performance Dashboard</h2>
+        <p className="text-gray-600">
+          {selectedAccountData && selectedDateRange
+            ? `Analytics for ${getDisplayName(selectedAccountData)} • ${formatDateRangeDisplay(selectedDateRange)}`
+            : 'Multi-country PPC campaign management'
+          }
+        </p>
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
+          <p className="text-red-800">{error}</p>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-16">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="mt-4 text-gray-600">Loading performance data...</p>
+        </div>
+      )}
+
+      {/* 10 KPI Dashboard */}
+      {campaignData && !loading && (
+        <>
+          {/* 10 KPI Boxes */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
+            {kpiConfig.map((kpi) => {
+              const IconComponent = kpi.icon;
+              const value = getKPIValue(kpi.id, campaignData);
+              const formattedValue = formatKPIValue(kpi.id, value);
+              
+              // Use static percentage change from state
+              const percentageChange = kpiPercentageChanges[kpi.id] || 0;
+              const isPositive = isPositiveChange(kpi.id, percentageChange);
+              
+              return (
+                <div
+                  key={kpi.id}
+                  className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 relative overflow-hidden group cursor-pointer"
+                  style={{ height: '140px' }}
+                  onClick={() => toggleKpiSelection(kpi.id)}
+                >
+                  {/* Background gradient on hover */}
+                  <div className={`absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-300 bg-gradient-to-br ${kpi.gradientFrom} ${kpi.gradientTo}`} />
+                  
+                  {/* Icon */}
+                  <div className={`w-10 h-10 ${kpi.bgColor} rounded-lg flex items-center justify-center mb-3`}>
+                    <IconComponent className="h-5 w-5 text-white" />
+                  </div>
+                  
+                  {/* Value */}
+                  <div className="mb-2">
+                    <div className="text-2xl font-bold text-gray-900 leading-tight">
+                      {formattedValue}
+                    </div>
+                    <div className="text-sm text-gray-600 font-medium">
+                      {kpi.label}
+                    </div>
+                  </div>
+                  
+                  {/* Percentage change */}
+                  <div className="absolute bottom-4 right-4 flex items-center space-x-1">
+                    {percentageChange >= 0 ? (
+                      <ArrowUp className={`h-3 w-3 ${isPositive ? 'text-green-500' : 'text-red-500'}`} />
+                    ) : (
+                      <ArrowDown className={`h-3 w-3 ${isPositive ? 'text-green-500' : 'text-red-500'}`} />
+                    )}
+                    <span className={`text-xs font-semibold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                      {Math.abs(percentageChange).toFixed(1)}%
+                    </span>
+                  </div>
+                  
+                  {/* Multi-selection indicator */}
+                  {selectedChartMetrics.includes(kpi.id) && (
+                    <div className="absolute top-2 right-2 flex items-center space-x-1">
+                      <div 
+                        className="w-3 h-3 rounded-full border-2 border-white shadow-lg"
+                        style={{ backgroundColor: getKpiChartColor(kpi.id) }}
+                      />
+                      {selectedChartMetrics.length > 1 && (
+                        <span className="text-xs font-bold text-gray-600">
+                          {selectedChartMetrics.indexOf(kpi.id) + 1}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Dynamic Chart Section */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">Performance Trends</h3>
+                  <p className="text-sm text-gray-600">
+                    {selectedChartMetrics.length === 1 
+                      ? `${kpiConfig.find(k => k.id === selectedChartMetrics[0])?.label} over ${selectedDateRange ? formatDateRangeDisplay(selectedDateRange) : 'the selected period'}`
+                      : `Comparing ${selectedChartMetrics.length} metrics over ${selectedDateRange ? formatDateRangeDisplay(selectedDateRange) : 'the selected period'}`
+                    }
+                    {' • '}
+                    <span className="font-medium text-gray-700">
+                      {dateGranularity.charAt(0).toUpperCase() + dateGranularity.slice(1)} view
+                    </span>
+                  </p>
+                </div>
+                <div className="flex items-center space-x-4">
+                  {/* Date Granularity Toggle */}
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => {
+                        setDateGranularity('daily');
+                        setManualGranularityOverride(true);
+                      }}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                        dateGranularity === 'daily'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Daily
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDateGranularity('weekly');
+                        setManualGranularityOverride(true);
+                      }}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                        dateGranularity === 'weekly'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Weekly
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDateGranularity('monthly');
+                        setManualGranularityOverride(true);
+                      }}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                        dateGranularity === 'monthly'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      Monthly
+                    </button>
+                  </div>
+                  
+                  {/* Chart Type Toggle */}
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setChartType('line')}
+                      className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                        chartType === 'line'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <TrendingUp className="w-4 h-4" />
+                      <span>Line</span>
+                    </button>
+                    <button
+                      onClick={() => setChartType('bar')}
+                      className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                        chartType === 'bar'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                      <span>Bar</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Multi-KPI Selection Tabs */}
+              <div className="flex flex-wrap gap-2 mb-6">
+                {kpiConfig.map((kpi) => {
+                  const isSelected = selectedChartMetrics.includes(kpi.id);
+                  const canDeselect = selectedChartMetrics.length > 1;
+                  const canSelect = selectedChartMetrics.length < 4;
+                  
+                  return (
+                    <button
+                      key={kpi.id}
+                      onClick={() => toggleKpiSelection(kpi.id)}
+                      disabled={isSelected && !canDeselect}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
+                        isSelected
+                          ? 'bg-blue-500 text-white shadow-lg'
+                          : canSelect 
+                            ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      <span>{kpi.label}</span>
+                      {isSelected && (
+                        <div 
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: getKpiChartColor(kpi.id) }}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              
+              {selectedChartMetrics.length >= 4 && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-amber-700 text-sm">
+                    💡 Maximum 4 KPIs selected. Deselect a metric to add others.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Enhanced Chart */}
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                {(() => {
+                  // Cache chart data calculation to avoid multiple expensive calls
+                  const chartData = generateMultiMetricChartData(selectedChartMetrics);
+                  
+                  return chartType === 'line' ? (
+                <LineChart
+                      data={chartData}
+                      margin={{ top: 5, right: needsDualYAxis(selectedChartMetrics, chartData) ? 50 : 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis 
+                    dataKey="dateFormatted" 
+                    stroke="#9ca3af"
+                    fontSize={12}
+                    tickLine={false}
+                  />
+                      
+                      {/* Primary Y-Axis (Left) */}
+                  <YAxis 
+                        yAxisId="left"
+                    stroke="#9ca3af"
+                    fontSize={12}
+                    tickLine={false}
+                        domain={getLeftAxisDomain(selectedChartMetrics, chartData)}
+                    tickFormatter={(value) => {
+                          const leftMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'left');
+                          return leftMetrics.length > 0 ? formatLeftYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
+                        }}
+                      />
+                      
+                      {/* Secondary Y-Axis (Right) - Only if needed */}
+                      {needsDualYAxis(selectedChartMetrics, chartData) && (
+                        <YAxis 
+                          yAxisId="right"
+                          orientation="right"
+                          stroke="#9ca3af"
+                          fontSize={12}
+                          tickLine={false}
+                          domain={getRightAxisDomain(selectedChartMetrics, chartData)}
+                          tickFormatter={(value) => {
+                            const rightMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'right');
+                            return rightMetrics.length > 0 ? formatRightYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
+                          }}
+                        />
+                      )}
+                      
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: 'white',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                    }}
+                        formatter={(value: any, name: string) => {
+                          const kpi = kpiConfig.find(k => k.id === name);
+                          return [formatKPIValue(name, value), kpi?.label || name];
+                        }}
+                    labelFormatter={(label) => `Date: ${label}`}
+                  />
+                      
+                      {/* Legend - Removed since KPI selection buttons already show numbered colors */}
+                      {/* {selectedChartMetrics.length > 1 && (
+                        <Legend 
+                          wrapperStyle={{ paddingTop: '20px' }}
+                          formatter={(value) => kpiConfig.find(k => k.id === value)?.label || value}
+                        />
+                      )} */}
+                      
+                      {/* Multiple Lines */}
+                      {selectedChartMetrics.map((metricId) => (
+                  <Line
+                          key={metricId}
+                          yAxisId={needsDualYAxis(selectedChartMetrics, chartData) ? getYAxisOrientation(metricId, selectedChartMetrics, chartData) : 'left'}
+                    type="monotone"
+                          dataKey={metricId}
+                          stroke={getKpiChartColor(metricId)}
+                    strokeWidth={3}
+                    dot={{ 
+                            fill: getKpiChartColor(metricId),
+                      strokeWidth: 2, 
+                      r: 4 
+                    }}
+                    activeDot={{ r: 6, stroke: 'white', strokeWidth: 2 }}
+                  />
+                      ))}
+                </LineChart>
+                  ) : (
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 5, right: needsDualYAxis(selectedChartMetrics, chartData) ? 50 : 30, left: 20, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis 
+                        dataKey="dateFormatted" 
+                        stroke="#9ca3af"
+                        fontSize={12}
+                        tickLine={false}
+                      />
+                      
+                      {/* Primary Y-Axis (Left) */}
+                      <YAxis 
+                        yAxisId="left"
+                        stroke="#9ca3af"
+                        fontSize={12}
+                        tickLine={false}
+                        domain={getLeftAxisDomain(selectedChartMetrics, chartData)}
+                        tickFormatter={(value) => {
+                          const leftMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'left');
+                          return leftMetrics.length > 0 ? formatLeftYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
+                        }}
+                      />
+                      
+                      {/* Secondary Y-Axis (Right) - Only if needed */}
+                      {needsDualYAxis(selectedChartMetrics, chartData) && (
+                        <YAxis 
+                          yAxisId="right"
+                          orientation="right"
+                          stroke="#9ca3af"
+                          fontSize={12}
+                          tickLine={false}
+                          domain={getRightAxisDomain(selectedChartMetrics, chartData)}
+                          tickFormatter={(value) => {
+                            const rightMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'right');
+                            return rightMetrics.length > 0 ? formatRightYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
+                          }}
+                        />
+                      )}
+                      
+                      <Tooltip 
+                        contentStyle={{
+                          backgroundColor: 'white',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}
+                        formatter={(value: any, name: string) => {
+                          const kpi = kpiConfig.find(k => k.id === name);
+                          return [formatKPIValue(name, value), kpi?.label || name];
+                        }}
+                        labelFormatter={(label) => `Date: ${label}`}
+                      />
+                      
+                      {/* Legend - Removed since KPI selection buttons already show numbered colors */}
+                      {/* {selectedChartMetrics.length > 1 && (
+                        <Legend 
+                          wrapperStyle={{ paddingTop: '20px' }}
+                          formatter={(value) => kpiConfig.find(k => k.id === value)?.label || value}
+                        />
+                      )} */}
+                      
+                      {/* Multiple Bars */}
+                      {selectedChartMetrics.map((metricId) => (
+                        <Bar
+                          key={metricId}
+                          yAxisId={needsDualYAxis(selectedChartMetrics, chartData) ? getYAxisOrientation(metricId, selectedChartMetrics, chartData) : 'left'}
+                          dataKey={metricId}
+                          fill={getKpiChartColor(metricId)}
+                          name={metricId}
+                        />
+                      ))}
+                    </BarChart>
+                  );
+                })()}
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Premium Campaign Performance Table */}
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden mt-8">
+            {/* Table Header with Search and Filters */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                    Campaign Performance
+              </h3>
+              <p className="text-sm text-gray-500">
+                    {(() => {
+                      const filteredCampaigns = getFilteredAndSortedCampaigns();
+                      const totalCampaigns = campaignData?.campaigns.length || 0;
+                      
+                      // Updated status descriptions
+                      const statusNote = statusFilter === 'active' 
+                        ? 'Active campaigns (with impressions/clicks)' 
+                        : 'All campaigns (including enabled but inactive)';
+                      
+                      return `Showing ${filteredCampaigns.length} of ${totalCampaigns} campaigns • Last ${campaignData?.dateRange.days} days • ${statusNote}`;
+                    })()}
+              </p>
+            </div>
+            
+                {/* Status Filter Toggle */}
+                <div className="flex items-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-600">Status:</span>
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button
+                        onClick={() => setStatusFilter('active')}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                          statusFilter === 'active'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        Active Only
+                      </button>
+                      <button
+                        onClick={() => setStatusFilter('all')}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                          statusFilter === 'all'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        All
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Bulk Actions */}
+                  {selectedCampaigns.length > 0 && (
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-600">
+                        {selectedCampaigns.length} selected
+                      </span>
+                      <div className="relative">
+                        <button
+                          onClick={() => setBulkActionOpen(!bulkActionOpen)}
+                          className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          <span className="text-sm font-medium">Actions</span>
+                          <ChevronDown className="h-4 w-4" />
+                        </button>
+                        
+                        {bulkActionOpen && (
+                          <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+                            <div className="p-1">
+                              <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md flex items-center space-x-2">
+                                <Pause className="h-4 w-4" />
+                                <span>Pause Campaigns</span>
+                              </button>
+                              <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md flex items-center space-x-2">
+                                <Play className="h-4 w-4" />
+                                <span>Resume Campaigns</span>
+                              </button>
+                              <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md flex items-center space-x-2">
+                                <Edit className="h-4 w-4" />
+                                <span>Edit Budgets</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Search Bar and Quick Filters */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4 flex-1">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search campaigns..."
+                      value={campaignSearch}
+                      onChange={(e) => setCampaignSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  
+                  {/* Quick Filter Chips */}
+                  <div className="flex items-center space-x-2">
+                    <button className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors">
+                      <Zap className="h-3 w-3 mr-1" />
+                      High Spend
+                    </button>
+                    <button className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors">
+                      <Target className="h-3 w-3 mr-1" />
+                      Low CTR
+                    </button>
+                    <button className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      No Conversions
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Bulk Selection Controls */}
+                <div className="flex items-center space-x-2">
+                  {(() => {
+                    const filteredCampaigns = getFilteredAndSortedCampaigns();
+                    const allSelected = filteredCampaigns.length > 0 && filteredCampaigns.every(c => selectedCampaigns.includes(c.id));
+                    return (
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={allSelected ? clearAllCampaigns : selectAllCampaigns}
+                          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          {allSelected ? 'Clear All' : 'Select All'}
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+            
+            {(() => {
+              const filteredCampaigns = getFilteredAndSortedCampaigns();
+              
+              if (filteredCampaigns.length === 0) {
+                return (
+                  <div className="px-6 py-12 text-center">
+                    <div className="text-gray-400 mb-4">
+                      <BarChart3 className="h-12 w-12 mx-auto" />
+                    </div>
+                    <p className="text-gray-500 text-lg">
+                      {campaignSearch.trim() ? 'No campaigns match your search' : 'No campaigns found'}
+                    </p>
+                    <p className="text-gray-400 text-sm">
+                      {campaignSearch.trim() ? 'Try adjusting your search criteria' : 'Check your account settings or date range'}
+                    </p>
+                  </div>
+                );
+              }
+              
+              return (
+                <div className="overflow-x-auto" style={{ height: 'calc(100vh - 280px)' }}>
+                  <table className="w-full">
+                    {/* Sticky Header */}
+                    <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 z-10">
+                      <tr>
+                        {/* Bulk Selection Checkbox */}
+                        <th className="px-4 py-3 text-left">
+                          <input
+                            type="checkbox"
+                            checked={filteredCampaigns.length > 0 && filteredCampaigns.every(c => selectedCampaigns.includes(c.id))}
+                            onChange={() => {
+                              const allSelected = filteredCampaigns.every(c => selectedCampaigns.includes(c.id));
+                              if (allSelected) {
+                                clearAllCampaigns();
+                              } else {
+                                selectAllCampaigns();
+                              }
+                            }}
+                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                      </th>
+                        
+                        {/* Campaign Name */}
+                        <th 
+                          onClick={() => handleSort('name')}
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center space-x-1">
+                            <span>Campaign</span>
+                            {getSortIcon('name')}
+                          </div>
+                      </th>
+                        
+                        {/* Clicks */}
+                        <th 
+                          onClick={() => handleSort('clicks')}
+                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center justify-end space-x-1">
+                            <span>Clicks</span>
+                            {getSortIcon('clicks')}
+                          </div>
+                      </th>
+                        
+                        {/* Impressions */}
+                        <th 
+                          onClick={() => handleSort('impressions')}
+                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center justify-end space-x-1">
+                            <span>Impressions</span>
+                            {getSortIcon('impressions')}
+                          </div>
+                      </th>
+                        
+                        {/* CTR */}
+                        <th 
+                          onClick={() => handleSort('ctr')}
+                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center justify-end space-x-1">
+                            <span>CTR</span>
+                            {getSortIcon('ctr')}
+                          </div>
+                      </th>
+                        
+                        {/* CPC */}
+                        <th 
+                          onClick={() => handleSort('avgCpc')}
+                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center justify-end space-x-1">
+                            <span>CPC</span>
+                            {getSortIcon('avgCpc')}
+                          </div>
+                      </th>
+                        
+                        {/* Cost */}
+                        <th 
+                          onClick={() => handleSort('cost')}
+                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center justify-end space-x-1">
+                            <span>Cost</span>
+                            {getSortIcon('cost')}
+                          </div>
+                        </th>
+                        
+                        {/* Conversions */}
+                        <th 
+                          onClick={() => handleSort('conversions')}
+                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center justify-end space-x-1">
+                            <span>Conversions</span>
+                            {getSortIcon('conversions')}
+                          </div>
+                        </th>
+                        
+                        {/* Conv. Value */}
+                        <th 
+                          onClick={() => handleSort('conversionsValue')}
+                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center justify-end space-x-1">
+                            <span>Conv. Value</span>
+                            {getSortIcon('conversionsValue')}
+                          </div>
+                        </th>
+                        
+                        {/* CPA */}
+                        <th 
+                          onClick={() => handleSort('cpa')}
+                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center justify-end space-x-1">
+                            <span>CPA</span>
+                            {getSortIcon('cpa')}
+                          </div>
+                        </th>
+                        
+                        {/* ROAS */}
+                        <th 
+                          onClick={() => handleSort('roas')}
+                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-center justify-end space-x-1">
+                            <span>ROAS</span>
+                            {getSortIcon('roas')}
+                          </div>
+                        </th>
+                        
+                        {/* Actions */}
+                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                          Actions
+                      </th>
+                    </tr>
+                  </thead>
+                    
+                    {/* Campaign Rows */}
+                    <tbody className="divide-y divide-gray-200">
+                      {filteredCampaigns.map((campaign, index) => (
+                        <tr 
+                          key={campaign.id} 
+                          className={`transition-colors ${
+                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                          } hover:bg-blue-50`}
+                        >
+                          {/* Bulk Selection Checkbox */}
+                          <td className="px-4 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selectedCampaigns.includes(campaign.id)}
+                              onChange={() => toggleCampaignSelection(campaign.id)}
+                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                          </td>
+                          
+                          {/* Campaign Name with Status */}
+                          <td className="px-6 py-4">
+                            <div className="flex items-center space-x-2">
+                              {getStatusIcon(campaign.status)}
+                              <div>
+                                <button className="text-sm font-medium text-blue-600 hover:text-blue-800 text-left">
+                            {campaign.name}
+                                </button>
+                                <div className="text-xs text-gray-500">
+                                  ID: {campaign.id} • {campaign.status}
+                          </div>
+                              </div>
+                          </div>
+                        </td>
+                          
+                          {/* Clicks */}
+                          <td className="px-6 py-4 text-right">
+                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'clicks'))}`}>
+                          {formatNumber(campaign.clicks)}
+                            </div>
+                        </td>
+                          
+                          {/* Impressions */}
+                          <td className="px-6 py-4 text-right">
+                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'impressions'))}`}>
+                              {formatLargeNumber(campaign.impressions)}
+                            </div>
+                          </td>
+                          
+                          {/* CTR */}
+                          <td className="px-6 py-4 text-right">
+                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'ctr'))}`}>
+                          {formatPercentage(campaign.ctr)}
+                            </div>
+                        </td>
+                          
+                          {/* CPC */}
+                          <td className="px-6 py-4 text-right">
+                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'avgCpc'))}`}>
+                              {formatCurrency(campaign.avgCpc)}
+                            </div>
+                          </td>
+                          
+                          {/* Cost */}
+                          <td className="px-6 py-4 text-right">
+                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'cost'))}`}>
+                          {formatCurrency(campaign.cost)}
+                            </div>
+                        </td>
+                          
+                          {/* Conversions */}
+                          <td className="px-6 py-4 text-right">
+                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversions'))}`}>
+                          {formatNumber(campaign.conversions)}
+                            </div>
+                        </td>
+                          
+                          {/* Conv. Value */}
+                          <td className="px-6 py-4 text-right">
+                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversionsValue'))}`}>
+                              {formatCurrency(campaign.conversionsValue)}
+                            </div>
+                          </td>
+                          
+                          {/* CPA */}
+                          <td className="px-6 py-4 text-right">
+                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'cpa'))}`}>
+                              {formatCurrency(campaign.cpa)}
+                            </div>
+                          </td>
+                          
+                          {/* ROAS */}
+                          <td className="px-6 py-4 text-right">
+                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'roas'))}`}>
+                              {campaign.roas.toFixed(2)}x
+                            </div>
+                          </td>
+                          
+                          {/* Actions */}
+                          <td className="px-6 py-4 text-center">
+                            <div className="relative">
+                              <button className="text-gray-400 hover:text-gray-600 transition-colors">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </button>
+                            </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                    
+                    {/* Totals Footer */}
+                    <tfoot className="bg-gray-100 border-t-2 border-gray-300">
+                      <tr className="font-bold text-gray-900">
+                        <td className="px-4 py-4"></td>
+                        <td className="px-6 py-4 text-sm">
+                          TOTAL
+                          <div className="text-xs font-normal text-gray-500">
+                            {filteredCampaigns.length} campaigns
+                          </div>
+                        </td>
+                        
+                        {(() => {
+                          const totals = calculateTableTotals();
+                          return (
+                            <>
+                              <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.clicks)}</td>
+                              <td className="px-6 py-4 text-right text-sm">{formatLargeNumber(totals.impressions)}</td>
+                              <td className="px-6 py-4 text-right text-sm">{formatPercentage(totals.ctr)}</td>
+                              <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.avgCpc)}</td>
+                              <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cost)}</td>
+                              <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.conversions)}</td>
+                              <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.conversionsValue)}</td>
+                              <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cpa)}</td>
+                              <td className="px-6 py-4 text-right text-sm">{totals.roas.toFixed(2)}x</td>
+                              <td className="px-6 py-4"></td>
+                            </>
+                          );
+                        })()}
+                      </tr>
+                    </tfoot>
+                </table>
+              </div>
+              );
+            })()}
+          </div>
+        </>
+      )}
+
+      {/* No data state */}
+      {!campaignData && !loading && (
+        <div className="text-center py-16">
+          <div className="text-gray-400 mb-6">
+            <BarChart3 className="h-16 w-16 mx-auto" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Welcome to Kovvar | PPC Performance</h3>
+          <p className="text-gray-500 mb-6">
+            {selectedAccount 
+              ? 'No data available for the selected account and date range.'
+              : 'Select an account from the header to view comprehensive PPC analytics.'
+            }
+          </p>
+          {!selectedAccount && (
+            <div className="flex justify-center">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md">
+                <p className="text-blue-800 text-sm">
+                  💡 Choose an account from the dropdown in the header to get started with your analytics dashboard.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+
+  // Ad Groups Performance page
+  const renderAdGroupsPage = () => (
+    <>
+      {/* Page Title */}
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Ad Groups & Asset Groups Performance</h2>
+        <p className="text-gray-600">
+          {selectedAccountData && selectedDateRange
+            ? `Traditional ad groups and Performance Max asset groups for ${getDisplayName(selectedAccountData)} • ${formatDateRangeDisplay(selectedDateRange)}`
+            : 'Analyze and optimize performance across traditional ad groups and Performance Max asset groups'
+          }
+        </p>
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
+          <p className="text-red-800">{error}</p>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-16">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="mt-4 text-gray-600">Loading ad groups and asset groups data...</p>
+        </div>
+      )}
+
+      {/* No Account Selected */}
+      {!selectedAccount && !loading && (
+        <div className="text-center py-16">
+          <div className="text-gray-400 mb-6">
+            <Target className="h-16 w-16 mx-auto" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Select an Account</h3>
+          <p className="text-gray-500 mb-6">
+            Choose an account from the header to view ad groups and asset groups performance data.
+          </p>
+          <div className="flex justify-center">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md">
+              <p className="text-blue-800 text-sm">
+                💡 Select an account from the dropdown in the header to analyze ad groups and asset groups performance.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ad Groups & Asset Groups Table */}
+      {selectedAccount && campaignData && !loading && (
+        <AdGroupsTable />
+      )}
+    </>
+  );
+
+  // Ad Groups Table Component (Enhanced for both Ad Groups and Asset Groups)
+  const AdGroupsTable = () => {
+    const [adGroupSearch, setAdGroupSearch] = useState<string>('');
+    const [adGroupSort, setAdGroupSort] = useState<{field: string, direction: 'asc' | 'desc' | null}>({field: '', direction: null});
+    const [selectedAdGroups, setSelectedAdGroups] = useState<string[]>([]);
+    const [groupTypeFilter, setGroupTypeFilter] = useState<'all' | 'traditional' | 'asset'>('all');
+    const [realAdGroupData, setRealAdGroupData] = useState<any>(null);
+    const [adGroupsLoading, setAdGroupsLoading] = useState(false);
+    const [adGroupsError, setAdGroupsError] = useState<string>('');
+    
+    // Fetch real ad groups and asset groups data
+    const fetchAdGroupsData = async () => {
+      if (!selectedAccount || !selectedDateRange) return;
+      
+      try {
+        setAdGroupsLoading(true);
+        setAdGroupsError('');
+        
+        const apiDateRange = getApiDateRange(selectedDateRange);
+        const response = await fetch(`/api/ad-groups?customerId=${selectedAccount}&dateRange=${apiDateRange.days}&groupType=all`);
+        const result = await response.json();
+        
+        if (result.success) {
+          console.log('📊 Real Ad Groups Data Fetched:', result.data);
+          setRealAdGroupData(result.data);
+        } else {
+          console.error('Failed to fetch ad groups data:', result.message);
+          setAdGroupsError(result.message || 'Failed to fetch ad groups data');
+        }
+      } catch (err) {
+        console.error('Error fetching ad groups data:', err);
+        setAdGroupsError('Error fetching ad groups data');
+      } finally {
+        setAdGroupsLoading(false);
+      }
+    };
+
+    // Fetch data when account or date range changes
+    useEffect(() => {
+      fetchAdGroupsData();
+    }, [selectedAccount, selectedDateRange]);
+    
+    // Campaign type detection based on naming conventions
+    const detectCampaignType = (campaignName: string): 'search' | 'shopping' | 'performance_max' | 'other' => {
+      const nameLower = campaignName.toLowerCase();
+      if (nameLower.includes('performance max') || nameLower.includes('pmax')) {
+        return 'performance_max';
+      }
+      if (nameLower.includes('shopping')) {
+        return 'shopping';
+      }
+      if (nameLower.includes('search')) {
+        return 'search';
+      }
+      return 'other';
+    };
+
+    // Get campaign type statistics for filter display
+    const getCampaignTypeStats = () => {
+      if (realAdGroupData?.groups) {
+        const traditional = realAdGroupData.groups.filter((g: any) => g.groupType === 'ad_group').length;
+        const asset = realAdGroupData.groups.filter((g: any) => g.groupType === 'asset_group').length;
+        return { traditional, asset, total: traditional + asset };
+      }
+      
+      // Fallback to campaign-based stats if no real data
+      if (!campaignData) return { traditional: 0, asset: 0, total: 0 };
+      
+      let traditional = 0;
+      let asset = 0;
+      
+      campaignData.campaigns.forEach(campaign => {
+        const type = detectCampaignType(campaign.name);
+        if (type === 'performance_max') {
+          asset++;
+        } else {
+          traditional++;
+        }
+      });
+      
+      return { traditional, asset, total: traditional + asset };
+    };
+    
+    // Get all ad groups and asset groups from all campaigns
+    const getAllAdGroups = () => {
+      // Use real data if available
+      if (realAdGroupData?.groups) {
+        return realAdGroupData.groups.map((group: any) => ({
+          ...group,
+          // Ensure consistent field names
+          campaignType: detectCampaignType(group.campaignName),
+          // Add mock Performance Max fields if not present
+          adStrength: group.groupType === 'asset_group' && !group.adStrength ? 
+            (['Poor', 'Good', 'Excellent'] as const)[Math.floor(Math.random() * 3)] : group.adStrength,
+          assetCoverage: group.groupType === 'asset_group' && !group.assetCoverage ? 
+            Math.floor(Math.random() * 40) + 60 : group.assetCoverage
+        }));
+      }
+
+      // Fallback to mock data if real data not available
+      if (!campaignData) return [];
+      
+      let allGroups: (AdGroup & { 
+        campaignName: string; 
+        campaignType: 'search' | 'shopping' | 'performance_max' | 'other';
+        groupType: 'ad_group' | 'asset_group';
+        adStrength?: 'Poor' | 'Good' | 'Excellent';
+        assetCoverage?: number;
+      })[] = [];
+      
+      // Add ad groups from expanded campaigns (if any loaded)
+      Object.entries(adGroupData).forEach(([campaignId, data]) => {
+        const campaign = campaignData.campaigns.find(c => c.id === campaignId);
+        if (!campaign) return;
+        
+        const campaignName = campaign.name;
+        const campaignType = detectCampaignType(campaignName);
+        
+        data.adGroups.forEach(adGroup => {
+          allGroups.push({
+            ...adGroup,
+            campaignName,
+            campaignType,
+            groupType: campaignType === 'performance_max' ? 'asset_group' : 'ad_group',
+            // Add mock Performance Max specific fields
+            adStrength: campaignType === 'performance_max' ? 
+              (['Poor', 'Good', 'Excellent'] as const)[Math.floor(Math.random() * 3)] : undefined,
+            assetCoverage: campaignType === 'performance_max' ? 
+              Math.floor(Math.random() * 40) + 60 : undefined // 60-100%
+          });
+        });
+      });
+      
+      // If no ad groups loaded yet, show mock data based on campaigns
+      if (allGroups.length === 0 && campaignData.campaigns.length > 0) {
+        campaignData.campaigns.slice(0, 8).forEach(campaign => {
+          const campaignType = detectCampaignType(campaign.name);
+          const isPerformanceMax = campaignType === 'performance_max';
+          
+          // Create 2-4 groups per campaign
+          const numGroups = Math.floor(Math.random() * 3) + 2;
+          for (let i = 0; i < numGroups; i++) {
+            const baseMetrics = {
+              impressions: Math.floor(campaign.impressions * (0.15 + Math.random() * 0.25)),
+              clicks: Math.floor(campaign.clicks * (0.15 + Math.random() * 0.25)),
+              cost: campaign.cost * (0.15 + Math.random() * 0.25),
+              conversions: campaign.conversions * (0.15 + Math.random() * 0.25),
+              conversionsValue: campaign.conversionsValue * (0.15 + Math.random() * 0.25),
+            };
+            
+            allGroups.push({
+              id: `${campaign.id}_${isPerformanceMax ? 'ag' : 'adg'}_${i + 1}`,
+              name: isPerformanceMax ? `Asset Group ${i + 1}` : `Ad Group ${i + 1}`,
+              status: Math.random() > 0.15 ? 'ENABLED' : 'PAUSED',
+              campaignId: campaign.id,
+              campaignName: campaign.name,
+              campaignType,
+              groupType: isPerformanceMax ? 'asset_group' : 'ad_group',
+              ...baseMetrics,
+              ctr: baseMetrics.impressions > 0 ? (baseMetrics.clicks / baseMetrics.impressions) * 100 : 0,
+              avgCpc: baseMetrics.clicks > 0 ? baseMetrics.cost / baseMetrics.clicks : 0,
+              conversionRate: baseMetrics.clicks > 0 ? (baseMetrics.conversions / baseMetrics.clicks) * 100 : 0,
+              cpa: baseMetrics.conversions > 0 ? baseMetrics.cost / baseMetrics.conversions : 0,
+              roas: baseMetrics.cost > 0 ? baseMetrics.conversionsValue / baseMetrics.cost : 0,
+              // Performance Max specific fields
+              adStrength: isPerformanceMax ? 
+                (['Poor', 'Good', 'Excellent'] as const)[Math.floor(Math.random() * 3)] : undefined,
+              assetCoverage: isPerformanceMax ? 
+                Math.floor(Math.random() * 40) + 60 : undefined // 60-100%
+            });
+          }
+        });
+      }
+      
+      return allGroups;
+    };
+
+    // Filter and sort ad groups
+    const getFilteredAndSortedAdGroups = () => {
+      let groups = getAllAdGroups();
+      
+      // Group type filter
+      if (groupTypeFilter === 'traditional') {
+        groups = groups.filter((g: any) => g.groupType === 'ad_group');
+      } else if (groupTypeFilter === 'asset') {
+        groups = groups.filter((g: any) => g.groupType === 'asset_group');
+      }
+      
+      // Search filter
+      if (adGroupSearch.trim()) {
+        const searchTerm = adGroupSearch.toLowerCase().trim();
+        groups = groups.filter((g: any) => 
+          g.name.toLowerCase().includes(searchTerm) ||
+          g.campaignName.toLowerCase().includes(searchTerm) ||
+          g.id.toLowerCase().includes(searchTerm)
+        );
+      }
+      
+      // Apply sorting
+      if (adGroupSort.field && adGroupSort.direction) {
+        groups.sort((a: any, b: any) => {
+          const field = adGroupSort.field;
+          let aValue: any = a[field as keyof typeof a];
+          let bValue: any = b[field as keyof typeof b];
+          
+          const numericFields = ['clicks', 'impressions', 'cost', 'ctr', 'avgCpc', 'conversions', 'conversionsValue', 'cpa', 'roas', 'assetCoverage'];
+          
+          if (numericFields.includes(field)) {
+            aValue = Number(aValue) || 0;
+            bValue = Number(bValue) || 0;
+          } else {
+            aValue = String(aValue).toLowerCase();
+            bValue = String(bValue).toLowerCase();
+          }
+          
+          let comparison = 0;
+          if (aValue < bValue) {
+            comparison = -1;
+          } else if (aValue > bValue) {
+            comparison = 1;
+          }
+          
+          return adGroupSort.direction === 'asc' ? comparison : -comparison;
+        });
+      }
+      
+      return groups;
+    };
+
+    const handleSort = (field: string) => {
+      setAdGroupSort(prev => {
+        if (prev.field !== field) {
+          return { field, direction: 'desc' };
+        }
+        switch (prev.direction) {
+          case null: return { field, direction: 'desc' };
+          case 'desc': return { field, direction: 'asc' };
+          case 'asc': return { field: '', direction: null };
+          default: return { field: '', direction: null };
+        }
+      });
+    };
+
+    const getSortIcon = (field: string) => {
+      if (adGroupSort.field !== field || adGroupSort.direction === null) {
+        return <ArrowUpDown className="h-4 w-4 text-gray-400" />;
+      }
+      return adGroupSort.direction === 'asc' 
+        ? <ArrowUp className="h-4 w-4 text-blue-600" />
+        : <ArrowDown className="h-4 w-4 text-blue-600" />;
+    };
+
+    const toggleAdGroupSelection = (adGroupId: string) => {
+      setSelectedAdGroups(prev => 
+        prev.includes(adGroupId) 
+          ? prev.filter(id => id !== adGroupId)
+          : [...prev, adGroupId]
+      );
+    };
+
+    const selectAllAdGroups = () => {
+      const filteredAdGroups = getFilteredAndSortedAdGroups();
+      setSelectedAdGroups(filteredAdGroups.map((ag: any) => ag.id));
+    };
+
+    const clearAllAdGroups = () => setSelectedAdGroups([]);
+
+    const getAdGroupPerformanceIndicator = (adGroup: any, metric: string): 'high' | 'medium' | 'low' => {
+      const allAdGroups = getAllAdGroups();
+      if (allAdGroups.length < 3) return 'medium';
+      const values = allAdGroups.map((ag: any) => ag[metric as keyof typeof ag] as number).sort((a: number, b: number) => b - a);
+      const value = adGroup[metric as keyof typeof adGroup] as number;
+      const highThreshold = values[Math.floor(values.length * 0.33)];
+      const lowThreshold = values[Math.floor(values.length * 0.67)];
+      
+      if (['cost', 'avgCpc', 'cpa'].includes(metric)) {
+        if (value <= lowThreshold) return 'high';
+        if (value <= highThreshold) return 'medium';
+        return 'low';
+      }
+      if (value >= highThreshold) return 'high';
+      if (value >= lowThreshold) return 'medium';
+      return 'low';
+    };
+
+    const calculateAdGroupTotals = () => {
+      const adGroups = getFilteredAndSortedAdGroups();
+      const totals = adGroups.reduce((acc: any, adGroup: any) => ({
+        clicks: acc.clicks + adGroup.clicks,
+        impressions: acc.impressions + adGroup.impressions,
+        cost: acc.cost + adGroup.cost,
+        conversions: acc.conversions + adGroup.conversions,
+        conversionsValue: acc.conversionsValue + adGroup.conversionsValue,
+      }), { clicks: 0, impressions: 0, cost: 0, conversions: 0, conversionsValue: 0 });
+
+      return {
+        ...totals,
+        ctr: totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0,
+        avgCpc: totals.clicks > 0 ? (totals.cost / totals.clicks) : 0,
+        cpa: totals.conversions > 0 ? (totals.cost / totals.conversions) : 0,
+        roas: totals.cost > 0 ? (totals.conversionsValue / totals.cost) : 0,
+      };
+    };
+
+    // Get group type badge styles
+    const getGroupTypeBadge = (groupType: 'ad_group' | 'asset_group') => {
+      if (groupType === 'asset_group') {
+        return 'bg-purple-100 text-purple-800 border border-purple-200';
+      }
+      return 'bg-blue-100 text-blue-800 border border-blue-200';
+    };
+
+    // Get campaign type indicator
+    const getCampaignTypeIndicator = (campaignType: 'search' | 'shopping' | 'performance_max' | 'other') => {
+      const indicators = {
+        search: '🔍',
+        shopping: '🛒', 
+        performance_max: '⚡',
+        other: '📊'
+      };
+      return indicators[campaignType];
+    };
+
+    // Get ad strength badge styles
+    const getAdStrengthBadge = (strength: 'Poor' | 'Good' | 'Excellent') => {
+      switch (strength) {
+        case 'Excellent': return 'bg-green-100 text-green-800 border border-green-200';
+        case 'Good': return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+        case 'Poor': return 'bg-red-100 text-red-800 border border-red-200';
+      }
+    };
+
+    const filteredAdGroups = getFilteredAndSortedAdGroups();
+    const typeStats = getCampaignTypeStats();
+
+    // Show loading state
+    if (adGroupsLoading) {
+      return (
+        <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-600">Loading ad groups and asset groups...</p>
+        </div>
+      );
+    }
+
+    // Show error state
+    if (adGroupsError) {
+      return (
+        <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+          <div className="text-red-400 mb-4">
+            <AlertTriangle className="h-8 w-8 mx-auto" />
+          </div>
+          <p className="text-red-600 mb-4">{adGroupsError}</p>
+          <button 
+            onClick={fetchAdGroupsData}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        {/* Table Header with Search and Filters */}
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Ad Groups & Asset Groups Performance
+              </h3>
+              <p className="text-sm text-gray-500">
+                Showing {filteredAdGroups.length} groups • Last {campaignData?.dateRange.days || selectedDateRange?.apiDays || 30} days
+                {realAdGroupData && (
+                  <span className="text-green-600 ml-2">• Live Data ✅</span>
+                )}
+              </p>
+            </div>
+            
+            {/* Group Type Filter */}
+            <div className="flex items-center space-x-4">
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setGroupTypeFilter('all')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                    groupTypeFilter === 'all'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  All ({typeStats.total})
+                </button>
+                <button
+                  onClick={() => setGroupTypeFilter('traditional')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                    groupTypeFilter === 'traditional'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Traditional ({typeStats.traditional})
+                </button>
+                <button
+                  onClick={() => setGroupTypeFilter('asset')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                    groupTypeFilter === 'asset'
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Asset Groups ({typeStats.asset})
+                </button>
+              </div>
+              
+              {/* Bulk Actions */}
+              {selectedAdGroups.length > 0 && (
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-600">
+                    {selectedAdGroups.length} selected
+                  </span>
+                  <button className="flex items-center space-x-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <span className="text-sm font-medium">Actions</span>
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Search Bar and Filters */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4 flex-1">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search ad groups, asset groups, or campaigns..."
+                  value={adGroupSearch}
+                  onChange={(e) => setAdGroupSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              
+              {/* Quick Filter Chips */}
+              <div className="flex items-center space-x-2">
+                <button className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors">
+                  <Zap className="h-3 w-3 mr-1" />
+                  High Spend
+                </button>
+                <button className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors">
+                  <Target className="h-3 w-3 mr-1" />
+                  Low CTR
+                </button>
+                <button className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  No Conversions
+                </button>
+              </div>
+            </div>
+            
+            {/* Bulk Selection Controls */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={filteredAdGroups.length > 0 && filteredAdGroups.every((ag: any) => selectedAdGroups.includes(ag.id)) ? clearAllAdGroups : selectAllAdGroups}
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+              >
+                {filteredAdGroups.length > 0 && filteredAdGroups.every((ag: any) => selectedAdGroups.includes(ag.id)) ? 'Clear All' : 'Select All'}
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        {/* Table Content */}
+        {filteredAdGroups.length === 0 ? (
+          <div className="px-6 py-12 text-center">
+            <div className="text-gray-400 mb-4">
+              <Target className="h-12 w-12 mx-auto" />
+            </div>
+            <p className="text-gray-500 text-lg">
+              {adGroupSearch.trim() ? 'No groups match your search' : 'No groups found'}
+            </p>
+            <p className="text-gray-400 text-sm">
+              {adGroupSearch.trim() ? 'Try adjusting your search criteria' : 'Groups will appear here when campaign data is loaded'}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto" style={{ height: 'calc(100vh - 280px)' }}>
+            <table className="w-full">
+              {/* Sticky Header */}
+              <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 z-10">
+                <tr>
+                  {/* Bulk Selection Checkbox */}
+                  <th className="px-4 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={filteredAdGroups.length > 0 && filteredAdGroups.every((ag: any) => selectedAdGroups.includes(ag.id))}
+                      onChange={() => {
+                        const allSelected = filteredAdGroups.every((ag: any) => selectedAdGroups.includes(ag.id));
+                        if (allSelected) {
+                          clearAllAdGroups();
+                        } else {
+                          selectAllAdGroups();
+                        }
+                      }}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                  </th>
+                  
+                  {/* Name */}
+                  <th 
+                    onClick={() => handleSort('name')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Name</span>
+                      {getSortIcon('name')}
+                    </div>
+                  </th>
+                  
+                  {/* Campaign */}
+                  <th 
+                    onClick={() => handleSort('campaignName')}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Campaign</span>
+                      {getSortIcon('campaignName')}
+                    </div>
+                  </th>
+                  
+                  {/* Type */}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Type
+                  </th>
+                  
+                  {/* Impressions */}
+                  <th 
+                    onClick={() => handleSort('impressions')}
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-end space-x-1">
+                      <span>Impressions</span>
+                      {getSortIcon('impressions')}
+                    </div>
+                  </th>
+                  
+                  {/* Clicks */}
+                  <th 
+                    onClick={() => handleSort('clicks')}
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-end space-x-1">
+                      <span>Clicks</span>
+                      {getSortIcon('clicks')}
+                    </div>
+                  </th>
+                  
+                  {/* CTR */}
+                  <th 
+                    onClick={() => handleSort('ctr')}
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-end space-x-1">
+                      <span>CTR</span>
+                      {getSortIcon('ctr')}
+                    </div>
+                  </th>
+                  
+                  {/* CPC */}
+                  <th 
+                    onClick={() => handleSort('avgCpc')}
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-end space-x-1">
+                      <span>CPC</span>
+                      {getSortIcon('avgCpc')}
+                    </div>
+                  </th>
+                  
+                  {/* Cost */}
+                  <th 
+                    onClick={() => handleSort('cost')}
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-end space-x-1">
+                      <span>Cost</span>
+                      {getSortIcon('cost')}
+                    </div>
+                  </th>
+                  
+                  {/* Conversions */}
+                  <th 
+                    onClick={() => handleSort('conversions')}
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-end space-x-1">
+                      <span>Conversions</span>
+                      {getSortIcon('conversions')}
+                    </div>
+                  </th>
+                  
+                  {/* CPA */}
+                  <th 
+                    onClick={() => handleSort('cpa')}
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-end space-x-1">
+                      <span>CPA</span>
+                      {getSortIcon('cpa')}
+                    </div>
+                  </th>
+                  
+                  {/* ROAS */}
+                  <th 
+                    onClick={() => handleSort('roas')}
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-end space-x-1">
+                      <span>ROAS</span>
+                      {getSortIcon('roas')}
+                    </div>
+                  </th>
+                  
+                  {/* Ad Strength (Asset Groups only) */}
+                  <th 
+                    onClick={() => handleSort('adStrength')}
+                    className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-center space-x-1">
+                      <span>Ad Strength</span>
+                      {getSortIcon('adStrength')}
+                    </div>
+                  </th>
+                  
+                  {/* Asset Coverage (Asset Groups only) */}
+                  <th 
+                    onClick={() => handleSort('assetCoverage')}
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center justify-end space-x-1">
+                      <span>Asset Coverage</span>
+                      {getSortIcon('assetCoverage')}
+                    </div>
+                  </th>
+                  
+                  {/* Actions */}
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              
+              {/* Group Rows */}
+              <tbody className="divide-y divide-gray-200">
+                {filteredAdGroups.map((group: any, index: number) => (
+                  <tr 
+                    key={group.id} 
+                    className={`transition-colors ${
+                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                    } hover:bg-blue-50`}
+                  >
+                    {/* Bulk Selection Checkbox */}
+                    <td className="px-4 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedAdGroups.includes(group.id)}
+                        onChange={() => toggleAdGroupSelection(group.id)}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                    </td>
+                    
+                    {/* Name with Status */}
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        {getStatusIcon(group.status)}
+                        <div>
+                          <button className="text-sm font-medium text-blue-600 hover:text-blue-800 text-left">
+                            {group.name}
+                          </button>
+                          <div className="text-xs text-gray-500">
+                            ID: {group.id} • {group.status}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    
+                    {/* Campaign Name with Type Indicator */}
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-lg">{getCampaignTypeIndicator(group.campaignType)}</span>
+                        <div className="text-sm text-gray-900 font-medium">
+                          {group.campaignName}
+                        </div>
+                      </div>
+                    </td>
+                    
+                    {/* Type Badge */}
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getGroupTypeBadge(group.groupType)}`}>
+                        {group.groupType === 'asset_group' ? 'Asset Group' : 'Ad Group'}
+                      </span>
+                    </td>
+                    
+                    {/* Impressions */}
+                    <td className="px-6 py-4 text-right">
+                      <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getAdGroupPerformanceIndicator(group, 'impressions'))}`}>
+                        {formatLargeNumber(group.impressions)}
+                      </div>
+                    </td>
+                    
+                    {/* Clicks */}
+                    <td className="px-6 py-4 text-right">
+                      <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getAdGroupPerformanceIndicator(group, 'clicks'))}`}>
+                        {formatNumber(group.clicks)}
+                      </div>
+                    </td>
+                    
+                    {/* CTR */}
+                    <td className="px-6 py-4 text-right">
+                      <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getAdGroupPerformanceIndicator(group, 'ctr'))}`}>
+                        {formatPercentage(group.ctr)}
+                      </div>
+                    </td>
+                    
+                    {/* CPC */}
+                    <td className="px-6 py-4 text-right">
+                      <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getAdGroupPerformanceIndicator(group, 'avgCpc'))}`}>
+                        {formatCurrency(group.avgCpc)}
+                      </div>
+                    </td>
+                    
+                    {/* Cost */}
+                    <td className="px-6 py-4 text-right">
+                      <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getAdGroupPerformanceIndicator(group, 'cost'))}`}>
+                        {formatCurrency(group.cost)}
+                      </div>
+                    </td>
+                    
+                    {/* Conversions */}
+                    <td className="px-6 py-4 text-right">
+                      <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getAdGroupPerformanceIndicator(group, 'conversions'))}`}>
+                        {formatNumber(group.conversions)}
+                      </div>
+                    </td>
+                    
+                    {/* CPA */}
+                    <td className="px-6 py-4 text-right">
+                      <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getAdGroupPerformanceIndicator(group, 'cpa'))}`}>
+                        {formatCurrency(group.cpa)}
+                      </div>
+                    </td>
+                    
+                    {/* ROAS */}
+                    <td className="px-6 py-4 text-right">
+                      <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getAdGroupPerformanceIndicator(group, 'roas'))}`}>
+                        {group.roas.toFixed(2)}x
+                      </div>
+                    </td>
+                    
+                    {/* Ad Strength (Asset Groups only) */}
+                    <td className="px-6 py-4 text-center">
+                      {group.adStrength ? (
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getAdStrengthBadge(group.adStrength)}`}>
+                          {group.adStrength}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
+                    
+                    {/* Asset Coverage (Asset Groups only) */}
+                    <td className="px-6 py-4 text-right">
+                      {group.assetCoverage ? (
+                        <div className="flex items-center justify-end space-x-2">
+                          <div className="w-16 bg-gray-200 rounded-full h-2">
+                            <div 
+                              className={`h-2 rounded-full ${
+                                group.assetCoverage >= 80 ? 'bg-green-500' : 
+                                group.assetCoverage >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                              }`}
+                              style={{ width: `${group.assetCoverage}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-xs font-medium text-gray-700">
+                            {group.assetCoverage}%
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
+                    </td>
+                    
+                    {/* Actions */}
+                    <td className="px-6 py-4 text-center">
+                      <div className="relative">
+                        <button className="text-gray-400 hover:text-gray-600 transition-colors">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              
+              {/* Totals Footer */}
+              <tfoot className="bg-gray-100 border-t-2 border-gray-300">
+                <tr className="font-bold text-gray-900">
+                  <td className="px-4 py-4"></td>
+                  <td className="px-6 py-4 text-sm">
+                    TOTAL
+                    <div className="text-xs font-normal text-gray-500">
+                      {filteredAdGroups.length} groups
+                    </div>
+                  </td>
+                  <td className="px-6 py-4"></td>
+                  <td className="px-6 py-4"></td>
+                  
+                  {(() => {
+                    const totals = calculateAdGroupTotals();
+                    return (
+                      <>
+                        <td className="px-6 py-4 text-right text-sm">{formatLargeNumber(totals.impressions)}</td>
+                        <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.clicks)}</td>
+                        <td className="px-6 py-4 text-right text-sm">{formatPercentage(totals.ctr)}</td>
+                        <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.avgCpc)}</td>
+                        <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cost)}</td>
+                        <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.conversions)}</td>
+                        <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cpa)}</td>
+                        <td className="px-6 py-4 text-right text-sm">{totals.roas.toFixed(2)}x</td>
+                        <td className="px-6 py-4"></td>
+                        <td className="px-6 py-4"></td>
+                        <td className="px-6 py-4"></td>
+                      </>
+                    );
+                  })()}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans">
+      {/* Enhanced Header */}
+      <header className="fixed top-0 left-0 right-0 h-18 bg-gradient-to-r from-white to-gray-50 border-b border-gray-200 shadow-sm z-50">
+        <div className="flex items-center justify-between h-full px-6">
+          {/* Left Section - Branding */}
+          <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center justify-center w-10 h-10 bg-teal-600 rounded-lg">
+                <KovvarIcon className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Kovvar | PPC Performance</h1>
+                <p className="text-sm text-gray-500">Multi-country PPC management</p>
+              </div>
+            </div>
+            
+            {/* Breadcrumbs */}
+            <div className="hidden lg:flex items-center space-x-2 text-sm text-gray-600">
+              <span>Dashboard</span>
+              <ChevronRight className="h-4 w-4" />
+              <span className="text-gray-900 font-medium">
+                {navigationItems.find(item => item.id === currentPage)?.name || 'Dashboard'}
+              </span>
+            </div>
+          </div>
+
+          {/* Center Section - Search & Actions */}
+          <div className="hidden md:flex items-center space-x-4 flex-1 max-w-2xl mx-8">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search campaigns, keywords..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <Plus className="h-4 w-4" />
+              <span className="font-medium">Create Campaign</span>
+            </button>
+          </div>
+
+          {/* Right Section - Account & User */}
+          <div className="flex items-center space-x-4">
+            {/* Account Switcher */}
+            {selectedAccountData && (
+              <div className="relative">
+                <button
+                  onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
+                  className="account-button flex items-center space-x-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <div className="text-left">
+                    <div className="text-sm font-medium text-gray-900">
+                      {cleanCountryCode(selectedAccountData.countryCode)}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate max-w-32">
+                      {selectedAccountData.name}
+                    </div>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-gray-400" />
+                </button>
+                
+                {/* Account Dropdown */}
+                {accountDropdownOpen && (
+                  <div className="account-dropdown absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                    <div className="p-2 max-h-64 overflow-y-auto">
+                      {filteredAccounts.map((account) => (
+                        <button
+                          key={account.id}
+                          onClick={() => {
+                            setSelectedAccount(account.id);
+                            setAccountDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 rounded-md hover:bg-gray-50 transition-colors ${
+                            account.id === selectedAccount ? 'bg-blue-50 text-blue-700' : 'text-gray-900'
+                          }`}
+                        >
+                          <div className="font-medium">{getDisplayName(account)}</div>
+                          <div className="text-sm text-gray-500">
+                            {account.currency} • {account.totalClicks ? formatNumber(account.totalClicks) : '0'} clicks
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Date Range Selector */}
+            <div className="relative">
+              <button
+                onClick={() => setDateDropdownOpen(!dateDropdownOpen)}
+                className="date-button flex items-center space-x-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <div className="text-left">
+                  <div className="text-sm font-medium text-gray-900">
+                    {selectedDateRange ? selectedDateRange.name : 'Last 30 days'}
+                  </div>
+                  <div className="text-xs text-gray-500 truncate max-w-40">
+                    {selectedDateRange ? formatDateRangeDisplay(selectedDateRange) : 'May 5 - Jun 4, 2025'}
+                  </div>
+                </div>
+                <ChevronDown className="h-4 w-4 text-gray-400" />
+              </button>
+              
+              {/* Date Range Dropdown */}
+              {dateDropdownOpen && (
+                <div className="date-dropdown absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+                  <div className="p-2 max-h-80 overflow-y-auto">
+                    {dateRanges.map((range) => {
+                      const IconComponent = range.icon;
+                      const isSelected = selectedDateRange?.id === range.id;
+                      return (
+                        <button
+                          key={range.id}
+                          onClick={() => {
+                            setSelectedDateRange(range);
+                            setDateDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-3 rounded-md hover:bg-gray-50 transition-colors flex items-center space-x-3 ${
+                            isSelected ? 'bg-blue-50 text-blue-700' : 'text-gray-900'
+                          }`}
+                        >
+                          <IconComponent className={`h-4 w-4 ${isSelected ? 'text-blue-600' : 'text-gray-400'}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className={`font-medium text-sm ${isSelected ? 'text-blue-900' : 'text-gray-900'}`}>
+                              {range.name}
+                            </div>
+                            <div className={`text-xs ${isSelected ? 'text-blue-600' : 'text-gray-500'}`}>
+                              {formatDateRangeDisplay(range)}
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                          )}
+                        </button>
+                      );
+                    })}
+                    
+                    {/* Custom Date Range Option */}
+                    <button
+                      onClick={() => {
+                        setCustomDateModalOpen(true);
+                        setDateDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-3 rounded-md hover:bg-gray-50 transition-colors flex items-center space-x-3 text-gray-900 border-t border-gray-100 mt-2 pt-3"
+                    >
+                      <Calendar className="h-4 w-4 text-gray-400" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm text-gray-900">Custom</div>
+                        <div className="text-xs text-gray-500">Choose your own date range</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Performance Summary */}
+            {(campaignData || filteredAccounts.length > 0) && (
+              <div className="hidden xl:block text-sm text-gray-600">
+                <span className="font-medium">Today:</span> {formatNumber(todayMetrics.clicks)} clicks • {formatCurrency(todayMetrics.spend)} spent
+              </div>
+            )}
+
+            {/* Notifications */}
+            <div className="relative">
+              <button 
+                onClick={() => setAnomalyDropdownOpen(!anomalyDropdownOpen)}
+                className="anomaly-button p-2 text-gray-400 hover:text-gray-600 transition-colors relative"
+              >
+                <Bell className="h-5 w-5" />
+                {anomalyData && anomalyData.summary.total > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                    {anomalyData.summary.total > 9 ? '9+' : anomalyData.summary.total}
+                  </span>
+                )}
+              </button>
+
+              {/* Anomaly Dropdown */}
+              {anomalyDropdownOpen && (
+                <div className="anomaly-dropdown absolute right-0 mt-2 w-96 bg-white border border-gray-200 rounded-lg shadow-lg z-20 max-h-96 overflow-hidden">
+                  <div className="p-4 border-b border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-gray-900">Anomaly Alerts</h3>
+                      <button
+                        onClick={() => setAnomalyDropdownOpen(false)}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {anomalyData && (
+                      <div className="flex items-center space-x-4 mt-2 text-sm text-gray-600">
+                        <span className="flex items-center space-x-1">
+                          <AlertTriangle className="h-3 w-3 text-red-500" />
+                          <span>{anomalyData.summary.high} High</span>
+                        </span>
+                        <span className="flex items-center space-x-1">
+                          <AlertCircle className="h-3 w-3 text-yellow-500" />
+                          <span>{anomalyData.summary.medium} Medium</span>
+                        </span>
+                        <span className="flex items-center space-x-1">
+                          <Info className="h-3 w-3 text-blue-500" />
+                          <span>{anomalyData.summary.low} Low</span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="max-h-72 overflow-y-auto">
+                    {anomalyLoading ? (
+                      <div className="p-4 text-center">
+                        <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                        <p className="mt-2 text-sm text-gray-600">Analyzing anomalies...</p>
+                      </div>
+                    ) : anomalyData && anomalyData.anomalies.length > 0 ? (
+                      <div className="divide-y divide-gray-100">
+                        {anomalyData.anomalies.map((anomaly) => (
+                          <div
+                            key={anomaly.id}
+                            className={`p-4 border-l-4 ${getSeverityColor(anomaly.severity)} hover:bg-gray-50 transition-colors`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-start space-x-3 flex-1">
+                                {getSeverityIcon(anomaly.severity)}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center space-x-2">
+                                    <h4 className="font-medium text-gray-900 text-sm">{anomaly.title}</h4>
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                      {anomaly.countryCode}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-600 mt-1">{anomaly.description}</p>
+                                  <div className="flex items-center justify-between mt-2">
+                                    <span className="text-xs text-gray-500">{formatTimeAgo(anomaly.detectedAt)}</span>
+                                    <button
+                                      onClick={() => {
+                                        // Switch to the anomaly's account
+                                        setSelectedAccount(anomaly.accountId);
+                                        setAnomalyDropdownOpen(false);
+                                      }}
+                                      className="inline-flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-800"
+                                    >
+                                      <span>View Account</span>
+                                      <ExternalLink className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {/* Add padding at the bottom to ensure last item is fully visible */}
+                        <div className="h-2"></div>
+                      </div>
+                    ) : (
+                      <div className="p-8 text-center">
+                        <Bell className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">No anomalies detected</p>
+                        <p className="text-xs text-gray-400 mt-1">Your campaigns are performing normally</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {anomalyData && anomalyData.anomalies.length > 0 && (
+                    <div className="p-3 border-t border-gray-200 bg-gray-50">
+                      <button
+                        onClick={() => {
+                          fetchAnomalies();
+                        }}
+                        className="w-full text-sm text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Refresh Anomalies
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* User Avatar */}
+            <button className="flex items-center space-x-2 p-1 hover:bg-gray-100 rounded-lg transition-colors">
+              <div className="h-8 w-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-medium text-sm">
+                JV
+              </div>
+            </button>
+
+            {/* Settings */}
+            <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+              <Settings className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Premium Sidebar */}
+      <aside className="fixed left-0 top-18 bottom-0 w-[280px] bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 shadow-xl z-30">
+        {/* Branding Section */}
+        <div className="p-6 border-b border-gray-700/50">
+          <div className="flex items-center space-x-3 mb-2">
+            <div className="flex items-center justify-center w-8 h-8 bg-teal-500/20 rounded-lg backdrop-blur-sm border border-teal-400/30">
+              <KovvarIcon className="h-5 w-5 text-teal-200" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-white">Kovvar</h1>
+            </div>
+          </div>
+          <p className="text-sm text-gray-300 ml-11">Kovvar PPC Intelligence</p>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-4">
+          <ul className="space-y-1">
+            {navigationItems.map((item) => {
+              const IconComponent = item.icon;
+              const isActive = currentPage === item.id;
+              return (
+                <li key={item.id}>
+                  <button
+                    onClick={() => setCurrentPage(item.id)}
+                    className={`group w-full flex items-center space-x-3 px-6 py-3 text-left transition-all duration-200 rounded-xl font-medium tracking-wide ${
+                      isActive
+                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25 border-l-4 border-blue-300'
+                        : 'text-gray-300 hover:bg-white/10 hover:text-white hover:shadow-lg hover:shadow-white/5'
+                    }`}
+                  >
+                    <IconComponent 
+                      className={`h-5 w-5 transition-all duration-200 ${
+                        isActive 
+                          ? 'text-white drop-shadow-sm' 
+                          : 'text-gray-400 group-hover:text-white group-hover:scale-105'
+                      }`} 
+                    />
+                    <span className={`transition-all duration-200 ${
+                      isActive ? 'text-white font-semibold' : 'group-hover:text-white'
+                    }`}>
+                      {item.name}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        {/* Bottom User Section */}
+        <div className="p-4 border-t border-gray-700/50">
+          <div className="bg-white/5 rounded-xl p-4 backdrop-blur-sm">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                <User className="h-4 w-4 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">Jasper van der Heide</p>
+                <p className="text-xs text-gray-400">
+                  {filteredAccounts.length > 0 ? `${filteredAccounts.length} accounts connected` : '3 accounts connected'}
+                </p>
+              </div>
+              <button className="text-gray-400 hover:text-white transition-colors duration-200 hover:bg-white/10 p-1.5 rounded-lg">
+                <Settings className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="ml-[280px] pt-18">
+        <div className="p-8">
+          {renderPageContent()}
+          </div>
+      </main>
+
+      {/* Custom Date Picker Modal */}
+      {customDateModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-96 max-w-full mx-4">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-gray-900">Custom Date Range</h3>
+              <button
+                onClick={() => setCustomDateModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Start Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  From Date
+                </label>
+                <input
+                  type="date"
+                  value={customDateRange.startDate.toISOString().split('T')[0]}
+                  onChange={(e) => setCustomDateRange(prev => ({
+                    ...prev,
+                    startDate: new Date(e.target.value)
+                  }))}
+                  max={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* End Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  To Date
+                </label>
+                <input
+                  type="date"
+                  value={customDateRange.endDate.toISOString().split('T')[0]}
+                  onChange={(e) => setCustomDateRange(prev => ({
+                    ...prev,
+                    endDate: new Date(e.target.value)
+                  }))}
+                  min={customDateRange.startDate.toISOString().split('T')[0]}
+                  max={new Date().toISOString().split('T')[0]}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+            </div>
+
+              {/* Date Range Preview */}
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="text-sm text-gray-600">Selected Range:</div>
+                <div className="text-sm font-medium text-gray-900">
+                  {formatDateForDisplay(customDateRange.startDate)} - {formatDateForDisplay(customDateRange.endDate)}, {customDateRange.endDate.getFullYear()}
+              </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {Math.ceil(Math.abs(customDateRange.endDate.getTime() - customDateRange.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1} days
+          </div>
+            </div>
+
+              {/* Validation Message */}
+              {!isValidDateRange(customDateRange.startDate, customDateRange.endDate) && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="text-sm text-red-800">
+                    Please ensure the start date is before the end date and both dates are not in the future.
+                  </div>
+            </div>
+          )}
+              </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end space-x-3 mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => setCustomDateModalOpen(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCustomDateApply}
+                disabled={!isValidDateRange(customDateRange.startDate, customDateRange.endDate)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Apply
+              </button>
+                </div>
+                              </div>
+                  </div>
+                )}
+    </div>
+  );
+}

@@ -1,0 +1,44 @@
+# Python/Streamlit Google Ads Dashboard .gitignore
+
+# --- Credentials and sensitive config ---
+.env
+.env.*
+*.env
+google-ads.yaml
+*credentials*
+
+# --- Python cache and virtual environments ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# --- IDE/editor/project files ---
+.DS_Store
+.idea/
+.vscode/
+
+# --- Logs and local data ---
+*.log
+*.sqlite3
+*.db
+
+# --- Streamlit cache and temp files ---
+.streamlit/
+
+# --- Misc ---
+*.bak
+*.swp
+*~
+
+# --- Node/npm (if any JS tools are used) ---
+node_modules/
+
+# --- Test output ---
+coverage/
+htmlcov/
+
+# --- OS generated files ---
+Thumbs.db 
