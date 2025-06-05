@@ -40,9 +40,10 @@ import {
   Play,
   Pause,
   Edit,
-  Zap
+  Zap,
+  PieChart
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter } from 'recharts';
 
 // Custom Kovvar Icon Component
 const KovvarIcon = ({ className }: { className?: string }) => (
@@ -1538,13 +1539,7 @@ export default function Dashboard() {
       case 'campaigns':
         return renderAdGroupsPage();
       case 'keywords':
-        return (
-          <div className="text-center py-16">
-            <Search className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Keywords</h2>
-            <p className="text-gray-600">Keyword research and analysis coming soon...</p>
-          </div>
-        );
+        return renderKeywordsPage();
       case 'brands':
         return (
           <div className="text-center py-16">
@@ -3349,6 +3344,635 @@ export default function Dashboard() {
     );
   };
 
+  // Keywords & Search Terms Page
+  const renderKeywordsPage = () => (
+    <>
+      {/* Page Title */}
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Keywords & Search Terms</h2>
+        <p className="text-gray-600">
+          {selectedAccountData && selectedDateRange
+            ? `Analyze keyword performance and discover search term opportunities for ${getDisplayName(selectedAccountData)} • ${formatDateRangeDisplay(selectedDateRange)}`
+            : 'Analyze keyword performance and discover new search term opportunities'
+          }
+        </p>
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
+          <p className="text-red-800">{error}</p>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-16">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="mt-4 text-gray-600">Loading keywords and search terms data...</p>
+        </div>
+      )}
+
+      {/* No Account Selected */}
+      {!selectedAccount && !loading && (
+        <div className="text-center py-16">
+          <div className="text-gray-400 mb-6">
+            <Search className="h-16 w-16 mx-auto" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Select an Account</h3>
+          <p className="text-gray-500 mb-6">
+            Choose an account from the header to view keywords and search terms performance data.
+          </p>
+          <div className="flex justify-center">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md">
+              <p className="text-blue-800 text-sm">
+                💡 Select an account from the dropdown in the header to analyze keywords and search terms performance.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Keywords & Search Terms Table */}
+      {selectedAccount && campaignData && !loading && (
+        <KeywordsTable />
+      )}
+    </>
+  );
+
+  // Keywords & Search Terms Table Component  
+  const KeywordsTable = () => {
+    // Core state
+    const [keywordData, setKeywordData] = useState<any[]>([]);
+    const [keywordsSummary, setKeywordsSummary] = useState<any>(null);
+    const [keywordsLoading, setKeywordsLoading] = useState(false);
+    const [keywordsError, setKeywordsError] = useState<string>('');
+
+    // View controls
+    const [viewMode, setViewMode] = useState<'table' | 'charts'>('table');
+    const [dataType, setDataType] = useState<'keywords' | 'search_terms'>('keywords');
+
+    // Table controls
+    const [keywordSearch, setKeywordSearch] = useState<string>('');
+    const [keywordSort, setKeywordSort] = useState<{field: string, direction: 'asc' | 'desc' | null}>({field: 'impressions', direction: 'desc'});
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage] = useState(25);
+
+    // Filter controls
+    const [matchTypeFilter, setMatchTypeFilter] = useState<string>('all');
+    const [performanceFilter, setPerformanceFilter] = useState<string>('all');
+    const [selectedColumns, setSelectedColumns] = useState<string[]>([
+      'keyword_text', 'match_type', 'impressions', 'clicks', 'cost', 'conversions', 'ctr', 'cpc'
+    ]);
+
+    // Available columns configuration  
+    const availableColumns = [
+      { id: 'keyword_text', label: 'Keyword/Search Term', always: true },
+      { id: 'match_type', label: 'Match Type', always: true },
+      { id: 'triggering_keyword', label: 'Triggering Keyword', searchTermsOnly: true },
+      { id: 'impressions', label: 'Impressions' },
+      { id: 'clicks', label: 'Clicks' },
+      { id: 'cost', label: 'Cost' },
+      { id: 'conversions', label: 'Conversions' },
+      { id: 'conversions_value', label: 'Conv. Value' },
+      { id: 'ctr', label: 'CTR' },
+      { id: 'cpc', label: 'CPC' },
+      { id: 'roas', label: 'ROAS' },
+      { id: 'quality_score', label: 'Quality Score', keywordsOnly: true },
+      { id: 'ad_group_name', label: 'Ad Group' },
+      { id: 'campaign_name', label: 'Campaign' }
+    ];
+
+    // Fetch keywords data
+    const fetchKeywordsData = async () => {
+      if (!selectedAccount || !selectedDateRange) return;
+
+      setKeywordsLoading(true);
+      setKeywordsError('');
+
+      try {
+        const apiDateRange = getApiDateRange(selectedDateRange);
+        const response = await fetch(`/api/keywords?customerId=${selectedAccount}&dateRange=${apiDateRange.days}&dataType=${dataType}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch keywords: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        
+        setKeywordData(result.data || []);
+        setKeywordsSummary(result.summary || null);
+        
+        console.log(`📊 Keywords loaded:`, {
+          dataType,
+          totalItems: result.data?.length || 0,
+          summary: result.summary
+        });
+
+      } catch (err) {
+        console.error('Error fetching keywords:', err);
+        setKeywordsError(err instanceof Error ? err.message : 'Failed to fetch keywords data');
+      } finally {
+        setKeywordsLoading(false);
+      }
+    };
+
+    // Fetch data when dependencies change
+    useEffect(() => {
+      fetchKeywordsData();
+    }, [selectedAccount, selectedDateRange, dataType]);
+
+    // Get intelligent KPI based on current data type
+    const getIntelligentKPI = () => {
+      if (!keywordsSummary) return null;
+
+      if (dataType === 'keywords') {
+        return {
+          label: 'Keywords with Zero Clicks',
+          value: `${keywordsSummary.zero_clicks_percentage.toFixed(1)}%`,
+          count: `${keywordsSummary.zero_clicks_count}/${keywordsSummary.total_keywords}`,
+          color: keywordsSummary.zero_clicks_percentage > 30 ? 'text-red-600' : keywordsSummary.zero_clicks_percentage > 15 ? 'text-yellow-600' : 'text-green-600',
+          icon: Target,
+          description: 'Keywords not generating any clicks may need optimization or removal'
+        };
+      } else {
+        return {
+          label: 'Search Terms with Zero Conversions',
+          value: `${keywordsSummary.zero_conversions_percentage.toFixed(1)}%`,
+          count: `${keywordsSummary.zero_conversions_count}/${keywordsSummary.total_search_terms}`,
+          color: keywordsSummary.zero_conversions_percentage > 70 ? 'text-red-600' : keywordsSummary.zero_conversions_percentage > 50 ? 'text-yellow-600' : 'text-green-600',
+          icon: AlertTriangle,
+          description: 'Search terms with no conversions may indicate opportunities for negative keywords'
+        };
+      }
+    };
+
+    // Filter and sort data
+    const getFilteredAndSortedData = () => {
+      let filtered = [...keywordData];
+
+      // Search filter
+      if (keywordSearch.trim()) {
+        const searchTerm = keywordSearch.toLowerCase().trim();
+        filtered = filtered.filter(item => 
+          item.keyword_text.toLowerCase().includes(searchTerm) ||
+          item.ad_group_name.toLowerCase().includes(searchTerm) ||
+          item.campaign_name.toLowerCase().includes(searchTerm) ||
+          (item.triggering_keyword && item.triggering_keyword.toLowerCase().includes(searchTerm))
+        );
+      }
+
+      // Match type filter
+      if (matchTypeFilter !== 'all') {
+        filtered = filtered.filter(item => item.match_type === matchTypeFilter);
+      }
+
+      // Performance filter
+      if (performanceFilter === 'high_spend_zero_conv') {
+        filtered = filtered.filter(item => item.cost > 10 && item.conversions === 0);
+      } else if (performanceFilter === 'zero_clicks') {
+        filtered = filtered.filter(item => item.clicks === 0);
+      } else if (performanceFilter === 'low_ctr') {
+        filtered = filtered.filter(item => item.ctr < 0.02); // Less than 2%
+      }
+
+      // Sort
+      if (keywordSort.field && keywordSort.direction) {
+        filtered.sort((a, b) => {
+          let aValue = a[keywordSort.field];
+          let bValue = b[keywordSort.field];
+
+          if (typeof aValue === 'string') {
+            aValue = aValue.toLowerCase();
+            bValue = bValue.toLowerCase();
+          }
+
+          if (aValue < bValue) return keywordSort.direction === 'asc' ? -1 : 1;
+          if (aValue > bValue) return keywordSort.direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+      }
+
+      return filtered;
+    };
+
+    // Pagination
+    const filteredData = getFilteredAndSortedData();
+    const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+    const paginatedData = filteredData.slice(
+      (currentPage - 1) * itemsPerPage,
+      currentPage * itemsPerPage
+    );
+
+    // Chart data preparation
+    const getHighSpendZeroConversionData = () => {
+      return keywordData
+        .filter(item => item.cost > 5 && item.conversions === 0)
+        .sort((a, b) => b.cost - a.cost)
+        .slice(0, 20)
+        .map(item => ({
+          name: item.keyword_text.length > 20 ? item.keyword_text.substring(0, 20) + '...' : item.keyword_text,
+          cost: item.cost,
+          clicks: item.clicks,
+          impressions: item.impressions
+        }));
+    };
+
+    const getCostDistributionData = () => {
+      const ranges = [
+        { name: '€0-€1', min: 0, max: 1 },
+        { name: '€1-€5', min: 1, max: 5 },
+        { name: '€5-€20', min: 5, max: 20 },
+        { name: '€20-€50', min: 20, max: 50 },
+        { name: '€50+', min: 50, max: Infinity }
+      ];
+
+      return ranges.map(range => ({
+        name: range.name,
+        count: keywordData.filter(item => item.cost >= range.min && item.cost < range.max).length,
+        totalCost: keywordData
+          .filter(item => item.cost >= range.min && item.cost < range.max)
+          .reduce((sum, item) => sum + item.cost, 0)
+      }));
+    };
+
+    const getPerformanceQuadrantData = () => {
+      return keywordData
+        .filter(item => item.impressions > 100) // Only items with significant data
+        .slice(0, 50) // Limit for performance
+        .map(item => ({
+          name: item.keyword_text,
+          conversionRate: item.clicks > 0 ? (item.conversions / item.clicks) * 100 : 0,
+          impressionShare: Math.random() * 100, // Placeholder - would need actual impression share data
+          cost: item.cost,
+          conversions: item.conversions
+        }));
+    };
+
+    // Handle sorting
+    const handleKeywordSort = (field: string) => {
+      if (keywordSort.field === field) {
+        setKeywordSort(prev => ({ 
+          field, 
+          direction: prev.direction === 'asc' ? 'desc' : prev.direction === 'desc' ? null : 'asc' 
+        }));
+      } else {
+        setKeywordSort({ field, direction: 'desc' });
+      }
+    };
+
+    // Toggle column visibility
+    const toggleColumn = (columnId: string) => {
+      const column = availableColumns.find(col => col.id === columnId);
+      if (column?.always) return; // Can't toggle always-visible columns
+
+      setSelectedColumns(prev => 
+        prev.includes(columnId) 
+          ? prev.filter(id => id !== columnId)
+          : [...prev, columnId]
+      );
+    };
+
+    // Get visible columns based on data type
+    const getVisibleColumns = () => {
+      return availableColumns.filter(col => {
+        // Always show always-visible columns
+        if (col.always) return true;
+        
+        // Filter by data type
+        if (col.keywordsOnly && dataType !== 'keywords') return false;
+        if (col.searchTermsOnly && dataType !== 'search_terms') return false;
+        
+        // Check if column is selected
+        return selectedColumns.includes(col.id);
+      });
+    };
+
+    const intelligentKPI = getIntelligentKPI();
+
+    if (keywordsLoading) {
+      return (
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="text-center py-16">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+            <p className="text-gray-600">Loading keywords data...</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (keywordsError) {
+      return (
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800">{keywordsError}</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* Data Type Toggle and Intelligent KPI */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              {/* Data Type Toggle */}
+              <div className="flex bg-white rounded-lg p-1 shadow-sm">
+                <button
+                  onClick={() => setDataType('keywords')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                    dataType === 'keywords'
+                      ? 'bg-blue-500 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Keywords
+                </button>
+                <button
+                  onClick={() => setDataType('search_terms')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                    dataType === 'search_terms'
+                      ? 'bg-blue-500 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Search Terms
+                </button>
+              </div>
+
+              {/* View Mode Toggle */}
+              <div className="flex bg-white rounded-lg p-1 shadow-sm">
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
+                    viewMode === 'table'
+                      ? 'bg-blue-500 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Table</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('charts')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
+                    viewMode === 'charts'
+                      ? 'bg-blue-500 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <PieChart className="w-4 h-4" />
+                  <span>Charts</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Intelligent KPI */}
+            {intelligentKPI && (
+              <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
+                  <intelligentKPI.icon className="h-5 w-5 text-blue-600" />
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {intelligentKPI.label}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {intelligentKPI.description}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className={`text-lg font-bold ${intelligentKPI.color}`}>
+                    {intelligentKPI.value}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {intelligentKPI.count}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+          {/* Table Header with Search and Filters */}
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {dataType === 'keywords' ? 'Keywords Performance' : 'Search Terms Discovery'}
+                </h3>
+                <p className="text-sm text-gray-500">
+                  Showing {filteredData.length} of {keywordData.length} items • Last {selectedDateRange?.apiDays || 30} days
+                </p>
+              </div>
+            </div>
+            
+            {/* Search Bar and Filters */}
+            <div className="flex items-center justify-between space-x-4">
+              <div className="flex items-center space-x-4 flex-1">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder={`Search ${dataType === 'keywords' ? 'keywords' : 'search terms'}...`}
+                    value={keywordSearch}
+                    onChange={(e) => setKeywordSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                {/* Match Type Filter */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-600">Match Type:</span>
+                  <select
+                    value={matchTypeFilter}
+                    onChange={(e) => setMatchTypeFilter(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All</option>
+                    <option value="EXACT">Exact</option>
+                    <option value="PHRASE">Phrase</option>
+                    <option value="BROAD">Broad</option>
+                  </select>
+                </div>
+                
+                {/* Performance Filter */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-gray-600">Performance:</span>
+                  <select
+                    value={performanceFilter}
+                    onChange={(e) => setPerformanceFilter(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All</option>
+                    <option value="high_spend_zero_conv">High Spend, No Conversions</option>
+                    <option value="zero_clicks">Zero Clicks</option>
+                    <option value="low_ctr">Low CTR</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Table or Charts Content */}
+          {viewMode === 'table' ? (
+            <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 320px)' }}>
+              <table className="w-full">
+                {/* Table Header */}
+                <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 z-10">
+                  <tr>
+                    {getVisibleColumns().map(col => (
+                      <th 
+                        key={col.id}
+                        onClick={() => handleKeywordSort(col.id)}
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-center space-x-1">
+                          <span>{col.label}</span>
+                          {keywordSort.field === col.id && (
+                            <span className={`${keywordSort.direction === 'asc' ? 'text-blue-600' : 'text-red-600'}`}>
+                              {keywordSort.direction === 'asc' ? '▲' : '▼'}
+                            </span>
+                          )}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                
+                {/* Table Body */}
+                <tbody className="divide-y divide-gray-200">
+                  {paginatedData.map((item, index) => (
+                    <tr key={index} className="hover:bg-gray-50 transition-colors">
+                      {getVisibleColumns().map(col => (
+                        <td key={col.id} className="px-6 py-4 whitespace-nowrap">
+                          {col.id === 'keyword_text' ? (
+                            <div className="text-sm font-medium text-gray-900 max-w-xs truncate">
+                              {item[col.id]}
+                            </div>
+                          ) : col.id === 'match_type' ? (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                              item[col.id] === 'EXACT' ? 'bg-green-100 text-green-800' : 
+                              item[col.id] === 'PHRASE' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {item[col.id]}
+                            </span>
+                          ) : col.id === 'triggering_keyword' ? (
+                            <div className="text-sm text-gray-600 max-w-xs truncate">
+                              {item[col.id] || '-'}
+                            </div>
+                          ) : col.id === 'cost' ? (
+                            <div className="text-sm text-gray-900">
+                              €{typeof item[col.id] === 'number' ? item[col.id].toFixed(2) : '0.00'}
+                            </div>
+                          ) : col.id === 'ctr' || col.id === 'roas' ? (
+                            <div className="text-sm text-gray-900">
+                              {typeof item[col.id] === 'number' ? (item[col.id] * 100).toFixed(2) + '%' : '0.00%'}
+                            </div>
+                          ) : col.id === 'cpc' || col.id === 'conversions_value' ? (
+                            <div className="text-sm text-gray-900">
+                              €{typeof item[col.id] === 'number' ? item[col.id].toFixed(2) : '0.00'}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-gray-900">
+                              {typeof item[col.id] === 'number' ? item[col.id].toLocaleString() : item[col.id] || '-'}
+                            </div>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                  <div className="text-sm text-gray-700">
+                    Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredData.length)} of {filteredData.length} results
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm text-gray-700">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Charts View */
+            <div className="p-6 space-y-8">
+              {/* High Spend, Zero Conversions Chart */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">High Spend, Zero Conversions</h4>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={getHighSpendZeroConversionData()}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar dataKey="cost" fill="#ef4444" name="Cost (€)" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Cost Distribution Chart */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">Cost Distribution</h4>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={getCostDistributionData()}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#3b82f6" name="Number of Keywords" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Performance Quadrant */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">Performance Analysis</h4>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <ResponsiveContainer width="100%" height={400}>
+                    <ScatterChart data={getPerformanceQuadrantData()}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="conversionRate" name="Conversion Rate" tick={{ fontSize: 12 }} />
+                      <YAxis dataKey="impressionShare" name="Impression Share" tick={{ fontSize: 12 }} />
+                      <Tooltip />
+                      <Scatter dataKey="cost" fill="#8b5cf6" />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
       {/* Enhanced Header */}
@@ -3636,6 +4260,37 @@ export default function Dashboard() {
             <button className="flex items-center space-x-2 p-1 hover:bg-gray-100 rounded-lg transition-colors">
               <div className="h-8 w-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-medium text-sm">
                 JV
+              </div>
+            </button>
+
+            {/* Refresh Button (Icon Only) */}
+            <button
+              onClick={async () => {
+                // Refresh all data
+                setLoading(true);
+                try {
+                  await Promise.all([
+                    fetchCampaignData(),
+                    fetchHistoricalData(),
+                    fetchAnomalies()
+                  ]);
+                } catch (error) {
+                  console.error('Error refreshing data:', error);
+                  setError('Failed to refresh data');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+              className={`p-2 rounded-lg border transition-colors ${
+                loading
+                  ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-700'
+              }`}
+              title="Refresh all data"
+            >
+              <div className={`${loading ? 'animate-spin' : ''}`}>
+                <ArrowDown className="h-4 w-4 transform rotate-45" />
               </div>
             </button>
 
