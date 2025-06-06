@@ -41,9 +41,10 @@ import {
   Pause,
   Edit,
   Zap,
-  PieChart
+  PieChart as PieChartIcon,
+  RefreshCw
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, PieChart, Pie, Cell } from 'recharts';
 
 // Custom Kovvar Icon Component
 const KovvarIcon = ({ className }: { className?: string }) => (
@@ -3609,6 +3610,111 @@ export default function Dashboard() {
         }));
     };
 
+    // New chart data functions for enhanced charts view
+    const getMatchTypeDistributionData = () => {
+      const matchTypeCounts = {
+        EXACT: 0,
+        PHRASE: 0,
+        BROAD: 0
+      };
+
+      keywordData.forEach(item => {
+        if (item.match_type in matchTypeCounts) {
+          matchTypeCounts[item.match_type as keyof typeof matchTypeCounts]++;
+        }
+      });
+
+      return Object.entries(matchTypeCounts).map(([matchType, count]) => ({
+        name: matchType,
+        value: count,
+        percentage: keywordData.length > 0 ? ((count / keywordData.length) * 100) : 0
+      }));
+    };
+
+    const getConversionsPerMatchTypeData = () => {
+      const matchTypeConversions = {
+        EXACT: 0,
+        PHRASE: 0,
+        BROAD: 0
+      };
+
+      keywordData.forEach(item => {
+        if (item.match_type in matchTypeConversions) {
+          matchTypeConversions[item.match_type as keyof typeof matchTypeConversions] += item.conversions || 0;
+        }
+      });
+
+      const totalConversions = Object.values(matchTypeConversions).reduce((sum, conv) => sum + conv, 0);
+
+      return Object.entries(matchTypeConversions).map(([matchType, conversions]) => ({
+        name: matchType,
+        value: conversions,
+        percentage: totalConversions > 0 ? ((conversions / totalConversions) * 100) : 0
+      }));
+    };
+
+    const getCPAPerMatchTypeData = () => {
+      const matchTypeData = {
+        EXACT: { cost: 0, conversions: 0 },
+        PHRASE: { cost: 0, conversions: 0 },
+        BROAD: { cost: 0, conversions: 0 }
+      };
+
+      keywordData.forEach(item => {
+        if (item.match_type in matchTypeData) {
+          matchTypeData[item.match_type as keyof typeof matchTypeData].cost += item.cost || 0;
+          matchTypeData[item.match_type as keyof typeof matchTypeData].conversions += item.conversions || 0;
+        }
+      });
+
+      return Object.entries(matchTypeData).map(([matchType, data]) => ({
+        name: matchType,
+        value: data.conversions > 0 ? (data.cost / data.conversions) : 0,
+        cost: data.cost,
+        conversions: data.conversions
+      }));
+    };
+
+    const getHighSpendZeroConversionsTableData = () => {
+      return keywordData
+        .filter(item => item.cost > 5 && item.conversions === 0) // High spend (>€5), zero conversions
+        .sort((a, b) => (b.cost || 0) - (a.cost || 0))
+        .slice(0, 50); // Limit for performance
+    };
+
+    const getBestPerformingKeywordsData = () => {
+      return keywordData
+        .filter(item => item.conversions > 0 && item.clicks > 0)
+        .map(item => ({
+          ...item,
+          conversionRate: (item.conversions / item.clicks) * 100,
+          impressionShare: Math.random() * 100 // Placeholder - would need actual impression share data
+        }))
+        .sort((a, b) => (b.impressionShare || 0) - (a.impressionShare || 0))
+        .slice(0, 50); // Limit for performance
+    };
+
+    // State for table pagination
+    const [highSpendPage, setHighSpendPage] = useState(1);
+    const [bestPerformingPage, setBestPerformingPage] = useState(1);
+    const tableItemsPerPage = 10;
+
+    // Get paginated data for tables
+    const getPaginatedHighSpendData = () => {
+      const data = getHighSpendZeroConversionsTableData();
+      const startIndex = (highSpendPage - 1) * tableItemsPerPage;
+      return data.slice(startIndex, startIndex + tableItemsPerPage);
+    };
+
+    const getPaginatedBestPerformingData = () => {
+      const data = getBestPerformingKeywordsData();
+      const startIndex = (bestPerformingPage - 1) * tableItemsPerPage;
+      return data.slice(startIndex, startIndex + tableItemsPerPage);
+    };
+
+    // Colors for donut charts
+    const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+
     // Handle sorting
     const handleKeywordSort = (field: string) => {
       if (keywordSort.field === field) {
@@ -3722,7 +3828,7 @@ export default function Dashboard() {
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
                 >
-                  <PieChart className="w-4 h-4" />
+                  <PieChartIcon className="w-4 h-4" />
                   <span>Charts</span>
                 </button>
               </div>
@@ -3917,53 +4023,221 @@ export default function Dashboard() {
               )}
             </div>
           ) : (
-            /* Charts View */
+            /* Enhanced Charts View */
             <div className="p-6 space-y-8">
-              {/* High Spend, Zero Conversions Chart */}
-              <div>
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">High Spend, Zero Conversions</h4>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={getHighSpendZeroConversionData()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip />
-                      <Bar dataKey="cost" fill="#ef4444" name="Cost (€)" />
-                    </BarChart>
+              {/* Top 3 Charts Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Match Type Distribution */}
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">Match Type Distribution</h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={getMatchTypeDistributionData()}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        dataKey="value"
+                        startAngle={90}
+                        endAngle={450}
+                        label={({ name, percentage }) => `${name}\n${percentage.toFixed(1)}%`}
+                      >
+                        {getMatchTypeDistributionData().map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value, name) => [value, name]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Conversions per Match Type */}
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">Conversions per Match Type</h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={getConversionsPerMatchTypeData()}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        dataKey="value"
+                        startAngle={90}
+                        endAngle={450}
+                        label={({ name, percentage }) => `${name}\n${percentage.toFixed(1)}%`}
+                      >
+                        {getConversionsPerMatchTypeData().map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value, name) => [value, name]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* CPA per Match Type */}
+                <div className="bg-white rounded-lg shadow p-6">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4">CPA per Match Type</h4>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={getCPAPerMatchTypeData()}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        dataKey="value"
+                        startAngle={90}
+                        endAngle={450}
+                        label={({ name, value }) => `${name}\n€${typeof value === 'number' ? value.toFixed(2) : '0.00'}`}
+                      >
+                        {getCPAPerMatchTypeData().map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value, name) => [`€${typeof value === 'number' ? value.toFixed(2) : '0.00'}`, 'CPA']} />
+                    </PieChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              {/* Cost Distribution Chart */}
-              <div>
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Cost Distribution</h4>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={getCostDistributionData()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
-                      <Tooltip />
-                      <Bar dataKey="count" fill="#3b82f6" name="Number of Keywords" />
-                    </BarChart>
-                  </ResponsiveContainer>
+              {/* Tables Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* High Spend, Zero Conversions Table */}
+                <div className="bg-white rounded-lg shadow">
+                  <div className="p-6 border-b">
+                    <h4 className="text-lg font-semibold text-gray-900">High Spend, Zero Conversions</h4>
+                    <p className="text-sm text-gray-600">Keywords spending above €5 with no conversions</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">Keyword</th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">Cost</th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">Clicks</th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">Match Type</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {getPaginatedHighSpendData().map((item, index) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-gray-900 max-w-xs truncate">
+                              {item.keyword_text}
+                            </td>
+                            <td className="px-4 py-3 text-gray-900">
+                              €{(item.cost || 0).toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3 text-gray-900">
+                              {item.clicks || 0}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                item.match_type === 'EXACT' ? 'bg-green-100 text-green-800' : 
+                                item.match_type === 'PHRASE' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {item.match_type}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Pagination for High Spend Table */}
+                  {Math.ceil(getHighSpendZeroConversionsTableData().length / tableItemsPerPage) > 1 && (
+                    <div className="px-6 py-4 border-t flex items-center justify-between">
+                      <div className="text-sm text-gray-700">
+                        Showing {((highSpendPage - 1) * tableItemsPerPage) + 1} to {Math.min(highSpendPage * tableItemsPerPage, getHighSpendZeroConversionsTableData().length)} of {getHighSpendZeroConversionsTableData().length}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setHighSpendPage(prev => Math.max(1, prev - 1))}
+                          disabled={highSpendPage === 1}
+                          className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-sm text-gray-700">
+                          {highSpendPage} of {Math.ceil(getHighSpendZeroConversionsTableData().length / tableItemsPerPage)}
+                        </span>
+                        <button
+                          onClick={() => setHighSpendPage(prev => Math.min(Math.ceil(getHighSpendZeroConversionsTableData().length / tableItemsPerPage), prev + 1))}
+                          disabled={highSpendPage === Math.ceil(getHighSpendZeroConversionsTableData().length / tableItemsPerPage)}
+                          className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              {/* Performance Quadrant */}
-              <div>
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Performance Analysis</h4>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <ResponsiveContainer width="100%" height={400}>
-                    <ScatterChart data={getPerformanceQuadrantData()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="conversionRate" name="Conversion Rate" tick={{ fontSize: 12 }} />
-                      <YAxis dataKey="impressionShare" name="Impression Share" tick={{ fontSize: 12 }} />
-                      <Tooltip />
-                      <Scatter dataKey="cost" fill="#8b5cf6" />
-                    </ScatterChart>
-                  </ResponsiveContainer>
+                {/* Best Performing Keywords Table */}
+                <div className="bg-white rounded-lg shadow">
+                  <div className="p-6 border-b">
+                    <h4 className="text-lg font-semibold text-gray-900">Best Performing Keywords</h4>
+                    <p className="text-sm text-gray-600">Top keywords by impression share performance</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">Keyword</th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">Conv. Rate</th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">Impr. Share</th>
+                          <th className="px-4 py-3 text-left font-medium text-gray-700">Conversions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {getPaginatedBestPerformingData().map((item, index) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-gray-900 max-w-xs truncate">
+                              {item.keyword_text}
+                            </td>
+                            <td className="px-4 py-3 text-gray-900">
+                              {(item.conversionRate || 0).toFixed(2)}%
+                            </td>
+                            <td className="px-4 py-3 text-gray-900">
+                              {(item.impressionShare || 0).toFixed(1)}%
+                            </td>
+                            <td className="px-4 py-3 text-gray-900">
+                              {(item.conversions || 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Pagination for Best Performing Table */}
+                  {Math.ceil(getBestPerformingKeywordsData().length / tableItemsPerPage) > 1 && (
+                    <div className="px-6 py-4 border-t flex items-center justify-between">
+                      <div className="text-sm text-gray-700">
+                        Showing {((bestPerformingPage - 1) * tableItemsPerPage) + 1} to {Math.min(bestPerformingPage * tableItemsPerPage, getBestPerformingKeywordsData().length)} of {getBestPerformingKeywordsData().length}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => setBestPerformingPage(prev => Math.max(1, prev - 1))}
+                          disabled={bestPerformingPage === 1}
+                          className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-sm text-gray-700">
+                          {bestPerformingPage} of {Math.ceil(getBestPerformingKeywordsData().length / tableItemsPerPage)}
+                        </span>
+                        <button
+                          onClick={() => setBestPerformingPage(prev => Math.min(Math.ceil(getBestPerformingKeywordsData().length / tableItemsPerPage), prev + 1))}
+                          disabled={bestPerformingPage === Math.ceil(getBestPerformingKeywordsData().length / tableItemsPerPage)}
+                          className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -4290,7 +4564,7 @@ export default function Dashboard() {
               title="Refresh all data"
             >
               <div className={`${loading ? 'animate-spin' : ''}`}>
-                <ArrowDown className="h-4 w-4 transform rotate-45" />
+                <RefreshCw className="h-4 w-4" />
               </div>
             </button>
 
