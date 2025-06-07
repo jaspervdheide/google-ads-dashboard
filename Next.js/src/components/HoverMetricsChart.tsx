@@ -83,8 +83,11 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
             
             return {
               date: day.date,
-              value: value,
-              formattedDate: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              value: Math.round(value * 100) / 100, // Round to 2 decimals
+              formattedDate: new Date(day.date).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric' 
+              })
             };
           });
           
@@ -177,7 +180,10 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
         mockData.push({
           date: date.toISOString().split('T')[0],
           value: Math.round(finalValue * 100) / 100, // Round to 2 decimals
-          formattedDate: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          formattedDate: date.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric'
+          })
         });
       }
       
@@ -206,6 +212,17 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
       default:
         return value.toFixed(2);
     }
+  };
+
+  const formatMainValue = (value: string | number, metric: string): string => {
+    if (typeof value === 'string') {
+      const numericValue = parseFloat(value.replace(/[€$,%]/g, ''));
+      if (!isNaN(numericValue)) {
+        return formatMetricValue(numericValue, metric);
+      }
+      return value;
+    }
+    return formatMetricValue(value, metric);
   };
 
   const getMetricLabel = (metric: string): string => {
@@ -278,7 +295,7 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
         <div className="mb-3">
           <p className="text-xs text-gray-500 truncate">{campaignName}</p>
           <p className="text-lg font-semibold text-gray-900">
-            {typeof metricValue === 'string' ? metricValue : formatMetricValue(metricValue, metricType)}
+            {formatMainValue(metricValue, metricType)}
           </p>
           {error && (
             <p className="text-xs text-amber-600 mt-1">{error}</p>
@@ -300,7 +317,8 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
                   tick={{ fontSize: 10, fill: '#6b7280' }}
                   axisLine={false}
                   tickLine={false}
-                  interval="preserveStartEnd"
+                  interval={Math.max(Math.floor(dailyData.length / 6), 1)}
+                  minTickGap={20}
                 />
                 <YAxis 
                   tick={{ fontSize: 10, fill: '#6b7280' }}
