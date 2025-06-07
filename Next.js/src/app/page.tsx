@@ -752,7 +752,34 @@ export default function Dashboard() {
     }
   };
 
-  const fetchCampaignData = async () => {
+  const fetchCampaignData = useCallback(async () => {
+    console.log("🎯 fetchCampaignData called - MEMOIZED");
+
+// Build cache key
+const cacheKey = `campaigns_${selectedAccount || 'default'}_${getApiDateRange(selectedDateRange).days}days`;
+console.log("🎯 Cache check:", { 
+  cacheKey, 
+  selectedAccount, 
+  days: getApiDateRange(selectedDateRange).days 
+});
+
+// Check cache first (30 min TTL)
+const cachedData = getFromCache(cacheKey, 30);
+console.log("💽 Cache result:", { 
+  hasCachedData: !!cachedData, 
+  cacheKey 
+});
+
+if (cachedData) {
+  console.log("🎯 CACHE HIT - Using cached campaigns data");
+  console.log("✅ Returning cached campaigns data");
+  setCampaignData(cachedData);
+  return;
+}
+
+console.log("🎯 CACHE MISS - Fetching from API");
+console.log("🌐 Making fresh API call for campaigns");
+
     console.log("🔄 FETCHING CAMPAIGN DATA");
     if (!selectedAccount || !selectedDateRange) return;
     
@@ -773,6 +800,9 @@ export default function Dashboard() {
         console.log('📊 API date range:', apiDateRange);
         
         setCampaignData(result.data);
+        // Save to cache
+        saveToCache(cacheKey, result.data);
+        console.log("💾 Saved campaigns to cache successfully", { cacheKey });
         
         // Generate static percentage changes for KPIs (simulate historical comparison)
         const percentageChanges: {[key: string]: number} = {};
@@ -793,7 +823,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedAccount, selectedDateRange, getApiDateRange]);
 
   // Fetch real historical data for charts
   const fetchHistoricalData = async () => {
