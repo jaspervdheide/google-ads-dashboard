@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { clearCache, getFromCache, saveToCache } from "./utils/cache.js";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, PieChart, Pie, Cell } from 'recharts';
+import HoverMetricsChart from '../components/HoverMetricsChart';
 
 // Custom Kovvar Icon Component
 const KovvarIcon = ({ className }: { className?: string }) => (
@@ -245,6 +246,33 @@ export default function Dashboard() {
   // Pagination state
   const [tablePage, setTablePage] = useState<number>(1);
   const [itemsPerPage] = useState<number>(10);
+
+  // Hover metrics chart state
+  const [hoverChart, setHoverChart] = useState({
+    isVisible: false,
+    position: { x: 0, y: 0 },
+    metricType: '',
+    metricValue: '',
+    campaignName: '',
+    campaignId: ''
+  });
+
+  // Hover metrics handlers
+  const handleMetricHover = (event: React.MouseEvent, metricType: string, metricValue: string | number, campaignName: string, campaignId: string) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setHoverChart({
+      isVisible: true,
+      position: { x: rect.right + 10, y: rect.top },
+      metricType,
+      metricValue: metricValue.toString(),
+      campaignName,
+      campaignId
+    });
+  };
+
+  const handleMetricLeave = () => {
+    setHoverChart(prev => ({ ...prev, isVisible: false }));
+  };
 
   // Handle refresh button click
   const handleRefresh = async () => {
@@ -774,6 +802,17 @@ if (cachedData) {
   console.log("🎯 CACHE HIT - Using cached campaigns data");
   console.log("✅ Returning cached campaigns data");
   setCampaignData(cachedData);
+  
+  // Generate percentage changes for cached data too (was missing!)
+  const percentageChanges: {[key: string]: number} = {};
+  kpiConfig.forEach(kpi => {
+    // Generate realistic percentage changes between -15% and +25%
+    const change = (Math.random() - 0.4) * 40; // Slight bias toward positive
+    percentageChanges[kpi.id] = change;
+  });
+  setKpiPercentageChanges(percentageChanges);
+  console.log('📊 Generated percentage changes for cached data:', percentageChanges);
+  
   return;
 }
 
@@ -2406,63 +2445,99 @@ console.log("🌐 Making fresh API call for campaigns");
                           
                           {/* Clicks */}
                           <td className="px-6 py-4 text-right">
-                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'clicks'))}`}>
-                          {formatNumber(campaign.clicks)}
+                            <div 
+                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'clicks'))}`}
+                              onMouseEnter={(e) => handleMetricHover(e, 'clicks', campaign.clicks, campaign.name, campaign.id)}
+                              onMouseLeave={handleMetricLeave}
+                            >
+                              {formatNumber(campaign.clicks)}
                             </div>
-                        </td>
+                          </td>
                           
                           {/* Impressions */}
                           <td className="px-6 py-4 text-right">
-                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'impressions'))}`}>
+                            <div 
+                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'impressions'))}`}
+                              onMouseEnter={(e) => handleMetricHover(e, 'impressions', campaign.impressions, campaign.name, campaign.id)}
+                              onMouseLeave={handleMetricLeave}
+                            >
                               {formatLargeNumber(campaign.impressions)}
                             </div>
                           </td>
                           
                           {/* CTR */}
                           <td className="px-6 py-4 text-right">
-                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'ctr'))}`}>
-                          {formatPercentage(campaign.ctr)}
+                            <div 
+                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'ctr'))}`}
+                              onMouseEnter={(e) => handleMetricHover(e, 'ctr', campaign.ctr, campaign.name, campaign.id)}
+                              onMouseLeave={handleMetricLeave}
+                            >
+                              {formatPercentage(campaign.ctr)}
                             </div>
-                        </td>
+                          </td>
                           
                           {/* CPC */}
                           <td className="px-6 py-4 text-right">
-                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'avgCpc'))}`}>
+                            <div 
+                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'avgCpc'))}`}
+                              onMouseEnter={(e) => handleMetricHover(e, 'avgCpc', campaign.avgCpc, campaign.name, campaign.id)}
+                              onMouseLeave={handleMetricLeave}
+                            >
                               {formatCurrency(campaign.avgCpc)}
                             </div>
                           </td>
                           
                           {/* Cost */}
                           <td className="px-6 py-4 text-right">
-                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'cost'))}`}>
-                          {formatCurrency(campaign.cost)}
+                            <div 
+                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'cost'))}`}
+                              onMouseEnter={(e) => handleMetricHover(e, 'cost', campaign.cost, campaign.name, campaign.id)}
+                              onMouseLeave={handleMetricLeave}
+                            >
+                              {formatCurrency(campaign.cost)}
                             </div>
-                        </td>
+                          </td>
                           
                           {/* Conversions */}
                           <td className="px-6 py-4 text-right">
-                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversions'))}`}>
-                          {formatNumber(campaign.conversions)}
+                            <div 
+                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversions'))}`}
+                              onMouseEnter={(e) => handleMetricHover(e, 'conversions', campaign.conversions, campaign.name, campaign.id)}
+                              onMouseLeave={handleMetricLeave}
+                            >
+                              {formatNumber(campaign.conversions)}
                             </div>
-                        </td>
+                          </td>
                           
                           {/* Conv. Value */}
                           <td className="px-6 py-4 text-right">
-                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversionsValue'))}`}>
+                            <div 
+                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversionsValue'))}`}
+                              onMouseEnter={(e) => handleMetricHover(e, 'conversionsValue', campaign.conversionsValue, campaign.name, campaign.id)}
+                              onMouseLeave={handleMetricLeave}
+                            >
                               {formatCurrency(campaign.conversionsValue)}
                             </div>
                           </td>
                           
                           {/* CPA */}
                           <td className="px-6 py-4 text-right">
-                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'cpa'))}`}>
+                            <div 
+                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'cpa'))}`}
+                              onMouseEnter={(e) => handleMetricHover(e, 'cpa', campaign.cpa, campaign.name, campaign.id)}
+                              onMouseLeave={handleMetricLeave}
+                            >
                               {formatCurrency(campaign.cpa)}
                             </div>
                           </td>
                           
                           {/* ROAS */}
                           <td className="px-6 py-4 text-right">
-                            <div className={`text-sm font-medium px-2 py-1 rounded ${getPerformanceColor(getPerformanceIndicator(campaign, 'roas'))}`}>
+                            <div 
+                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'roas'))}`}
+                              onMouseEnter={(e) => handleMetricHover(e, 'roas', campaign.roas, campaign.name, campaign.id)}
+                              onMouseLeave={handleMetricLeave}
+                            >
                               {campaign.roas.toFixed(2)}x
                             </div>
                           </td>
@@ -4832,8 +4907,19 @@ console.log("🌐 Making fresh API call for campaigns");
       <main className="ml-[280px] pt-18">
         <div className="p-8">
           {renderPageContent()}
-          </div>
+        </div>
       </main>
+
+      {/* Hover Metrics Chart */}
+      <HoverMetricsChart
+        isVisible={hoverChart.isVisible}
+        position={hoverChart.position}
+        metricType={hoverChart.metricType}
+        metricValue={hoverChart.metricValue}
+        campaignName={hoverChart.campaignName}
+        campaignId={hoverChart.campaignId}
+        onClose={handleMetricLeave}
+      />
 
       {/* Custom Date Picker Modal */}
       {customDateModalOpen && (
