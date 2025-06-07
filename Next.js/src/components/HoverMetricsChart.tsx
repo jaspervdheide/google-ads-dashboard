@@ -108,25 +108,27 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
     };
 
     const generateRealisticMockData = () => {
-      // Generate more realistic and varied mock data based on metric type
-      const baseValue = parseFloat(metricValue.toString().replace(/,/g, '')) || 100;
       const days = 30;
-      const mockData = [];
+      const mockData: DailyData[] = [];
+      const today = new Date();
+      
+      // Parse the current metric value for baseline
+      const currentValueStr = typeof metricValue === 'string' ? metricValue : String(metricValue);
+      const numericValue = parseFloat(currentValueStr.replace(/[€$,%]/g, ''));
+      const baseValue = isNaN(numericValue) ? 100 : numericValue;
       
       for (let i = days - 1; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
+        const date = new Date(today);
+        date.setDate(date.getDate() - i); // Go back i days from today
         
-        let value = baseValue;
-        let variationFactor = 0.3; // 30% variation by default
+        let variationFactor = 0.3; // Default 30% variation
         let trendFactor = 0;
         
-        // Create realistic patterns based on metric type
+        // Metric-specific patterns
         switch (metricType) {
           case 'clicks':
-            // Clicks: Weekend dips, gradual upward trend
-            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-            variationFactor = isWeekend ? 0.5 : 0.4;
+            // Clicks: Moderate variation, slight improvement trend
+            variationFactor = 0.4;
             trendFactor = (days - i) * 0.002; // Slight upward trend
             break;
             
@@ -317,8 +319,16 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
                   tick={{ fontSize: 10, fill: '#6b7280' }}
                   axisLine={false}
                   tickLine={false}
-                  interval={Math.max(Math.floor(dailyData.length / 6), 1)}
-                  minTickGap={20}
+                  interval="preserveStartEnd"
+                  ticks={dailyData.length > 0 ? [
+                    dailyData[0]?.formattedDate,
+                    dailyData[Math.floor(dailyData.length * 0.2)]?.formattedDate,
+                    dailyData[Math.floor(dailyData.length * 0.4)]?.formattedDate,
+                    dailyData[Math.floor(dailyData.length * 0.6)]?.formattedDate,
+                    dailyData[Math.floor(dailyData.length * 0.8)]?.formattedDate,
+                    dailyData[dailyData.length - 1]?.formattedDate
+                  ].filter(Boolean) : []}
+                  minTickGap={15}
                 />
                 <YAxis 
                   tick={{ fontSize: 10, fill: '#6b7280' }}
