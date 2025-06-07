@@ -1,3 +1,8 @@
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, PieChart, Pie, Cell } from 'recharts';
+import { clearCache } from './utils/cache.js';
+
+// Custom Kovvar Icon Component
+
                             <td className="px-4 py-3 text-gray-900">
                               {(item.conversions || 0).toFixed(2)}
                             </td> 

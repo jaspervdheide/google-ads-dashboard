@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   LayoutDashboard, 
   Target, 
@@ -44,7 +44,7 @@ import {
   PieChart as PieChartIcon,
   RefreshCw
 } from 'lucide-react';
-import { clearCache } from "./utils/cache.js";
+import { clearCache, getFromCache, saveToCache } from "./utils/cache.js";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, PieChart, Pie, Cell } from 'recharts';
 
 // Custom Kovvar Icon Component
@@ -825,7 +825,35 @@ export default function Dashboard() {
   // Fetch ad groups for a specific campaign
   const fetchAdGroups = async (campaignId: string) => {
     console.log("🔄 FETCHING AD GROUPS DATA");
+    
+    // 1. At the very start
+    console.log("🔍 fetchAdGroups called with:", { selectedAccount, dateRange: selectedDateRange });
+    
     if (!selectedAccount || !selectedDateRange) return;
+    
+    // 1. Check cache at start
+    const cached = getFromCache('adgroups', 30);
+    
+    // 2. After the cache check
+    console.log("💽 Cache result:", { cached: !!cached, cacheExists: cached !== null });
+    
+    // 2. If cached exists, return cached data
+    if (cached) {
+      console.log("💾 Using cached ad groups");
+      
+      // 3. Before the return cached
+      console.log("✅ Returning cached ad groups data");
+      
+      setAdGroupData(prev => ({ ...prev, [campaignId]: cached }));
+      setAdGroupLoading(prev => ({ ...prev, [campaignId]: false }));
+      return;
+    }
+    
+    // 3. If no cached data, proceed with normal API call
+    console.log("🔄 Fetching fresh ad groups");
+    
+    // 4. Before the API call
+    console.log("🌐 Making fresh API call for ad groups");
     
     try {
       setAdGroupLoading(prev => ({ ...prev, [campaignId]: true }));
@@ -837,6 +865,12 @@ export default function Dashboard() {
       if (result.success) {
         console.log(`📊 Ad Groups Fetched for campaign ${campaignId}:`, result.data);
         setAdGroupData(prev => ({ ...prev, [campaignId]: result.data }));
+        
+        // 4. After successful API response, save to cache
+        saveToCache('adgroups', result.data);
+        
+        // 5. After saving cache
+        console.log("💾 Saved ad groups to cache successfully");
       } else {
         console.error('Failed to fetch ad groups:', result.message);
       }
@@ -2481,60 +2515,66 @@ export default function Dashboard() {
   );
 
   // Ad Groups Performance page
-  const renderAdGroupsPage = () => (
-    <>
-      {/* Page Title */}
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Ad Groups & Asset Groups Performance</h2>
-        <p className="text-gray-600">
-          {selectedAccountData && selectedDateRange
-            ? `Traditional ad groups and Performance Max asset groups for ${getDisplayName(selectedAccountData)} • ${formatDateRangeDisplay(selectedDateRange)}`
-            : 'Analyze and optimize performance across traditional ad groups and Performance Max asset groups'
-          }
-        </p>
-      </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
-          <p className="text-red-800">{error}</p>
-        </div>
-      )}
-
-      {/* Loading State */}
-      {loading && (
-        <div className="text-center py-16">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <p className="mt-4 text-gray-600">Loading ad groups and asset groups data...</p>
-        </div>
-      )}
-
-      {/* No Account Selected */}
-      {!selectedAccount && !loading && (
-        <div className="text-center py-16">
-          <div className="text-gray-400 mb-6">
-            <Target className="h-16 w-16 mx-auto" />
-          </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Select an Account</h3>
-          <p className="text-gray-500 mb-6">
-            Choose an account from the header to view ad groups and asset groups performance data.
+  const renderAdGroupsPage = () => {
+    console.log("🎯 renderAdGroupsPage called");
+    return (
+      <>
+        {/* Page Title */}
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Ad Groups & Asset Groups Performance</h2>
+          <p className="text-gray-600">
+            {selectedAccountData && selectedDateRange
+              ? `Traditional ad groups and Performance Max asset groups for ${getDisplayName(selectedAccountData)} • ${formatDateRangeDisplay(selectedDateRange)}`
+              : 'Analyze and optimize performance across traditional ad groups and Performance Max asset groups'
+            }
           </p>
-          <div className="flex justify-center">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md">
-              <p className="text-blue-800 text-sm">
-                💡 Select an account from the dropdown in the header to analyze ad groups and asset groups performance.
-              </p>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
+            <p className="text-red-800">{error}</p>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center py-16">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-gray-600">Loading ad groups and asset groups data...</p>
+          </div>
+        )}
+
+        {/* No Account Selected */}
+        {!selectedAccount && !loading && (
+          <div className="text-center py-16">
+            <div className="text-gray-400 mb-6">
+              <Target className="h-16 w-16 mx-auto" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Select an Account</h3>
+            <p className="text-gray-500 mb-6">
+              Choose an account from the header to view ad groups and asset groups performance data.
+            </p>
+            <div className="flex justify-center">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md">
+                <p className="text-blue-800 text-sm">
+                  💡 Select an account from the dropdown in the header to analyze ad groups and asset groups performance.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Ad Groups & Asset Groups Table */}
-      {selectedAccount && campaignData && !loading && (
-        <AdGroupsTable />
-      )}
-    </>
-  );
+        {/* Ad Groups & Asset Groups Table */}
+        {selectedAccount && campaignData && !loading && (
+          <AdGroupsTable />
+        )}
+      </>
+    );
+  };
+
+  // 🎯 RENDER COUNTER - Track if infinite loop is truly fixed
+  let adGroupsTableRenderCount = 0;
 
   // Ad Groups Table Component (Enhanced for both Ad Groups and Asset Groups)
   const AdGroupsTable = () => {
@@ -2546,9 +2586,20 @@ export default function Dashboard() {
     const [adGroupsLoading, setAdGroupsLoading] = useState(false);
     const [adGroupsError, setAdGroupsError] = useState<string>('');
     
-    // Fetch real ad groups and asset groups data
-    const fetchAdGroupsData = async () => {
-      console.log("🔄 FETCHING AD GROUPS DATA");
+    // 🚨 CRITICAL DEBUG LOGGING to identify infinite loop cause
+    console.log("🎯 AdGroupsTable render caused by:", {
+      selectedAccount: !!selectedAccount,
+      selectedDateRange: !!selectedDateRange,
+      realAdGroupData: !!realAdGroupData,
+      adGroupSearch,
+      groupTypeFilter,
+      adGroupSort,
+      renderTime: new Date().toISOString()
+    });
+
+    // 🚨 CRITICAL FIX: Memoize fetchAdGroupsData with PROPER CACHE LOGIC
+    const fetchAdGroupsData = useCallback(async () => {
+      console.log("🎯 fetchAdGroupsData called - MEMOIZED");
       if (!selectedAccount || !selectedDateRange) return;
       
       try {
@@ -2556,11 +2607,42 @@ export default function Dashboard() {
         setAdGroupsError('');
         
         const apiDateRange = getApiDateRange(selectedDateRange);
+        
+        // 🚨 STEP 1: BUILD PROPER CACHE KEY
+        const cacheKey = `adgroups_${selectedAccount}_${apiDateRange.days}days`;
+        console.log("🎯 Cache check:", { cacheKey, selectedAccount, days: apiDateRange.days });
+        
+        // 🚨 STEP 2: CHECK CACHE FIRST (30 min TTL)
+        const cachedData = getFromCache(cacheKey, 30);
+        console.log("💽 Cache result:", { 
+          cached: !!cachedData, 
+          cacheExists: cachedData !== null,
+          cacheKey 
+        });
+        
+        // 🚨 STEP 3: IF CACHE HIT, RETURN IMMEDIATELY
+        if (cachedData) {
+          console.log("🎯 CACHE HIT - Using cached ad groups data");
+          console.log("✅ Returning cached ad groups data");
+          setRealAdGroupData(cachedData);
+          setAdGroupsLoading(false);
+          return; // ← CRITICAL: Must return here to avoid API call
+        }
+        
+        // 🚨 STEP 4: CACHE MISS - FETCH FROM API
+        console.log("🎯 CACHE MISS - Fetching from API");
+        console.log("🌐 Making fresh API call for ad groups");
+        
         const response = await fetch(`/api/ad-groups?customerId=${selectedAccount}&dateRange=${apiDateRange.days}&groupType=all`);
         const result = await response.json();
         
         if (result.success) {
           console.log('📊 Real Ad Groups Data Fetched:', result.data);
+          
+          // 🚨 STEP 5: SAVE TO CACHE AFTER SUCCESS
+          saveToCache(cacheKey, result.data);
+          console.log("💾 Saved ad groups to cache successfully");
+          
           setRealAdGroupData(result.data);
         } else {
           console.error('Failed to fetch ad groups data:', result.message);
@@ -2572,15 +2654,16 @@ export default function Dashboard() {
       } finally {
         setAdGroupsLoading(false);
       }
-    };
+    }, [selectedAccount, selectedDateRange, getApiDateRange]);
 
-    // Fetch data when account or date range changes
+    // 🚨 CRITICAL FIX: Proper useEffect with correct dependencies
     useEffect(() => {
+      console.log("🎯 useEffect triggered - fetching ad groups data");
       fetchAdGroupsData();
-    }, [selectedAccount, selectedDateRange]);
+    }, [fetchAdGroupsData]); // 🚨 FIXED: Now depends on memoized function
     
     // Campaign type detection based on naming conventions
-    const detectCampaignType = (campaignName: string): 'search' | 'shopping' | 'performance_max' | 'other' => {
+    const detectCampaignType = useCallback((campaignName: string): 'search' | 'shopping' | 'performance_max' | 'other' => {
       const nameLower = campaignName.toLowerCase();
       if (nameLower.includes('performance max') || nameLower.includes('pmax')) {
         return 'performance_max';
@@ -2592,10 +2675,10 @@ export default function Dashboard() {
         return 'search';
       }
       return 'other';
-    };
+    }, []);
 
-    // Get campaign type statistics for filter display
-    const getCampaignTypeStats = () => {
+    // Get campaign type statistics for filter display - MEMOIZED
+    const typeStats = useMemo(() => {
       if (realAdGroupData?.groups) {
         const traditional = realAdGroupData.groups.filter((g: any) => g.groupType === 'ad_group').length;
         const asset = realAdGroupData.groups.filter((g: any) => g.groupType === 'asset_group').length;
@@ -2618,10 +2701,11 @@ export default function Dashboard() {
       });
       
       return { traditional, asset, total: traditional + asset };
-    };
+    }, [realAdGroupData, campaignData, detectCampaignType]);
     
-    // Get all ad groups and asset groups from all campaigns
-    const getAllAdGroups = () => {
+    // Get all ad groups and asset groups from all campaigns - MEMOIZED TO FIX INFINITE LOOP
+    const allAdGroups = useMemo(() => {
+      console.log("🎯 getAllAdGroups called");
       // Use real data if available
       if (realAdGroupData?.groups) {
         return realAdGroupData.groups.map((group: any) => ({
@@ -2712,11 +2796,12 @@ export default function Dashboard() {
       }
       
       return allGroups;
-    };
+    }, [realAdGroupData, campaignData, adGroupData, detectCampaignType]);
 
-    // Filter and sort ad groups
-    const getFilteredAndSortedAdGroups = () => {
-      let groups = getAllAdGroups();
+    // Filter and sort ad groups - MEMOIZED TO FIX INFINITE LOOP
+    const filteredAdGroups = useMemo(() => {
+      console.log("🎯 getFilteredAndSortedAdGroups called");
+      let groups = [...allAdGroups];
       
       // Group type filter
       if (groupTypeFilter === 'traditional') {
@@ -2764,7 +2849,7 @@ export default function Dashboard() {
       }
       
       return groups;
-    };
+    }, [allAdGroups, groupTypeFilter, adGroupSearch, adGroupSort]);
 
     const handleSort = (field: string) => {
       setAdGroupSort(prev => {
@@ -2798,64 +2883,59 @@ export default function Dashboard() {
     };
 
     const selectAllAdGroups = () => {
-      const filteredAdGroups = getFilteredAndSortedAdGroups();
       setSelectedAdGroups(filteredAdGroups.map((ag: any) => ag.id));
     };
 
     const clearAllAdGroups = () => setSelectedAdGroups([]);
 
-    const getAdGroupPerformanceIndicator = (adGroup: any, metric: string): 'high' | 'medium' | 'low' => {
-      const allAdGroups = getAllAdGroups();
+    const getAdGroupPerformanceIndicator = useCallback((adGroup: any, metric: string): 'high' | 'medium' | 'low' => {
       if (allAdGroups.length < 3) return 'medium';
       const values = allAdGroups.map((ag: any) => ag[metric as keyof typeof ag] as number).sort((a: number, b: number) => b - a);
       const value = adGroup[metric as keyof typeof adGroup] as number;
-      const highThreshold = values[Math.floor(values.length * 0.33)];
-      const lowThreshold = values[Math.floor(values.length * 0.67)];
       
-      if (['cost', 'avgCpc', 'cpa'].includes(metric)) {
-        if (value <= lowThreshold) return 'high';
-        if (value <= highThreshold) return 'medium';
-        return 'low';
-      }
-      if (value >= highThreshold) return 'high';
-      if (value >= lowThreshold) return 'medium';
+      if (value >= values[Math.floor(values.length * 0.33)]) return 'high';
+      if (value >= values[Math.floor(values.length * 0.67)]) return 'medium';
       return 'low';
-    };
+    }, [allAdGroups]);
 
-    const calculateAdGroupTotals = () => {
-      const adGroups = getFilteredAndSortedAdGroups();
-      const totals = adGroups.reduce((acc: any, adGroup: any) => ({
+    const calculateAdGroupTotals = useMemo(() => {
+      console.log("🎯 calculateAdGroupTotals memoized calculation");
+      const totals = filteredAdGroups.reduce((acc: any, adGroup: any) => ({
         clicks: acc.clicks + adGroup.clicks,
         impressions: acc.impressions + adGroup.impressions,
         cost: acc.cost + adGroup.cost,
         conversions: acc.conversions + adGroup.conversions,
         conversionsValue: acc.conversionsValue + adGroup.conversionsValue,
-      }), { clicks: 0, impressions: 0, cost: 0, conversions: 0, conversionsValue: 0 });
+      }), {
+        clicks: 0,
+        impressions: 0,
+        cost: 0,
+        conversions: 0,
+        conversionsValue: 0,
+      });
 
+      // Calculate derived metrics
       return {
         ...totals,
         ctr: totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0,
-        avgCpc: totals.clicks > 0 ? (totals.cost / totals.clicks) : 0,
-        cpa: totals.conversions > 0 ? (totals.cost / totals.conversions) : 0,
-        roas: totals.cost > 0 ? (totals.conversionsValue / totals.cost) : 0,
+        avgCpc: totals.clicks > 0 ? totals.cost / totals.clicks : 0,
+        cpa: totals.conversions > 0 ? totals.cost / totals.conversions : 0,
+        roas: totals.cost > 0 ? totals.conversionsValue / totals.cost : 0
       };
-    };
+    }, [filteredAdGroups]);
 
-    // Get group type badge styles
     const getGroupTypeBadge = (groupType: 'ad_group' | 'asset_group') => {
-      if (groupType === 'asset_group') {
-        return 'bg-purple-100 text-purple-800 border border-purple-200';
-      }
-      return 'bg-blue-100 text-blue-800 border border-blue-200';
+      return groupType === 'asset_group' 
+        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+        : 'bg-blue-100 text-blue-800 border border-blue-200';
     };
 
-    // Get campaign type indicator
     const getCampaignTypeIndicator = (campaignType: 'search' | 'shopping' | 'performance_max' | 'other') => {
       const indicators = {
-        search: '🔍',
-        shopping: '🛒', 
-        performance_max: '⚡',
-        other: '📊'
+        'search': { icon: Search, color: 'text-blue-600', bg: 'bg-blue-100' },
+        'shopping': { icon: Package, color: 'text-green-600', bg: 'bg-green-100' },
+        'performance_max': { icon: Zap, color: 'text-purple-600', bg: 'bg-purple-100' },
+        'other': { icon: MoreHorizontal, color: 'text-gray-600', bg: 'bg-gray-100' }
       };
       return indicators[campaignType];
     };
@@ -2868,9 +2948,6 @@ export default function Dashboard() {
         case 'Poor': return 'bg-red-100 text-red-800 border border-red-200';
       }
     };
-
-    const filteredAdGroups = getFilteredAndSortedAdGroups();
-    const typeStats = getCampaignTypeStats();
 
     // Show loading state
     if (adGroupsLoading) {
@@ -3227,7 +3304,11 @@ export default function Dashboard() {
                     {/* Campaign Name with Type Indicator */}
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
-                        <span className="text-lg">{getCampaignTypeIndicator(group.campaignType)}</span>
+                        <div className={`w-6 h-6 rounded flex items-center justify-center ${getCampaignTypeIndicator(group.campaignType).bg}`}>
+                          {React.createElement(getCampaignTypeIndicator(group.campaignType).icon, { 
+                            className: `h-3 w-3 ${getCampaignTypeIndicator(group.campaignType).color}` 
+                          })}
+                        </div>
                         <div className="text-sm text-gray-900 font-medium">
                           {group.campaignName}
                         </div>
@@ -3356,7 +3437,7 @@ export default function Dashboard() {
                   <td className="px-6 py-4"></td>
                   
                   {(() => {
-                    const totals = calculateAdGroupTotals();
+                    const totals = calculateAdGroupTotals;
                     return (
                       <>
                         <td className="px-6 py-4 text-right text-sm">{formatLargeNumber(totals.impressions)}</td>
@@ -3481,16 +3562,55 @@ export default function Dashboard() {
       { id: 'campaign_name', label: 'Campaign' }
     ];
 
-    // Fetch keywords data
-    const fetchKeywordsData = async () => {
-      console.log("🔄 FETCHING KEYWORDS DATA");
+    // 🚨 CRITICAL FIX: Memoize fetchKeywordsData with PROPER CACHE LOGIC
+    const fetchKeywordsData = useCallback(async () => {
+      console.log("🎯 fetchKeywordsData called - MEMOIZED");
       if (!selectedAccount || !selectedDateRange) return;
 
-      setKeywordsLoading(true);
-      setKeywordsError('');
-
       try {
+        setKeywordsLoading(true);
+        setKeywordsError('');
+
         const apiDateRange = getApiDateRange(selectedDateRange);
+        
+        // 🚨 STEP 1: BUILD PROPER CACHE KEY (include dataType for keywords vs search_terms)
+        const cacheKey = `keywords_${selectedAccount}_${apiDateRange.days}days_${dataType}`;
+        console.log("🎯 Cache check:", { 
+          cacheKey, 
+          selectedAccount, 
+          days: apiDateRange.days,
+          dataType: dataType
+        });
+        
+        // 🚨 STEP 2: CHECK CACHE FIRST (30 min TTL)
+        const cachedData = getFromCache(cacheKey, 30);
+        console.log("💽 Cache result:", { 
+          cached: !!cachedData, 
+          cacheExists: cachedData !== null,
+          cacheKey 
+        });
+        
+        // 🚨 STEP 3: If cached exists, return cached data
+        if (cachedData) {
+          console.log("💾 Using cached keywords data");
+          console.log("✅ Returning cached keywords data");
+          
+          setKeywordData(cachedData.keywords || []);
+          setKeywordsSummary(cachedData.summary || null);
+          setKeywordsLoading(false);
+          
+          console.log(`📊 Keywords loaded from cache:`, {
+            dataType,
+            totalItems: cachedData.keywords?.length || 0,
+            summary: cachedData.summary
+          });
+          return;
+        }
+        
+        // 🚨 STEP 4: If no cached data, proceed with API call
+        console.log("🎯 CACHE MISS - Fetching from API");
+        console.log("🌐 Making fresh API call for keywords");
+        
         const response = await fetch(`/api/keywords?customerId=${selectedAccount}&dateRange=${apiDateRange.days}&dataType=${dataType}`);
         
         if (!response.ok) {
@@ -3499,10 +3619,18 @@ export default function Dashboard() {
 
         const result = await response.json();
         
+        // 🚨 STEP 5: Save to cache after successful API response
+        const cacheData = {
+          keywords: result.data || [],
+          summary: result.summary || null
+        };
+        saveToCache(cacheKey, cacheData); // Cache for 30 minutes (TTL controlled by getFromCache)
+        console.log("💾 Saved keywords to cache successfully", { cacheKey });
+        
         setKeywordData(result.data || []);
         setKeywordsSummary(result.summary || null);
         
-        console.log(`📊 Keywords loaded:`, {
+        console.log(`📊 Keywords loaded from API:`, {
           dataType,
           totalItems: result.data?.length || 0,
           summary: result.summary
@@ -3514,12 +3642,12 @@ export default function Dashboard() {
       } finally {
         setKeywordsLoading(false);
       }
-    };
+    }, [selectedAccount, selectedDateRange, dataType, getApiDateRange]);
 
     // Fetch data when dependencies change
     useEffect(() => {
       fetchKeywordsData();
-    }, [selectedAccount, selectedDateRange, dataType]);
+    }, [fetchKeywordsData]);
 
     // Get intelligent KPI based on current data type
     const getIntelligentKPI = () => {
