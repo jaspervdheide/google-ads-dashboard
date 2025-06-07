@@ -44,6 +44,7 @@ import {
   PieChart as PieChartIcon,
   RefreshCw
 } from 'lucide-react';
+import { clearCache } from "./utils/cache.js";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, PieChart, Pie, Cell } from 'recharts';
 
 // Custom Kovvar Icon Component
@@ -244,6 +245,33 @@ export default function Dashboard() {
   // Pagination state
   const [tablePage, setTablePage] = useState<number>(1);
   const [itemsPerPage] = useState<number>(10);
+
+  // Handle refresh button click
+  const handleRefresh = async () => {
+    console.log("🔥 REFRESH BUTTON CLICKED - CACHE CLEARING!");
+    alert("Refresh button clicked!");
+    setLoading(true);
+    
+    try {
+      // Clear all cached data
+      clearCache();
+      
+      // Re-fetch data (keeping existing functionality)
+      await Promise.all([
+        fetchCampaignData(),
+        fetchHistoricalData(),
+        fetchAnomalies()
+      ]);
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+      setError("Failed to refresh data");
+    } finally {
+      // Re-enable button after 1 second
+      setTimeout(() => {
+        setLoading(false);
+      }, 1000);
+    }
+  };
 
   // Date range utility functions
   const formatDateForDisplay = (date: Date): string => {
@@ -561,6 +589,7 @@ export default function Dashboard() {
 
   // Fetch today's campaign data for an account
   const fetchTodayClicks = async (accountId: string): Promise<{clicks: number, spend: number}> => {
+    console.log("🔄 FETCHING TODAY CLICKS DATA");
     try {
       const response = await fetch(`/api/campaigns?customerId=${accountId}&dateRange=1`);
       const result = await response.json();
@@ -579,6 +608,7 @@ export default function Dashboard() {
 
   // Fetch campaign data for an account to get click count (30-day for filtering)
   const fetchAccountClicks = async (accountId: string): Promise<number> => {
+    console.log("🔄 FETCHING ACCOUNT CLICKS DATA");
     try {
       const response = await fetch(`/api/campaigns?customerId=${accountId}&dateRange=30`);
       const result = await response.json();
@@ -641,6 +671,7 @@ export default function Dashboard() {
   // Fetch today's metrics when account changes or filtered accounts change
   useEffect(() => {
     const fetchTodayData = async () => {
+      console.log("🔄 FETCHING TODAY DATA");
       const metrics = await calculateTodayMetrics();
       setTodayMetrics(metrics);
     };
@@ -693,6 +724,7 @@ export default function Dashboard() {
   }, []);
 
   const fetchAccounts = async () => {
+    console.log("🔄 FETCHING ACCOUNTS DATA");
     try {
       setLoading(true);
       const response = await fetch('/api/accounts');
@@ -721,6 +753,7 @@ export default function Dashboard() {
   };
 
   const fetchCampaignData = async () => {
+    console.log("🔄 FETCHING CAMPAIGN DATA");
     if (!selectedAccount || !selectedDateRange) return;
     
     try {
@@ -764,6 +797,7 @@ export default function Dashboard() {
 
   // Fetch real historical data for charts
   const fetchHistoricalData = async () => {
+    console.log("🔄 FETCHING HISTORICAL DATA");
     if (!selectedAccount || !selectedDateRange) return;
     
     try {
@@ -790,6 +824,7 @@ export default function Dashboard() {
 
   // Fetch ad groups for a specific campaign
   const fetchAdGroups = async (campaignId: string) => {
+    console.log("🔄 FETCHING AD GROUPS DATA");
     if (!selectedAccount || !selectedDateRange) return;
     
     try {
@@ -813,6 +848,7 @@ export default function Dashboard() {
   };
 
   const fetchAnomalies = async () => {
+    console.log("🔄 FETCHING ANOMALIES DATA");
     try {
       setAnomalyLoading(true);
       const response = await fetch('/api/anomalies');
@@ -2512,6 +2548,7 @@ export default function Dashboard() {
     
     // Fetch real ad groups and asset groups data
     const fetchAdGroupsData = async () => {
+      console.log("🔄 FETCHING AD GROUPS DATA");
       if (!selectedAccount || !selectedDateRange) return;
       
       try {
@@ -3446,6 +3483,7 @@ export default function Dashboard() {
 
     // Fetch keywords data
     const fetchKeywordsData = async () => {
+      console.log("🔄 FETCHING KEYWORDS DATA");
       if (!selectedAccount || !selectedDateRange) return;
 
       setKeywordsLoading(true);
@@ -4539,22 +4577,7 @@ export default function Dashboard() {
 
             {/* Refresh Button (Icon Only) */}
             <button
-              onClick={async () => {
-                // Refresh all data
-                setLoading(true);
-                try {
-                  await Promise.all([
-                    fetchCampaignData(),
-                    fetchHistoricalData(),
-                    fetchAnomalies()
-                  ]);
-                } catch (error) {
-                  console.error('Error refreshing data:', error);
-                  setError('Failed to refresh data');
-                } finally {
-                  setLoading(false);
-                }
-              }}
+              onClick={handleRefresh}
               disabled={loading}
               className={`p-2 rounded-lg border transition-colors ${
                 loading
