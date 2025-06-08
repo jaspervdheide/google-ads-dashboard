@@ -47,6 +47,7 @@ import {
 import { clearCache, getFromCache, saveToCache } from "./utils/cache.js";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, PieChart, Pie, Cell, AreaChart, Area, Legend } from 'recharts';
 import HoverMetricsChart from '../components/HoverMetricsChart';
+import MarketShareTab from '../components/keywords/MarketShareTab';
 
 // Custom Kovvar Icon Component
 const KovvarIcon = ({ className }: { className?: string }) => (
@@ -3746,7 +3747,7 @@ console.log("🌐 Making fresh API call for campaigns");
 
     // View controls
     const [viewMode, setViewMode] = useState<'table' | 'charts'>('table');
-    const [dataType, setDataType] = useState<'keywords' | 'search_terms' | 'history'>('keywords');
+    const [dataType, setDataType] = useState<'keywords' | 'search_terms' | 'history' | 'market_share'>('keywords');
 
     // History data state
     const [historyData, setHistoryData] = useState<any>(null);
@@ -3877,7 +3878,8 @@ console.log("🌐 Making fresh API call for campaigns");
 
     // Get intelligent KPI based on current data type
     const getIntelligentKPI = () => {
-      if (!keywordsSummary) return null;
+      // Only show intelligent KPI for keywords and search_terms
+      if (dataType === 'market_share' || dataType === 'history' || !keywordsSummary) return null;
 
       if (dataType === 'keywords') {
         return {
@@ -3902,6 +3904,9 @@ console.log("🌐 Making fresh API call for campaigns");
 
     // Filter and sort data
     const getFilteredAndSortedData = () => {
+      // Only filter for keywords and search_terms data types
+      if (dataType === 'market_share' || dataType === 'history') return [];
+      
       let filtered = [...keywordData];
 
       // Search filter
@@ -4198,6 +4203,16 @@ console.log("🌐 Making fresh API call for campaigns");
                   Search Terms
                 </button>
                 <button
+                  onClick={() => setDataType('market_share')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                    dataType === 'market_share'
+                      ? 'bg-blue-500 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Market Share
+                </button>
+                <button
                   onClick={() => setDataType('history')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
                     dataType === 'history'
@@ -4270,63 +4285,74 @@ console.log("🌐 Making fresh API call for campaigns");
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {dataType === 'keywords' ? 'Keywords Performance' : 'Search Terms Discovery'}
+                  {dataType === 'keywords' ? 'Keywords Performance' : 
+                   dataType === 'search_terms' ? 'Search Terms Discovery' : 
+                   dataType === 'market_share' ? 'Market Share Analysis' : 
+                   'Search Volume History'}
                 </h3>
                 <p className="text-sm text-gray-500">
-                  Showing {filteredData.length} of {keywordData.length} items • Last {selectedDateRange?.apiDays || 30} days
+                  {dataType === 'market_share' || dataType === 'history' ? 
+                    `Market intelligence and search volume analysis • Last ${selectedDateRange?.apiDays || 30} days` :
+                    `Showing ${filteredData.length} of ${keywordData.length} items • Last ${selectedDateRange?.apiDays || 30} days`
+                  }
                 </p>
               </div>
             </div>
             
-            {/* Search Bar and Filters */}
-            <div className="flex items-center justify-between space-x-4">
-              <div className="flex items-center space-x-4 flex-1">
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder={`Search ${dataType === 'keywords' ? 'keywords' : 'search terms'}...`}
-                    value={keywordSearch}
-                    onChange={(e) => setKeywordSearch(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                {/* Match Type Filter */}
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600">Match Type:</span>
-                  <select
-                    value={matchTypeFilter}
-                    onChange={(e) => setMatchTypeFilter(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All</option>
-                    <option value="EXACT">Exact</option>
-                    <option value="PHRASE">Phrase</option>
-                    <option value="BROAD">Broad</option>
-                  </select>
-                </div>
-                
-                {/* Performance Filter */}
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600">Performance:</span>
-                  <select
-                    value={performanceFilter}
-                    onChange={(e) => setPerformanceFilter(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All</option>
-                    <option value="high_spend_zero_conv">High Spend, No Conversions</option>
-                    <option value="zero_clicks">Zero Clicks</option>
-                    <option value="low_ctr">Low CTR</option>
-                  </select>
+            {/* Search Bar and Filters - Only show for keywords/search_terms */}
+            {(dataType === 'keywords' || dataType === 'search_terms') && (
+              <div className="flex items-center justify-between space-x-4">
+                <div className="flex items-center space-x-4 flex-1">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder={`Search ${dataType === 'keywords' ? 'keywords' : 'search terms'}...`}
+                      value={keywordSearch}
+                      onChange={(e) => setKeywordSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  
+                  {/* Match Type Filter */}
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-600">Match Type:</span>
+                    <select
+                      value={matchTypeFilter}
+                      onChange={(e) => setMatchTypeFilter(e.target.value)}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All</option>
+                      <option value="EXACT">Exact</option>
+                      <option value="PHRASE">Phrase</option>
+                      <option value="BROAD">Broad</option>
+                    </select>
+                  </div>
+                  
+                  {/* Performance Filter */}
+                  <div className="flex items-center space-x-2">
+                    <span className="text-sm text-gray-600">Performance:</span>
+                    <select
+                      value={performanceFilter}
+                      onChange={(e) => setPerformanceFilter(e.target.value)}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">All</option>
+                      <option value="high_spend_zero_conv">High Spend, No Conversions</option>
+                      <option value="zero_clicks">Zero Clicks</option>
+                      <option value="low_ctr">Low CTR</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
           
           {/* Table or Charts Content */}
-          {dataType === 'history' ? (
+          {dataType === 'market_share' ? (
+            // Market Share Analysis View
+            <MarketShareTab customerId={selectedAccount || ''} />
+          ) : dataType === 'history' ? (
             // Search Volume History View
             <div className="p-6">
               {historyLoading ? (
