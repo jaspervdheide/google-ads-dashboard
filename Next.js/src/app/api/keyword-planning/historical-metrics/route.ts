@@ -8,23 +8,34 @@ const client = new GoogleAdsApi({
   developer_token: process.env.DEVELOPER_TOKEN!,
 });
 
-interface MonthlySearchVolumeData {
-  [key: string]: number;
-}
-
 interface MonthlyData {
   month: string;
   searchVolume: number;
   clicks: number;
   cost: number;
   formattedMonth: string;
+  competitionLevel: string;
+  marketShareCaptured: number;
+  avgImpressionShare: number;
+}
+
+interface KeywordMetrics {
+  keyword: string;
+  avgMonthlySearches: number;
+  impressions: number;
+  clicks: number;
+  cost: number;
+  impressionShare: number;
+  estimatedMarketVolume: number;
+  competitionLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  missedOpportunity: number;
 }
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const customerId = searchParams.get('customerId');
-    const dateRange = searchParams.get('dateRange') || '30';
+    const customerId: string | null = searchParams.get('customerId');
+    const dateRange: string = searchParams.get('dateRange') || '30';
     
     if (!customerId) {
       return NextResponse.json({
@@ -33,7 +44,7 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    console.log(`[Keyword Planning] Fetching search volume data for customer ${customerId}`);
+    console.log(`[Keyword Planning] Fetching enhanced keyword metrics for customer ${customerId}`);
     
     // Get customer instance using same pattern
     const customer = client.Customer({
@@ -42,15 +53,21 @@ export async function GET(request: NextRequest) {
       login_customer_id: process.env.MCC_CUSTOMER_ID!,
     });
 
-    // First, get existing keywords from same query pattern as keywords API
+    // Enhanced query to get comprehensive keyword data
     const keywordsQuery = `
       SELECT 
         ad_group_criterion.keyword.text,
+        ad_group_criterion.keyword.match_type,
         campaign.name,
+        campaign.advertising_channel_type,
         metrics.clicks,
         metrics.impressions,
         metrics.cost_micros,
         metrics.search_impression_share,
+        metrics.search_exact_match_impression_share,
+        metrics.search_top_impression_share,
+        metrics.ctr,
+        metrics.average_cpc,
         segments.date
       FROM keyword_view 
       WHERE campaign.advertising_channel_type IN ('SEARCH', 'SHOPPING')
@@ -73,107 +90,176 @@ export async function GET(request: NextRequest) {
 
     const keywordsData = await customer.query(keywordsQuery);
     
-    // Extract unique keywords for search volume lookup
-    const uniqueKeywords = [...new Set(
-      keywordsData.map((row: any) => row.ad_group_criterion?.keyword?.text).filter(Boolean)
-    )];
+    console.log(`[Keyword Planning] Found ${keywordsData.length} keyword records`);
 
-    console.log(`[Keyword Planning] Found ${uniqueKeywords.length} unique keywords`);
+    if (keywordsData.length === 0) {
+      return NextResponse.json({
+        success: false,
+        message: "❌ No keywords found for analysis"
+      }, { status: 404 });
+    }
 
-    // Process data to calculate real search volume using impression share
-    // Formula: Market Search Volume = Your Impressions ÷ Search Impression Share
-    const monthlySearchVolume: MonthlySearchVolumeData = {};
-    const monthlyClicks: MonthlySearchVolumeData = {};
-    const monthlyCost: MonthlySearchVolumeData = {};
-    const keywordSearchVolumes: { [key: string]: any } = {};
-    
-    // Process keywords data into monthly aggregation with real search volume calculation
+    // Process and aggregate keyword data with enhanced market intelligence
+    const keywordMetrics: { [key: string]: KeywordMetrics } = {};
+    const monthlyAggregates: { [key: string]: {
+      searchVolume: number;
+      clicks: number;
+      cost: number;
+      impressionShares: number[];
+      competitionLevels: string[];
+    }} = {};
+
     keywordsData.forEach((row: any) => {
-      if (row.segments?.date) {
-        const dateStr = row.segments.date;
+      const keyword = row.ad_group_criterion?.keyword?.text;
+      const dateStr = row.segments?.date;
+      
+      if (keyword && dateStr) {
         const monthKey = `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}`;
         
-        // Initialize month if not exists
-        if (!monthlyClicks[monthKey]) {
-          monthlyClicks[monthKey] = 0;
-          monthlyCost[monthKey] = 0;
-          monthlySearchVolume[monthKey] = 0;
+        // Initialize keyword metrics
+        if (!keywordMetrics[keyword]) {
+          keywordMetrics[keyword] = {
+            keyword,
+            avgMonthlySearches: 0,
+            impressions: 0,
+            clicks: 0,
+            cost: 0,
+            impressionShare: 0,
+            estimatedMarketVolume: 0,
+            competitionLevel: 'MEDIUM',
+            missedOpportunity: 0
+          };
         }
-        
-        // Aggregate clicks and cost
-        monthlyClicks[monthKey] += Number(row.metrics?.clicks) || 0;
-        monthlyCost[monthKey] += (Number(row.metrics?.cost_micros) || 0) / 1000000;
-        
-        // Calculate market search volume from impression share
+
+        // Aggregate keyword data
         const impressions = Number(row.metrics?.impressions) || 0;
-        const searchImpressionShare = Number(row.metrics?.search_impression_share) || 0;
+        const clicks = Number(row.metrics?.clicks) || 0;
+        const cost = (Number(row.metrics?.cost_micros) || 0) / 1000000;
+        const impressionShare = Number(row.metrics?.search_impression_share) || 0;
+        const ctr = Number(row.metrics?.ctr) || 0;
+
+        keywordMetrics[keyword].impressions += impressions;
+        keywordMetrics[keyword].clicks += clicks;
+        keywordMetrics[keyword].cost += cost;
         
-        if (impressions > 0 && searchImpressionShare > 0) {
-          // Market search volume = impressions ÷ impression share
-          const estimatedMarketVolume = Math.round(impressions / searchImpressionShare);
-          monthlySearchVolume[monthKey] += estimatedMarketVolume;
+        // Calculate enhanced market intelligence
+        if (impressions > 0 && impressionShare > 0) {
+          const estimatedMarketVolume = Math.round(impressions / impressionShare);
+          keywordMetrics[keyword].estimatedMarketVolume += estimatedMarketVolume;
+          keywordMetrics[keyword].impressionShare = Math.max(keywordMetrics[keyword].impressionShare, impressionShare);
           
-          // Store individual keyword metrics for detailed analysis
-          const keywordText = row.ad_group_criterion?.keyword?.text;
-          if (keywordText && !keywordSearchVolumes[keywordText]) {
-            keywordSearchVolumes[keywordText] = {
-              impressions: impressions,
-              impressionShare: searchImpressionShare,
-              estimatedMarketVolume: estimatedMarketVolume,
-              clicks: Number(row.metrics?.clicks) || 0,
-              cost: (Number(row.metrics?.cost_micros) || 0) / 1000000
-            };
+          // Determine competition level based on impression share and CTR
+          if (impressionShare < 0.3 || ctr < 0.02) {
+            keywordMetrics[keyword].competitionLevel = 'HIGH';
+          } else if (impressionShare > 0.7 && ctr > 0.05) {
+            keywordMetrics[keyword].competitionLevel = 'LOW';
+          } else {
+            keywordMetrics[keyword].competitionLevel = 'MEDIUM';
           }
         }
+
+        // Initialize monthly aggregates
+        if (!monthlyAggregates[monthKey]) {
+          monthlyAggregates[monthKey] = {
+            searchVolume: 0,
+            clicks: 0,
+            cost: 0,
+            impressionShares: [],
+            competitionLevels: []
+          };
+        }
+
+        // Aggregate monthly data
+        if (impressions > 0 && impressionShare > 0) {
+          const monthlyMarketVolume = Math.round(impressions / impressionShare);
+          monthlyAggregates[monthKey].searchVolume += monthlyMarketVolume;
+          monthlyAggregates[monthKey].impressionShares.push(impressionShare);
+        }
+        
+        monthlyAggregates[monthKey].clicks += clicks;
+        monthlyAggregates[monthKey].cost += cost;
+        monthlyAggregates[monthKey].competitionLevels.push(keywordMetrics[keyword].competitionLevel);
       }
     });
 
-    console.log(`[Keyword Planning] Processed ${Object.keys(monthlySearchVolume).length} months of data with real search volume calculation`);
-
-    // Combine data for visualization
-    const combinedMonthlyData: MonthlyData[] = [];
-    const allMonths = new Set([
-      ...Object.keys(monthlySearchVolume),
-      ...Object.keys(monthlyClicks)
-    ]);
-
-    Array.from(allMonths).sort().forEach(month => {
-      combinedMonthlyData.push({
-        month,
-        searchVolume: monthlySearchVolume[month] || 0,
-        clicks: monthlyClicks[month] || 0,
-        cost: monthlyCost[month] || 0,
-        formattedMonth: new Date(month + '-01').toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'short' 
-        })
-      });
+    // Calculate missed opportunities for each keyword
+    Object.values(keywordMetrics).forEach(keyword => {
+      if (keyword.impressionShare > 0) {
+        keyword.missedOpportunity = keyword.estimatedMarketVolume - keyword.impressions;
+        keyword.avgMonthlySearches = Math.round(keyword.estimatedMarketVolume / Math.max(1, parseInt(dateRange) / 30));
+      }
     });
 
+    // Convert to monthly data format
+    const monthlyData: MonthlyData[] = Object.entries(monthlyAggregates)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([monthKey, data]) => {
+        const avgImpressionShare = data.impressionShares.length > 0 
+          ? data.impressionShares.reduce((sum, share) => sum + share, 0) / data.impressionShares.length 
+          : 0;
+        
+        const marketShareCaptured = data.searchVolume > 0 ? (data.clicks / data.searchVolume * 100) : 0;
+        
+        // Determine overall competition level for the month
+        const competitionCounts = data.competitionLevels.reduce((acc: any, level) => {
+          acc[level] = (acc[level] || 0) + 1;
+          return acc;
+        }, {});
+        
+        const dominantCompetition = Object.entries(competitionCounts)
+          .sort(([,a], [,b]) => (b as number) - (a as number))[0]?.[0] || 'MEDIUM';
+
+        return {
+          month: monthKey,
+          searchVolume: data.searchVolume,
+          clicks: data.clicks,
+          cost: data.cost,
+          formattedMonth: new Date(monthKey + '-01').toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short' 
+          }),
+          competitionLevel: dominantCompetition,
+          marketShareCaptured,
+          avgImpressionShare: avgImpressionShare * 100
+        };
+      });
+
     // Calculate summary metrics
-    const totalSearchVolume = combinedMonthlyData.reduce((sum, d) => sum + d.searchVolume, 0);
-    const totalClicks = combinedMonthlyData.reduce((sum, d) => sum + d.clicks, 0);
-    const totalCost = combinedMonthlyData.reduce((sum, d) => sum + d.cost, 0);
+    const totalSearchVolume = monthlyData.reduce((sum, d) => sum + d.searchVolume, 0);
+    const totalClicks = monthlyData.reduce((sum, d) => sum + d.clicks, 0);
+    const totalCost = monthlyData.reduce((sum, d) => sum + d.cost, 0);
     const marketCaptureRate = totalSearchVolume > 0 ? (totalClicks / totalSearchVolume * 100) : 0;
+    const avgImpressionShare = monthlyData.length > 0 
+      ? monthlyData.reduce((sum, d) => sum + d.avgImpressionShare, 0) / monthlyData.length 
+      : 0;
+
+    // Get top opportunities (keywords with high missed opportunity)
+    const topOpportunities = Object.values(keywordMetrics)
+      .sort((a, b) => b.missedOpportunity - a.missedOpportunity)
+      .slice(0, 10);
 
     return NextResponse.json({
       success: true,
-      message: `✅ Retrieved search volume data for ${uniqueKeywords.length} keywords using real impression share data`,
+      message: `✅ Enhanced keyword intelligence for ${Object.keys(keywordMetrics).length} keywords`,
       data: {
-        monthlyData: combinedMonthlyData,
+        monthlyData,
         summary: {
-          totalKeywords: uniqueKeywords.length,
+          totalKeywords: Object.keys(keywordMetrics).length,
           totalSearchVolume,
           totalClicks,
           totalCost,
-          marketCaptureRate
+          marketCaptureRate,
+          avgImpressionShare,
+          totalMissedOpportunity: topOpportunities.reduce((sum, k) => sum + k.missedOpportunity, 0)
         },
         dateRange: {
           days: parseInt(dateRange),
-          monthsAnalyzed: combinedMonthlyData.length
+          monthsAnalyzed: monthlyData.length
         },
-        keywordSearchVolumes, // Individual keyword search volumes for drill-down
-        calculationMethod: "search_impression_share" // Indicate the calculation method
+        keywordDetails: keywordMetrics,
+        topOpportunities,
+        calculationMethod: "enhanced_impression_share_analysis",
+        dataSource: "Google Ads Performance Data + Market Intelligence"
       }
     });
 
@@ -181,7 +267,7 @@ export async function GET(request: NextRequest) {
     console.error('[Keyword Planning] Error:', error);
     return NextResponse.json({
       success: false,
-      message: "❌ Failed to fetch search volume data",
+      message: "❌ Failed to fetch keyword historical metrics",
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
