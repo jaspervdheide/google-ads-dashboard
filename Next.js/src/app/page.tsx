@@ -45,7 +45,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { clearCache, getFromCache, saveToCache } from "./utils/cache.js";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, PieChart, Pie, Cell, AreaChart, Area, Legend } from 'recharts';
 import HoverMetricsChart from '../components/HoverMetricsChart';
 
 // Custom Kovvar Icon Component
@@ -3746,7 +3746,12 @@ console.log("🌐 Making fresh API call for campaigns");
 
     // View controls
     const [viewMode, setViewMode] = useState<'table' | 'charts'>('table');
-    const [dataType, setDataType] = useState<'keywords' | 'search_terms'>('keywords');
+    const [dataType, setDataType] = useState<'keywords' | 'search_terms' | 'history'>('keywords');
+
+    // History data state
+    const [historyData, setHistoryData] = useState<any>(null);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [historyError, setHistoryError] = useState<string>('');
 
     // Table controls
     const [keywordSearch, setKeywordSearch] = useState<string>('');
@@ -3863,8 +3868,12 @@ console.log("🌐 Making fresh API call for campaigns");
 
     // Fetch data when dependencies change
     useEffect(() => {
-      fetchKeywordsData();
-    }, [fetchKeywordsData]);
+      if (dataType === 'history') {
+        fetchHistoryData();
+      } else {
+        fetchKeywordsData();
+      }
+    }, [fetchKeywordsData, fetchHistoryData, dataType]);
 
     // Get intelligent KPI based on current data type
     const getIntelligentKPI = () => {
@@ -4188,6 +4197,16 @@ console.log("🌐 Making fresh API call for campaigns");
                 >
                   Search Terms
                 </button>
+                <button
+                  onClick={() => setDataType('history')}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                    dataType === 'history'
+                      ? 'bg-blue-500 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Search Volume History
+                </button>
               </div>
 
               {/* View Mode Toggle */}
@@ -4307,7 +4326,149 @@ console.log("🌐 Making fresh API call for campaigns");
           </div>
           
           {/* Table or Charts Content */}
-          {viewMode === 'table' ? (
+          {dataType === 'history' ? (
+            // Search Volume History View
+            <div className="p-6">
+              {historyLoading ? (
+                <div className="text-center py-16">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                  <p className="text-gray-600">Loading search volume history...</p>
+                </div>
+              ) : historyError ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-red-800">{historyError}</p>
+                </div>
+              ) : historyData?.success ? (
+                <div className="space-y-6">
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="bg-blue-50 rounded-lg p-4">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {historyData.data.summary.totalKeywords.toLocaleString()}
+                      </div>
+                      <div className="text-sm text-blue-800">Total Keywords</div>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4">
+                      <div className="text-2xl font-bold text-green-600">
+                        {historyData.data.summary.totalSearchVolume.toLocaleString()}
+                      </div>
+                      <div className="text-sm text-green-800">Search Volume</div>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-4">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {historyData.data.summary.totalClicks.toLocaleString()}
+                      </div>
+                      <div className="text-sm text-purple-800">Total Clicks</div>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-4">
+                      <div className="text-2xl font-bold text-orange-600">
+                        {historyData.data.summary.marketCaptureRate.toFixed(2)}%
+                      </div>
+                      <div className="text-sm text-orange-800">Market Capture Rate</div>
+                    </div>
+                  </div>
+
+                  {/* Search Volume vs Clicks Chart */}
+                  <div className="bg-white rounded-lg shadow-lg p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                      Search Volume vs Clicks Correlation
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-6">
+                      Compare market search volume with your actual clicks to identify opportunities
+                    </p>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <LineChart data={historyData.data.monthlyData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="formattedMonth" 
+                          fontSize={12}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis 
+                          yAxisId="left"
+                          fontSize={12}
+                          tickFormatter={(value) => value.toLocaleString()}
+                        />
+                        <YAxis 
+                          yAxisId="right" 
+                          orientation="right"
+                          fontSize={12}
+                          tickFormatter={(value) => value.toLocaleString()}
+                        />
+                        <Tooltip 
+                          formatter={(value, name) => [
+                            typeof value === 'number' ? value.toLocaleString() : value,
+                            name
+                          ]}
+                        />
+                        <Legend />
+                        <Line 
+                          yAxisId="left"
+                          type="monotone" 
+                          dataKey="searchVolume" 
+                          stroke="#3B82F6" 
+                          strokeWidth={3}
+                          name="Search Volume"
+                          dot={{ fill: '#3B82F6', strokeWidth: 2 }}
+                        />
+                        <Line 
+                          yAxisId="right"
+                          type="monotone" 
+                          dataKey="clicks" 
+                          stroke="#10B981" 
+                          strokeWidth={3}
+                          name="Actual Clicks"
+                          dot={{ fill: '#10B981', strokeWidth: 2 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Cost Efficiency Chart */}
+                  <div className="bg-white rounded-lg shadow-lg p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                      Cost Efficiency Over Time
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-6">
+                      Monthly spend tracked against search volume trends
+                    </p>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <AreaChart data={historyData.data.monthlyData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="formattedMonth"
+                          fontSize={12}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis 
+                          fontSize={12}
+                          tickFormatter={(value) => `€${value.toFixed(0)}`}
+                        />
+                        <Tooltip 
+                          formatter={(value) => [`€${typeof value === 'number' ? value.toFixed(2) : '0.00'}`, 'Cost']}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="cost" 
+                          stroke="#F59E0B" 
+                          fill="#FEF3C7" 
+                          strokeWidth={2}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-16">
+                  <p className="text-gray-600">No search volume history data available</p>
+                </div>
+              )}
+            </div>
+          ) : viewMode === 'table' ? (
             <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 320px)' }}>
               <table className="w-full">
                 {/* Table Header */}
@@ -4629,6 +4790,83 @@ console.log("🌐 Making fresh API call for campaigns");
       </div>
     );
   };
+
+  // History data state
+  const [historyData, setHistoryData] = useState<any>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string>('');
+
+  // Fetch history data function
+  const fetchHistoryData = useCallback(async () => {
+    console.log("🎯 fetchHistoryData called - MEMOIZED");
+    if (!selectedAccount || !selectedDateRange) return;
+
+    try {
+      setHistoryLoading(true);
+      setHistoryError('');
+
+      const apiDateRange = getApiDateRange(selectedDateRange);
+      
+      // Build cache key for history data
+      const cacheKey = `keyword_history_${selectedAccount}_${apiDateRange.days}days`;
+      console.log("🎯 History cache check:", { 
+        cacheKey, 
+        selectedAccount, 
+        days: apiDateRange.days
+      });
+      
+      // Check cache first (30 min TTL)
+      const cachedData = getFromCache(cacheKey, 30);
+      console.log("💽 History cache result:", { 
+        cached: !!cachedData, 
+        cacheExists: cachedData !== null,
+        cacheKey 
+      });
+      
+      // If cached exists, return cached data
+      if (cachedData) {
+        console.log("💾 Using cached history data");
+        
+        setHistoryData(cachedData);
+        setHistoryLoading(false);
+        
+        console.log(`📊 History loaded from cache:`, {
+          totalMonths: cachedData.data?.monthlyData?.length || 0,
+          summary: cachedData.data?.summary
+        });
+        return;
+      }
+      
+      // If no cached data, proceed with API call
+      console.log("🎯 HISTORY CACHE MISS - Fetching from API");
+      console.log("🌐 Making fresh API call for search volume history");
+      
+      const response = await fetch(`/api/keyword-planning/historical-metrics?customerId=${selectedAccount}&dateRange=${apiDateRange.days}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch search volume history: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      // Save to cache after successful API response
+      saveToCache(cacheKey, result); // Cache for 30 minutes
+      console.log("💾 Saved history to cache successfully", { cacheKey });
+      
+      setHistoryData(result);
+      
+      console.log(`📊 History loaded from API:`, {
+        totalMonths: result.data?.monthlyData?.length || 0,
+        summary: result.data?.summary
+      });
+
+    } catch (err) {
+      console.error('Error fetching search volume history:', err);
+      setHistoryError(err instanceof Error ? err.message : 'Failed to fetch search volume history');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [selectedAccount, selectedDateRange, getApiDateRange]);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
