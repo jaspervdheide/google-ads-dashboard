@@ -4374,7 +4374,11 @@ console.log("🌐 Making fresh API call for campaigns");
                       Search Volume vs Clicks Correlation
                     </h3>
                     <p className="text-sm text-gray-600 mb-6">
-                      Compare market search volume with your actual clicks to identify opportunities
+                      Market search volume calculated from your impression share data vs actual clicks captured
+                      <br />
+                      <span className="text-xs text-blue-600">
+                        📊 Formula: Market Volume = Your Impressions ÷ Search Impression Share
+                      </span>
                     </p>
                     <ResponsiveContainer width="100%" height={400}>
                       <LineChart data={historyData.data.monthlyData}>

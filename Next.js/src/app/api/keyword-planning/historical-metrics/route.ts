@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
         metrics.clicks,
         metrics.impressions,
         metrics.cost_micros,
+        metrics.search_impression_share,
         segments.date
       FROM keyword_view 
       WHERE campaign.advertising_channel_type IN ('SEARCH', 'SHOPPING')
@@ -57,10 +58,14 @@ export async function GET(request: NextRequest) {
         AND ad_group.status = 'ENABLED'
         AND ad_group_criterion.type = 'KEYWORD'
         AND ad_group_criterion.status = 'ENABLED'
-        AND segments.date >= '${(() => {
-          const date = new Date();
-          date.setDate(date.getDate() - parseInt(dateRange));
-          return date.toISOString().split('T')[0].replace(/-/g, '');
+        AND segments.date BETWEEN '${(() => {
+          const endDate = new Date();
+          const startDate = new Date(endDate);
+          startDate.setDate(startDate.getDate() - parseInt(dateRange));
+          return startDate.toISOString().split('T')[0].replace(/-/g, '');
+        })()}' AND '${(() => {
+          const endDate = new Date();
+          return endDate.toISOString().split('T')[0].replace(/-/g, '');
         })()}'
       ORDER BY metrics.impressions DESC
       LIMIT 1000
@@ -75,44 +80,55 @@ export async function GET(request: NextRequest) {
 
     console.log(`[Keyword Planning] Found ${uniqueKeywords.length} unique keywords`);
 
-    // For now, create mock search volume data until we can properly implement the Keyword Planner API
-    // The Google Ads API v15+ has changed how keyword planning works
+    // Process data to calculate real search volume using impression share
+    // Formula: Market Search Volume = Your Impressions ÷ Search Impression Share
     const monthlySearchVolume: MonthlySearchVolumeData = {};
-    const keywordSearchVolumes: { [key: string]: any } = {};
-    
-    // Generate sample data for demonstration
-    uniqueKeywords.forEach((keyword: string) => {
-      keywordSearchVolumes[keyword] = {
-        averageMonthlySearches: Math.floor(Math.random() * 10000) + 100,
-        competitionIndex: Math.random() * 100,
-        lowTopOfPageBidMicros: Math.floor(Math.random() * 5000000) + 100000,
-        highTopOfPageBidMicros: Math.floor(Math.random() * 10000000) + 1000000,
-      };
-    });
-
-    // Process clicks data into monthly aggregation (same pattern as campaigns API)
     const monthlyClicks: MonthlySearchVolumeData = {};
     const monthlyCost: MonthlySearchVolumeData = {};
+    const keywordSearchVolumes: { [key: string]: any } = {};
     
+    // Process keywords data into monthly aggregation with real search volume calculation
     keywordsData.forEach((row: any) => {
       if (row.segments?.date) {
         const dateStr = row.segments.date;
         const monthKey = `${dateStr.substring(0, 4)}-${dateStr.substring(4, 6)}`;
         
+        // Initialize month if not exists
         if (!monthlyClicks[monthKey]) {
           monthlyClicks[monthKey] = 0;
           monthlyCost[monthKey] = 0;
+          monthlySearchVolume[monthKey] = 0;
         }
         
+        // Aggregate clicks and cost
         monthlyClicks[monthKey] += Number(row.metrics?.clicks) || 0;
         monthlyCost[monthKey] += (Number(row.metrics?.cost_micros) || 0) / 1000000;
+        
+        // Calculate market search volume from impression share
+        const impressions = Number(row.metrics?.impressions) || 0;
+        const searchImpressionShare = Number(row.metrics?.search_impression_share) || 0;
+        
+        if (impressions > 0 && searchImpressionShare > 0) {
+          // Market search volume = impressions ÷ impression share
+          const estimatedMarketVolume = Math.round(impressions / searchImpressionShare);
+          monthlySearchVolume[monthKey] += estimatedMarketVolume;
+          
+          // Store individual keyword metrics for detailed analysis
+          const keywordText = row.ad_group_criterion?.keyword?.text;
+          if (keywordText && !keywordSearchVolumes[keywordText]) {
+            keywordSearchVolumes[keywordText] = {
+              impressions: impressions,
+              impressionShare: searchImpressionShare,
+              estimatedMarketVolume: estimatedMarketVolume,
+              clicks: Number(row.metrics?.clicks) || 0,
+              cost: (Number(row.metrics?.cost_micros) || 0) / 1000000
+            };
+          }
+        }
       }
     });
 
-    // Generate sample monthly search volume data
-    Object.keys(monthlyClicks).forEach(month => {
-      monthlySearchVolume[month] = Math.floor(Math.random() * 50000) + 1000;
-    });
+    console.log(`[Keyword Planning] Processed ${Object.keys(monthlySearchVolume).length} months of data with real search volume calculation`);
 
     // Combine data for visualization
     const combinedMonthlyData: MonthlyData[] = [];
@@ -142,7 +158,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `✅ Retrieved search volume data for ${uniqueKeywords.length} keywords (demo data)`,
+      message: `✅ Retrieved search volume data for ${uniqueKeywords.length} keywords using real impression share data`,
       data: {
         monthlyData: combinedMonthlyData,
         summary: {
@@ -156,7 +172,8 @@ export async function GET(request: NextRequest) {
           days: parseInt(dateRange),
           monthsAnalyzed: combinedMonthlyData.length
         },
-        keywordSearchVolumes // Individual keyword search volumes for drill-down
+        keywordSearchVolumes, // Individual keyword search volumes for drill-down
+        calculationMethod: "search_impression_share" // Indicate the calculation method
       }
     });
 
