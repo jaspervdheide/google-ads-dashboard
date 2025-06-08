@@ -237,6 +237,9 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState<'active' | 'all'>('active');
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
   const [bulkActionOpen, setBulkActionOpen] = useState<boolean>(false);
+  
+  // Campaign pre-filters state
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
 
   // Campaign drill-down state
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
@@ -1211,6 +1214,78 @@ console.log("🌐 Making fresh API call for campaigns");
     return value;
   };
 
+  // Helper function to get current High Spend threshold
+  const getHighSpendThreshold = () => {
+    if (!campaignData || campaignData.campaigns.length === 0) return 0;
+    
+    const campaigns = campaignData.campaigns;
+    const campaignsWithSpend = campaigns.filter(c => c.cost > 0);
+    
+    // If no campaigns have spend, return 0
+    if (campaignsWithSpend.length === 0) return 0;
+    
+    const totalSpend = campaignsWithSpend.reduce((sum, c) => sum + c.cost, 0);
+    const averageSpend = totalSpend / campaignsWithSpend.length;
+    const threshold = averageSpend * 2;
+    
+    // Set a minimum threshold of €10 to avoid very low thresholds
+    return Math.max(threshold, 10);
+  };
+
+  // Campaign filter handlers
+  const toggleFilter = (filterType: string) => {
+    setActiveFilters(prev => {
+      const newFilters = new Set(prev);
+      if (newFilters.has(filterType)) {
+        newFilters.delete(filterType);
+      } else {
+        newFilters.add(filterType);
+      }
+      return newFilters;
+    });
+  };
+
+  const applyPreFilters = (campaigns: Campaign[]) => {
+    let filtered = [...campaigns];
+    
+    if (activeFilters.has('high_spend')) {
+      // Calculate average spend from campaigns with actual spend
+      const campaignsWithSpend = campaigns.filter(c => c.cost > 0);
+      
+      if (campaignsWithSpend.length === 0) {
+        console.log(`📊 High Spend filter - No campaigns with spend found`);
+        filtered = []; // No campaigns to show if none have spend
+      } else {
+        const totalSpend = campaignsWithSpend.reduce((sum, c) => sum + c.cost, 0);
+        const averageSpend = totalSpend / campaignsWithSpend.length;
+        const highSpendThreshold = Math.max(averageSpend * 2, 10); // Double the average, minimum €10
+        
+        console.log(`📊 High Spend filter - Average: €${averageSpend.toFixed(2)}, Threshold (2x avg, min €10): €${highSpendThreshold.toFixed(2)}`);
+        
+        // High spend: campaigns that spend double the average
+        const beforeCount = filtered.length;
+        filtered = filtered.filter(c => c.cost > highSpendThreshold);
+        console.log(`📊 High Spend filter result: ${beforeCount} -> ${filtered.length} campaigns (${filtered.length > 0 ? filtered.map(c => `${c.name}: €${c.cost.toFixed(2)}`).join(', ') : 'none'})`);
+      }
+    }
+    
+    if (activeFilters.has('low_ctr')) {
+      // Low CTR: campaigns with CTR < 2%
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(c => c.ctr < 2.0);
+      console.log(`📊 Low CTR filter result: ${beforeCount} -> ${filtered.length} campaigns`);
+    }
+    
+    if (activeFilters.has('high_cpa')) {
+      // High CPA: campaigns with CPA > €20 (only for campaigns with conversions)
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(c => c.conversions > 0 && c.cpa > 20);
+      console.log(`📊 High CPA filter result: ${beforeCount} -> ${filtered.length} campaigns`);
+    }
+    
+    return filtered;
+  };
+
   // Premium table helper function - get filtered and sorted campaigns
   const getFilteredAndSortedCampaigns = () => {
     if (!campaignData) return [];
@@ -1242,6 +1317,13 @@ console.log("🌐 Making fresh API call for campaigns");
     }
     
     console.log(`📊 After status filter (${statusFilter}): ${campaigns.length} campaigns`);
+    
+    // Apply pre-filters
+    if (activeFilters.size > 0) {
+      const beforeCount = campaigns.length;
+      campaigns = applyPreFilters(campaigns);
+      console.log(`📊 Pre-filters applied (${Array.from(activeFilters).join(', ')}): ${beforeCount} -> ${campaigns.length} campaigns`);
+    }
     
     // Search filter
     if (campaignSearch.trim()) {
@@ -2215,18 +2297,48 @@ console.log("🌐 Making fresh API call for campaigns");
                   
                   {/* Quick Filter Chips */}
                   <div className="flex items-center space-x-2">
-                    <button className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors">
+                    <button 
+                      onClick={() => toggleFilter('high_spend')}
+                      className={`inline-flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                        activeFilters.has('high_spend') 
+                          ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                      title={`Shows campaigns spending more than €${getHighSpendThreshold().toFixed(2)} (2x the average spend of campaigns with actual spend)`}
+                    >
                       <Zap className="h-3 w-3 mr-1" />
                       High Spend
                     </button>
-                    <button className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors">
+                    <button 
+                      onClick={() => toggleFilter('low_ctr')}
+                      className={`inline-flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                        activeFilters.has('low_ctr') 
+                          ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
                       <Target className="h-3 w-3 mr-1" />
                       Low CTR
                     </button>
-                    <button className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors">
+                    <button 
+                      onClick={() => toggleFilter('high_cpa')}
+                      className={`inline-flex items-center px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                        activeFilters.has('high_cpa') 
+                          ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
                       <AlertTriangle className="h-3 w-3 mr-1" />
-                      No Conversions
+                      High CPA
                     </button>
+                    {activeFilters.size > 0 && (
+                      <button
+                        onClick={() => setActiveFilters(new Set())}
+                        className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 transition-colors"
+                      >
+                        Clear Filters
+                      </button>
+                    )}
                   </div>
                 </div>
                 
@@ -3175,7 +3287,7 @@ console.log("🌐 Making fresh API call for campaigns");
                 </button>
                 <button className="inline-flex items-center px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition-colors">
                   <AlertTriangle className="h-3 w-3 mr-1" />
-                  No Conversions
+                  High CPA
                 </button>
               </div>
             </div>
