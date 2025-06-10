@@ -5,7 +5,7 @@ export function saveToCache(key, data) {
   try {
     const cacheEntry = { data: data, timestamp: Date.now() };
     localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(cacheEntry));
-    console.log(`�� Cached data for key: ${key}`);
+    console.log(`💾 Cached data for key: ${key}`);
   } catch (error) {
     console.error("Failed to save to cache:", error);
   }
@@ -55,4 +55,4 @@ export function isExpired(key, maxAgeMinutes) {
     console.error("Failed to check cache expiry:", error);
     return true;
   }
-}
+} 

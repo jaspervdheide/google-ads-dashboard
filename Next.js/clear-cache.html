@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Cache</title>
+</head>
+<body>
+    <h1>Clear Google Ads Dashboard Cache</h1>
+    <button onclick="clearAllCache()">Clear All Cache</button>
+    <button onclick="showCacheSize()">Show Cache Size</button>
+    <div id="output"></div>
+
+    <script>
+        function clearAllCache() {
+            try {
+                const keys = Object.keys(localStorage);
+                let removedCount = 0;
+                keys.forEach(key => {
+                    if (key.startsWith('kovvar_cache_')) {
+                        localStorage.removeItem(key);
+                        removedCount++;
+                    }
+                });
+                document.getElementById('output').innerHTML = `<p>Removed ${removedCount} cache entries</p>`;
+            } catch (error) {
+                document.getElementById('output').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+
+        function showCacheSize() {
+            try {
+                const keys = Object.keys(localStorage);
+                let totalSize = 0;
+                let cacheEntries = 0;
+                
+                keys.forEach(key => {
+                    if (key.startsWith('kovvar_cache_')) {
+                        const item = localStorage.getItem(key);
+                        totalSize += new Blob([item]).size;
+                        cacheEntries++;
+                    }
+                });
+                
+                const sizeInMB = totalSize / (1024 * 1024);
+                document.getElementById('output').innerHTML = `
+                    <p>Cache entries: ${cacheEntries}</p>
+                    <p>Total size: ${sizeInMB.toFixed(2)} MB</p>
+                `;
+            } catch (error) {
+                document.getElementById('output').innerHTML = `<p>Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html> 
