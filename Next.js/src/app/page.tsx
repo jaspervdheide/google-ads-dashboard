@@ -2021,7 +2021,7 @@ console.log("🌐 Making fresh API call for campaigns");
             </div>
 
             {/* Enhanced Chart */}
-            <div className="h-80">
+            <div className="h-96">
               <ResponsiveContainer width="100%" height="100%">
                 {(() => {
                   // Cache chart data calculation to avoid multiple expensive calls
@@ -4417,7 +4417,7 @@ console.log("🌐 Making fresh API call for campaigns");
                 {/* Match Type Distribution */}
                 <div className="bg-white rounded-lg shadow p-6">
                   <h4 className="text-lg font-semibold text-gray-900 mb-4">Match Type Distribution</h4>
-                  <ResponsiveContainer width="100%" height={250}>
+                  <ResponsiveContainer width="100%" height={320}>
                     <PieChart>
                       <Pie
                         data={getMatchTypeDistributionData()}
@@ -4442,7 +4442,7 @@ console.log("🌐 Making fresh API call for campaigns");
                 {/* Conversions per Match Type */}
                 <div className="bg-white rounded-lg shadow p-6">
                   <h4 className="text-lg font-semibold text-gray-900 mb-4">Conversions per Match Type</h4>
-                  <ResponsiveContainer width="100%" height={250}>
+                  <ResponsiveContainer width="100%" height={320}>
                     <PieChart>
                       <Pie
                         data={getConversionsPerMatchTypeData()}
@@ -4467,7 +4467,7 @@ console.log("🌐 Making fresh API call for campaigns");
                 {/* CPA per Match Type */}
                 <div className="bg-white rounded-lg shadow p-6">
                   <h4 className="text-lg font-semibold text-gray-900 mb-4">CPA per Match Type</h4>
-                  <ResponsiveContainer width="100%" height={250}>
+                  <ResponsiveContainer width="100%" height={320}>
                     <PieChart>
                       <Pie
                         data={getCPAPerMatchTypeData()}
