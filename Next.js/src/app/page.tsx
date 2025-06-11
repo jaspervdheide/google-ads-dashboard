@@ -246,6 +246,9 @@ export default function Dashboard() {
   const [adGroupData, setAdGroupData] = useState<{[campaignId: string]: AdGroupData}>({});
   const [adGroupLoading, setAdGroupLoading] = useState<{[campaignId: string]: boolean}>({});
 
+  // Campaign Performance view mode
+  const [campaignViewMode, setCampaignViewMode] = useState<'table' | 'charts'>('table');
+
   // Pagination state
   const [tablePage, setTablePage] = useState<number>(1);
   const [itemsPerPage] = useState<number>(10);
@@ -1469,6 +1472,112 @@ console.log("🌐 Making fresh API call for campaigns");
     }
   };
 
+  // Campaign Performance Chart Data Functions
+  const getCampaignCostDistributionData = () => {
+    if (!campaignData) return [];
+    
+    const ranges = [
+      { name: '€0-€50', min: 0, max: 50 },
+      { name: '€50-€200', min: 50, max: 200 },
+      { name: '€200-€500', min: 200, max: 500 },
+      { name: '€500-€1000', min: 500, max: 1000 },
+      { name: '€1000+', min: 1000, max: Infinity }
+    ];
+
+    const filteredCampaigns = getFilteredAndSortedCampaigns();
+    
+    return ranges.map(range => ({
+      name: range.name,
+      count: filteredCampaigns.filter(campaign => campaign.cost >= range.min && campaign.cost < range.max).length,
+      totalCost: filteredCampaigns
+        .filter(campaign => campaign.cost >= range.min && campaign.cost < range.max)
+        .reduce((sum, campaign) => sum + campaign.cost, 0)
+    }));
+  };
+
+  const getCampaignStatusDistributionData = () => {
+    if (!campaignData) return [];
+    
+    const filteredCampaigns = getFilteredAndSortedCampaigns();
+    const statusCounts = {
+      ENABLED: 0,
+      PAUSED: 0,
+      REMOVED: 0
+    };
+
+    filteredCampaigns.forEach(campaign => {
+      if (campaign.status in statusCounts) {
+        statusCounts[campaign.status as keyof typeof statusCounts]++;
+      }
+    });
+
+    return Object.entries(statusCounts).map(([status, count]) => ({
+      name: status,
+      value: count,
+      percentage: filteredCampaigns.length > 0 ? ((count / filteredCampaigns.length) * 100) : 0
+    }));
+  };
+
+  const getTopSpendingCampaignsData = () => {
+    if (!campaignData) return [];
+    
+    const filteredCampaigns = getFilteredAndSortedCampaigns();
+    
+    return filteredCampaigns
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 15)
+      .map(campaign => ({
+        name: campaign.name.length > 20 ? campaign.name.substring(0, 20) + '...' : campaign.name,
+        cost: campaign.cost,
+        conversions: campaign.conversions,
+        roas: campaign.roas,
+        cpa: campaign.cpa
+      }));
+  };
+
+  const getCampaignPerformanceQuadrantData = () => {
+    if (!campaignData) return [];
+    
+    const filteredCampaigns = getFilteredAndSortedCampaigns();
+    
+    return filteredCampaigns
+      .filter(campaign => campaign.impressions > 100) // Only campaigns with significant data
+      .slice(0, 50) // Limit for performance
+      .map(campaign => ({
+        name: campaign.name,
+        roas: campaign.roas,
+        cost: campaign.cost,
+        conversions: campaign.conversions,
+        ctr: campaign.ctr
+      }));
+  };
+
+  const getHighSpendZeroConversionsCampaignsData = () => {
+    if (!campaignData) return [];
+    
+    const filteredCampaigns = getFilteredAndSortedCampaigns();
+    const threshold = getHighSpendThreshold();
+    
+    return filteredCampaigns
+      .filter(campaign => campaign.cost > threshold && campaign.conversions === 0)
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 50);
+  };
+
+  const getBestPerformingCampaignsData = () => {
+    if (!campaignData) return [];
+    
+    const filteredCampaigns = getFilteredAndSortedCampaigns();
+    
+    return filteredCampaigns
+      .filter(campaign => campaign.conversions > 0 && campaign.roas > 0)
+      .sort((a, b) => b.roas - a.roas)
+      .slice(0, 50);
+  };
+
+  // Colors for charts
+  const CAMPAIGN_CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+
   // Generate mock chart data (for now - later can be replaced with real historical data)
   const generateChartData = (metricId: string, currentValue: number) => {
     if (!selectedDateRange || !historicalData || historicalData.length === 0) {
@@ -2212,35 +2321,64 @@ console.log("🌐 Making fresh API call for campaigns");
                       return `Showing ${filteredCampaigns.length} of ${totalCampaigns} campaigns • Last ${campaignData?.dateRange.days} days • ${statusNote}`;
                     })()}
               </p>
-            </div>
-            
-                {/* Status Filter Toggle */}
-                <div className="flex items-center space-x-4">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-600">Status:</span>
-                    <div className="flex bg-gray-100 rounded-lg p-1">
-                      <button
-                        onClick={() => setStatusFilter('active')}
-                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
-                          statusFilter === 'active'
-                            ? 'bg-white text-gray-900 shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        Active Only
-                      </button>
-                      <button
-                        onClick={() => setStatusFilter('all')}
-                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
-                          statusFilter === 'all'
-                            ? 'bg-white text-gray-900 shadow-sm'
-                            : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                      >
-                        All
-                      </button>
+                        </div>
+              
+                  {/* Status Filter and View Mode Toggles */}
+                  <div className="flex items-center space-x-6">
+                                      <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-600">Status:</span>
+                      <div className="flex bg-gray-100 rounded-lg p-1">
+                        <button
+                          onClick={() => setStatusFilter('active')}
+                          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                            statusFilter === 'active'
+                              ? 'bg-white text-gray-900 shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          Active Only
+                        </button>
+                        <button
+                          onClick={() => setStatusFilter('all')}
+                          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                            statusFilter === 'all'
+                              ? 'bg-white text-gray-900 shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          All
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                    
+                    {/* View Mode Toggle */}
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-600">View:</span>
+                      <div className="flex bg-gray-100 rounded-lg p-1">
+                        <button
+                          onClick={() => setCampaignViewMode('table')}
+                          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 flex items-center space-x-1.5 ${
+                            campaignViewMode === 'table'
+                              ? 'bg-white text-gray-900 shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          <BarChart3 className="w-3.5 h-3.5" />
+                          <span>Table</span>
+                        </button>
+                        <button
+                          onClick={() => setCampaignViewMode('charts')}
+                          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 flex items-center space-x-1.5 ${
+                            campaignViewMode === 'charts'
+                              ? 'bg-white text-gray-900 shadow-sm'
+                              : 'text-gray-600 hover:text-gray-900'
+                          }`}
+                        >
+                          <PieChartIcon className="w-3.5 h-3.5" />
+                          <span>Charts</span>
+                        </button>
+                      </div>
+                    </div>
                   
                   {/* Bulk Actions */}
                   {selectedCampaigns.length > 0 && (
@@ -2380,325 +2518,496 @@ console.log("🌐 Making fresh API call for campaigns");
                   </div>
                 );
               }
-              
-              return (
-                <div className="overflow-x-auto" style={{ height: 'calc(100vh - 280px)' }}>
-                  <table className="w-full">
-                    {/* Sticky Header */}
-                    <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 z-10">
-                      <tr>
-                        {/* Bulk Selection Checkbox */}
-                        <th className="px-4 py-3 text-left">
-                          <input
-                            type="checkbox"
-                            checked={filteredCampaigns.length > 0 && filteredCampaigns.every(c => selectedCampaigns.includes(c.id))}
-                            onChange={() => {
-                              const allSelected = filteredCampaigns.every(c => selectedCampaigns.includes(c.id));
-                              if (allSelected) {
-                                clearAllCampaigns();
-                              } else {
-                                selectAllCampaigns();
-                              }
-                            }}
-                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
-                          />
-                      </th>
-                        
-                        {/* Campaign Name */}
-                        <th 
-                          onClick={() => handleSort('name')}
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center space-x-1">
-                            <span>Campaign</span>
-                            {getSortIcon('name')}
-                          </div>
-                      </th>
-                        
-                        {/* Clicks */}
-                        <th 
-                          onClick={() => handleSort('clicks')}
-                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center justify-end space-x-1">
-                            <span>Clicks</span>
-                            {getSortIcon('clicks')}
-                          </div>
-                      </th>
-                        
-                        {/* Impressions */}
-                        <th 
-                          onClick={() => handleSort('impressions')}
-                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center justify-end space-x-1">
-                            <span>Impressions</span>
-                            {getSortIcon('impressions')}
-                          </div>
-                      </th>
-                        
-                        {/* CTR */}
-                        <th 
-                          onClick={() => handleSort('ctr')}
-                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center justify-end space-x-1">
-                            <span>CTR</span>
-                            {getSortIcon('ctr')}
-                          </div>
-                      </th>
-                        
-                        {/* CPC */}
-                        <th 
-                          onClick={() => handleSort('avgCpc')}
-                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center justify-end space-x-1">
-                            <span>CPC</span>
-                            {getSortIcon('avgCpc')}
-                          </div>
-                      </th>
-                        
-                        {/* Cost */}
-                        <th 
-                          onClick={() => handleSort('cost')}
-                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center justify-end space-x-1">
-                            <span>Cost</span>
-                            {getSortIcon('cost')}
-                          </div>
-                        </th>
-                        
-                        {/* Conversions */}
-                        <th 
-                          onClick={() => handleSort('conversions')}
-                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center justify-end space-x-1">
-                            <span>Conversions</span>
-                            {getSortIcon('conversions')}
-                          </div>
-                        </th>
-                        
-                        {/* Conv. Value */}
-                        <th 
-                          onClick={() => handleSort('conversionsValue')}
-                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center justify-end space-x-1">
-                            <span>Conv. Value</span>
-                            {getSortIcon('conversionsValue')}
-                          </div>
-                        </th>
-                        
-                        {/* CPA */}
-                        <th 
-                          onClick={() => handleSort('cpa')}
-                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center justify-end space-x-1">
-                            <span>CPA</span>
-                            {getSortIcon('cpa')}
-                          </div>
-                        </th>
-                        
-                        {/* ROAS */}
-                        <th 
-                          onClick={() => handleSort('roas')}
-                          className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center justify-end space-x-1">
-                            <span>ROAS</span>
-                            {getSortIcon('roas')}
-                          </div>
-                        </th>
-                        
-                        {/* Actions */}
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
-                          Actions
-                      </th>
-                    </tr>
-                  </thead>
-                    
-                    {/* Campaign Rows */}
-                    <tbody className="divide-y divide-gray-200">
-                      {filteredCampaigns.map((campaign, index) => (
-                        <tr 
-                          key={campaign.id} 
-                          className={`transition-colors ${
-                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                          } hover:bg-blue-50`}
-                        >
+
+              // Table or Charts Content
+              if (campaignViewMode === 'table') {
+                return (
+                  <div className="overflow-x-auto" style={{ height: 'calc(100vh - 280px)' }}>
+                    <table className="w-full">
+                      {/* Sticky Header */}
+                      <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 z-10">
+                        <tr>
                           {/* Bulk Selection Checkbox */}
-                          <td className="px-4 py-4">
+                          <th className="px-4 py-3 text-left">
                             <input
                               type="checkbox"
-                              checked={selectedCampaigns.includes(campaign.id)}
-                              onChange={() => toggleCampaignSelection(campaign.id)}
+                              checked={filteredCampaigns.length > 0 && filteredCampaigns.every(c => selectedCampaigns.includes(c.id))}
+                              onChange={() => {
+                                const allSelected = filteredCampaigns.every(c => selectedCampaigns.includes(c.id));
+                                if (allSelected) {
+                                  clearAllCampaigns();
+                                } else {
+                                  selectAllCampaigns();
+                                }
+                              }}
                               className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                             />
-                          </td>
+                        </th>
                           
-                          {/* Campaign Name with Status */}
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-2">
-                              {getStatusIcon(campaign.status)}
-                              <div>
-                                <button className="text-sm font-medium text-blue-600 hover:text-blue-800 text-left">
-                            {campaign.name}
-                                </button>
-                                <div className="text-xs text-gray-500">
-                                  ID: {campaign.id} • {campaign.status}
-                          </div>
-                              </div>
-                          </div>
-                        </td>
+                          {/* Campaign Name */}
+                          <th 
+                            onClick={() => handleSort('name')}
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center space-x-1">
+                              <span>Campaign</span>
+                              {getSortIcon('name')}
+                            </div>
+                        </th>
                           
                           {/* Clicks */}
-                          <td className="px-6 py-4 text-right">
-                            <div 
-                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'clicks'))}`}
-                              onMouseEnter={(e) => handleMetricHover(e, 'clicks', campaign.clicks, campaign.name, campaign.id)}
-                              onMouseLeave={handleMetricLeave}
-                            >
-                              {formatNumber(campaign.clicks)}
+                          <th 
+                            onClick={() => handleSort('clicks')}
+                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center justify-end space-x-1">
+                              <span>Clicks</span>
+                              {getSortIcon('clicks')}
                             </div>
-                          </td>
+                        </th>
                           
                           {/* Impressions */}
-                          <td className="px-6 py-4 text-right">
-                            <div 
-                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'impressions'))}`}
-                              onMouseEnter={(e) => handleMetricHover(e, 'impressions', campaign.impressions, campaign.name, campaign.id)}
-                              onMouseLeave={handleMetricLeave}
-                            >
-                              {formatLargeNumber(campaign.impressions)}
+                          <th 
+                            onClick={() => handleSort('impressions')}
+                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center justify-end space-x-1">
+                              <span>Impressions</span>
+                              {getSortIcon('impressions')}
                             </div>
-                          </td>
+                        </th>
                           
                           {/* CTR */}
-                          <td className="px-6 py-4 text-right">
-                            <div 
-                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'ctr'))}`}
-                              onMouseEnter={(e) => handleMetricHover(e, 'ctr', campaign.ctr, campaign.name, campaign.id)}
-                              onMouseLeave={handleMetricLeave}
-                            >
-                              {formatPercentage(campaign.ctr)}
+                          <th 
+                            onClick={() => handleSort('ctr')}
+                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center justify-end space-x-1">
+                              <span>CTR</span>
+                              {getSortIcon('ctr')}
                             </div>
-                          </td>
+                        </th>
                           
                           {/* CPC */}
-                          <td className="px-6 py-4 text-right">
-                            <div 
-                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'avgCpc'))}`}
-                              onMouseEnter={(e) => handleMetricHover(e, 'avgCpc', campaign.avgCpc, campaign.name, campaign.id)}
-                              onMouseLeave={handleMetricLeave}
-                            >
-                              {formatCurrency(campaign.avgCpc)}
+                          <th 
+                            onClick={() => handleSort('avgCpc')}
+                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center justify-end space-x-1">
+                              <span>CPC</span>
+                              {getSortIcon('avgCpc')}
                             </div>
-                          </td>
+                        </th>
                           
                           {/* Cost */}
-                          <td className="px-6 py-4 text-right">
-                            <div 
-                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'cost'))}`}
-                              onMouseEnter={(e) => handleMetricHover(e, 'cost', campaign.cost, campaign.name, campaign.id)}
-                              onMouseLeave={handleMetricLeave}
-                            >
-                              {formatCurrency(campaign.cost)}
+                          <th 
+                            onClick={() => handleSort('cost')}
+                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center justify-end space-x-1">
+                              <span>Cost</span>
+                              {getSortIcon('cost')}
                             </div>
-                          </td>
+                          </th>
                           
                           {/* Conversions */}
-                          <td className="px-6 py-4 text-right">
-                            <div 
-                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversions'))}`}
-                              onMouseEnter={(e) => handleMetricHover(e, 'conversions', campaign.conversions, campaign.name, campaign.id)}
-                              onMouseLeave={handleMetricLeave}
-                            >
-                              {formatNumber(campaign.conversions)}
+                          <th 
+                            onClick={() => handleSort('conversions')}
+                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center justify-end space-x-1">
+                              <span>Conversions</span>
+                              {getSortIcon('conversions')}
                             </div>
-                          </td>
+                          </th>
                           
                           {/* Conv. Value */}
-                          <td className="px-6 py-4 text-right">
-                            <div 
-                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversionsValue'))}`}
-                              onMouseEnter={(e) => handleMetricHover(e, 'conversionsValue', campaign.conversionsValue, campaign.name, campaign.id)}
-                              onMouseLeave={handleMetricLeave}
-                            >
-                              {formatCurrency(campaign.conversionsValue)}
+                          <th 
+                            onClick={() => handleSort('conversionsValue')}
+                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center justify-end space-x-1">
+                              <span>Conv. Value</span>
+                              {getSortIcon('conversionsValue')}
                             </div>
-                          </td>
+                          </th>
                           
                           {/* CPA */}
-                          <td className="px-6 py-4 text-right">
-                            <div 
-                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'cpa'))}`}
-                              onMouseEnter={(e) => handleMetricHover(e, 'cpa', campaign.cpa, campaign.name, campaign.id)}
-                              onMouseLeave={handleMetricLeave}
-                            >
-                              {formatCurrency(campaign.cpa)}
+                          <th 
+                            onClick={() => handleSort('cpa')}
+                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center justify-end space-x-1">
+                              <span>CPA</span>
+                              {getSortIcon('cpa')}
                             </div>
-                          </td>
+                          </th>
                           
                           {/* ROAS */}
-                          <td className="px-6 py-4 text-right">
-                            <div 
-                              className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'roas'))}`}
-                              onMouseEnter={(e) => handleMetricHover(e, 'roas', campaign.roas, campaign.name, campaign.id)}
-                              onMouseLeave={handleMetricLeave}
-                            >
-                              {campaign.roas.toFixed(2)}x
+                          <th 
+                            onClick={() => handleSort('roas')}
+                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center justify-end space-x-1">
+                              <span>ROAS</span>
+                              {getSortIcon('roas')}
                             </div>
-                          </td>
+                          </th>
                           
                           {/* Actions */}
-                          <td className="px-6 py-4 text-center">
-                            <div className="relative">
-                              <button className="text-gray-400 hover:text-gray-600 transition-colors">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </button>
-                            </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                    
-                    {/* Totals Footer */}
-                    <tfoot className="bg-gray-100 border-t-2 border-gray-300">
-                      <tr className="font-bold text-gray-900">
-                        <td className="px-4 py-4"></td>
-                        <td className="px-6 py-4 text-sm">
-                          TOTAL
-                          <div className="text-xs font-normal text-gray-500">
-                            {filteredCampaigns.length} campaigns
-                          </div>
-                        </td>
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                            Actions
+                        </th>
+                        </tr>
+                      </thead>
                         
-                        {(() => {
-                          const totals = calculateTableTotals();
-                          return (
-                            <>
-                              <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.clicks)}</td>
-                              <td className="px-6 py-4 text-right text-sm">{formatLargeNumber(totals.impressions)}</td>
-                              <td className="px-6 py-4 text-right text-sm">{formatPercentage(totals.ctr)}</td>
-                              <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.avgCpc)}</td>
-                              <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cost)}</td>
-                              <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.conversions)}</td>
-                              <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.conversionsValue)}</td>
-                              <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cpa)}</td>
-                              <td className="px-6 py-4 text-right text-sm">{totals.roas.toFixed(2)}x</td>
-                              <td className="px-6 py-4"></td>
-                            </>
-                          );
-                        })()}
-                      </tr>
-                    </tfoot>
-                </table>
-              </div>
-              );
+                        {/* Campaign Rows */}
+                        <tbody className="divide-y divide-gray-200">
+                          {filteredCampaigns.map((campaign, index) => (
+                            <tr 
+                              key={campaign.id} 
+                              className={`transition-colors ${
+                                index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                              } hover:bg-blue-50`}
+                            >
+                              {/* Bulk Selection Checkbox */}
+                              <td className="px-4 py-4">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedCampaigns.includes(campaign.id)}
+                                  onChange={() => toggleCampaignSelection(campaign.id)}
+                                  className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                              </td>
+                              
+                              {/* Campaign Name with Status */}
+                              <td className="px-6 py-4">
+                                <div className="flex items-center space-x-2">
+                                  {getStatusIcon(campaign.status)}
+                                  <div>
+                                    <button className="text-sm font-medium text-blue-600 hover:text-blue-800 text-left">
+                                {campaign.name}
+                                    </button>
+                                    <div className="text-xs text-gray-500">
+                                      ID: {campaign.id} • {campaign.status}
+                              </div>
+                                  </div>
+                              </div>
+                            </td>
+                              
+                              {/* Clicks */}
+                              <td className="px-6 py-4 text-right">
+                                <div 
+                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'clicks'))}`}
+                                  onMouseEnter={(e) => handleMetricHover(e, 'clicks', campaign.clicks, campaign.name, campaign.id)}
+                                  onMouseLeave={handleMetricLeave}
+                                >
+                                  {formatNumber(campaign.clicks)}
+                                </div>
+                              </td>
+                              
+                              {/* Impressions */}
+                              <td className="px-6 py-4 text-right">
+                                <div 
+                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'impressions'))}`}
+                                  onMouseEnter={(e) => handleMetricHover(e, 'impressions', campaign.impressions, campaign.name, campaign.id)}
+                                  onMouseLeave={handleMetricLeave}
+                                >
+                                  {formatLargeNumber(campaign.impressions)}
+                                </div>
+                              </td>
+                              
+                              {/* CTR */}
+                              <td className="px-6 py-4 text-right">
+                                <div 
+                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'ctr'))}`}
+                                  onMouseEnter={(e) => handleMetricHover(e, 'ctr', campaign.ctr, campaign.name, campaign.id)}
+                                  onMouseLeave={handleMetricLeave}
+                                >
+                                  {formatPercentage(campaign.ctr)}
+                                </div>
+                              </td>
+                              
+                              {/* CPC */}
+                              <td className="px-6 py-4 text-right">
+                                <div 
+                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'avgCpc'))}`}
+                                  onMouseEnter={(e) => handleMetricHover(e, 'avgCpc', campaign.avgCpc, campaign.name, campaign.id)}
+                                  onMouseLeave={handleMetricLeave}
+                                >
+                                  {formatCurrency(campaign.avgCpc)}
+                                </div>
+                              </td>
+                              
+                              {/* Cost */}
+                              <td className="px-6 py-4 text-right">
+                                <div 
+                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'cost'))}`}
+                                  onMouseEnter={(e) => handleMetricHover(e, 'cost', campaign.cost, campaign.name, campaign.id)}
+                                  onMouseLeave={handleMetricLeave}
+                                >
+                                  {formatCurrency(campaign.cost)}
+                                </div>
+                              </td>
+                              
+                              {/* Conversions */}
+                              <td className="px-6 py-4 text-right">
+                                <div 
+                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversions'))}`}
+                                  onMouseEnter={(e) => handleMetricHover(e, 'conversions', campaign.conversions, campaign.name, campaign.id)}
+                                  onMouseLeave={handleMetricLeave}
+                                >
+                                  {formatNumber(campaign.conversions)}
+                                </div>
+                              </td>
+                              
+                              {/* Conv. Value */}
+                              <td className="px-6 py-4 text-right">
+                                <div 
+                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversionsValue'))}`}
+                                  onMouseEnter={(e) => handleMetricHover(e, 'conversionsValue', campaign.conversionsValue, campaign.name, campaign.id)}
+                                  onMouseLeave={handleMetricLeave}
+                                >
+                                  {formatCurrency(campaign.conversionsValue)}
+                                </div>
+                              </td>
+                              
+                              {/* CPA */}
+                              <td className="px-6 py-4 text-right">
+                                <div 
+                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'cpa'))}`}
+                                  onMouseEnter={(e) => handleMetricHover(e, 'cpa', campaign.cpa, campaign.name, campaign.id)}
+                                  onMouseLeave={handleMetricLeave}
+                                >
+                                  {formatCurrency(campaign.cpa)}
+                                </div>
+                              </td>
+                              
+                              {/* ROAS */}
+                              <td className="px-6 py-4 text-right">
+                                <div 
+                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'roas'))}`}
+                                  onMouseEnter={(e) => handleMetricHover(e, 'roas', campaign.roas, campaign.name, campaign.id)}
+                                  onMouseLeave={handleMetricLeave}
+                                >
+                                  {campaign.roas.toFixed(2)}x
+                                </div>
+                              </td>
+                              
+                              {/* Actions */}
+                              <td className="px-6 py-4 text-center">
+                                <div className="relative">
+                                  <button className="text-gray-400 hover:text-gray-600 transition-colors">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </button>
+                                </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                        
+                        {/* Totals Footer */}
+                        <tfoot className="bg-gray-100 border-t-2 border-gray-300">
+                          <tr className="font-bold text-gray-900">
+                            <td className="px-4 py-4"></td>
+                            <td className="px-6 py-4 text-sm">
+                              TOTAL
+                              <div className="text-xs font-normal text-gray-500">
+                                {filteredCampaigns.length} campaigns
+                              </div>
+                            </td>
+                            
+                            {(() => {
+                              const totals = calculateTableTotals();
+                              return (
+                                <>
+                                  <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.clicks)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatLargeNumber(totals.impressions)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatPercentage(totals.ctr)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.avgCpc)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cost)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.conversions)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.conversionsValue)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cpa)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{totals.roas.toFixed(2)}x</td>
+                                  <td className="px-6 py-4"></td>
+                                </>
+                              );
+                            })()}
+                          </tr>
+                        </tfoot>
+                    </table>
+                  </div>
+                );
+              } else {
+                // Charts View
+                return (
+                  <div className="p-6 space-y-8">
+                    {/* Top 3 Charts Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      {/* Campaign Cost Distribution */}
+                      <div className="bg-white rounded-lg shadow p-6">
+                        <h4 className="text-lg font-semibold text-gray-900 mb-4">Cost Distribution</h4>
+                        <ResponsiveContainer width="100%" height={320}>
+                          <PieChart>
+                            <Pie
+                              data={getCampaignCostDistributionData()}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={100}
+                              dataKey="count"
+                              startAngle={90}
+                              endAngle={450}
+                              label={({ name, count }) => `${name}\n${count} campaigns`}
+                            >
+                              {getCampaignCostDistributionData().map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={CAMPAIGN_CHART_COLORS[index % CAMPAIGN_CHART_COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value, name) => [value, 'Campaigns']} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      {/* Campaign Status Distribution */}
+                      <div className="bg-white rounded-lg shadow p-6">
+                        <h4 className="text-lg font-semibold text-gray-900 mb-4">Status Distribution</h4>
+                        <ResponsiveContainer width="100%" height={320}>
+                          <PieChart>
+                            <Pie
+                              data={getCampaignStatusDistributionData()}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={100}
+                              dataKey="value"
+                              startAngle={90}
+                              endAngle={450}
+                              label={({ name, percentage }) => `${name}\n${percentage.toFixed(1)}%`}
+                            >
+                              {getCampaignStatusDistributionData().map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={CAMPAIGN_CHART_COLORS[index % CAMPAIGN_CHART_COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value, name) => [value, 'Campaigns']} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      {/* Top Spending Campaigns */}
+                      <div className="bg-white rounded-lg shadow p-6">
+                        <h4 className="text-lg font-semibold text-gray-900 mb-4">Top Spending Campaigns</h4>
+                        <ResponsiveContainer width="100%" height={320}>
+                          <BarChart data={getTopSpendingCampaignsData()}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis 
+                              dataKey="name" 
+                              angle={-45}
+                              textAnchor="end"
+                              height={100}
+                              fontSize={10}
+                            />
+                            <YAxis 
+                              tickFormatter={(value) => `€${value.toFixed(0)}`}
+                              fontSize={10}
+                            />
+                            <Tooltip 
+                              formatter={(value, name) => [`€${Number(value).toFixed(2)}`, 'Cost']}
+                              labelFormatter={(label) => `Campaign: ${label}`}
+                            />
+                            <Bar dataKey="cost" fill={CAMPAIGN_CHART_COLORS[0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                    {/* Tables Section */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* High Spend, Zero Conversions Table */}
+                      <div className="bg-white rounded-lg shadow">
+                        <div className="p-6 border-b">
+                          <h4 className="text-lg font-semibold text-gray-900">High Spend, Zero Conversions</h4>
+                          <p className="text-sm text-gray-600">Campaigns with high spend but no conversions</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Campaign</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Cost</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Clicks</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {getHighSpendZeroConversionsCampaignsData().slice(0, 10).map((campaign, index) => (
+                                <tr key={index} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-gray-900 max-w-xs truncate">
+                                    {campaign.name}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-900">
+                                    €{campaign.cost.toFixed(2)}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-900">
+                                    {campaign.clicks}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                      campaign.status === 'ENABLED' ? 'bg-green-100 text-green-800' : 
+                                      campaign.status === 'PAUSED' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                                    }`}>
+                                      {campaign.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Best Performing Campaigns Table */}
+                      <div className="bg-white rounded-lg shadow">
+                        <div className="p-6 border-b">
+                          <h4 className="text-lg font-semibold text-gray-900">Best Performing Campaigns</h4>
+                          <p className="text-sm text-gray-600">Top campaigns by ROAS performance</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Campaign</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">ROAS</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Conversions</th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-700">Cost</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {getBestPerformingCampaignsData().slice(0, 10).map((campaign, index) => (
+                                <tr key={index} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-gray-900 max-w-xs truncate">
+                                    {campaign.name}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-900">
+                                    {campaign.roas.toFixed(2)}x
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-900">
+                                    {campaign.conversions.toFixed(1)}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-900">
+                                    €{campaign.cost.toFixed(2)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
             })()}
           </div>
         </>
