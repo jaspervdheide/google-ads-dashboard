@@ -2840,169 +2840,20 @@ console.log("🌐 Making fresh API call for campaigns");
                   </div>
                 );
               } else {
-                // Charts View
+                // Charts View - Empty Canvas
                 return (
-                  <div className="p-6 space-y-8">
-                    {/* Top 3 Charts Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      {/* Campaign Cost Distribution */}
-                      <div className="bg-white rounded-lg shadow p-6">
-                        <h4 className="text-lg font-semibold text-gray-900 mb-4">Cost Distribution</h4>
-                        <ResponsiveContainer width="100%" height={320}>
-                          <PieChart>
-                            <Pie
-                              data={getCampaignCostDistributionData()}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={60}
-                              outerRadius={100}
-                              dataKey="count"
-                              startAngle={90}
-                              endAngle={450}
-                              label={({ name, count }) => `${name}\n${count} campaigns`}
-                            >
-                              {getCampaignCostDistributionData().map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={CAMPAIGN_CHART_COLORS[index % CAMPAIGN_CHART_COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip formatter={(value, name) => [value, 'Campaigns']} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-
-                      {/* Campaign Status Distribution */}
-                      <div className="bg-white rounded-lg shadow p-6">
-                        <h4 className="text-lg font-semibold text-gray-900 mb-4">Status Distribution</h4>
-                        <ResponsiveContainer width="100%" height={320}>
-                          <PieChart>
-                            <Pie
-                              data={getCampaignStatusDistributionData()}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={60}
-                              outerRadius={100}
-                              dataKey="value"
-                              startAngle={90}
-                              endAngle={450}
-                              label={({ name, percentage }) => `${name}\n${percentage.toFixed(1)}%`}
-                            >
-                              {getCampaignStatusDistributionData().map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={CAMPAIGN_CHART_COLORS[index % CAMPAIGN_CHART_COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip formatter={(value, name) => [value, 'Campaigns']} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-
-                      {/* Top Spending Campaigns */}
-                      <div className="bg-white rounded-lg shadow p-6">
-                        <h4 className="text-lg font-semibold text-gray-900 mb-4">Top Spending Campaigns</h4>
-                        <ResponsiveContainer width="100%" height={320}>
-                          <BarChart data={getTopSpendingCampaignsData()}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis 
-                              dataKey="name" 
-                              angle={-45}
-                              textAnchor="end"
-                              height={100}
-                              fontSize={10}
-                            />
-                            <YAxis 
-                              tickFormatter={(value) => `€${value.toFixed(0)}`}
-                              fontSize={10}
-                            />
-                            <Tooltip 
-                              formatter={(value, name) => [`€${Number(value).toFixed(2)}`, 'Cost']}
-                              labelFormatter={(label) => `Campaign: ${label}`}
-                            />
-                            <Bar dataKey="cost" fill={CAMPAIGN_CHART_COLORS[0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-
-                    {/* Tables Section */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {/* High Spend, Zero Conversions Table */}
-                      <div className="bg-white rounded-lg shadow">
-                        <div className="p-6 border-b">
-                          <h4 className="text-lg font-semibold text-gray-900">High Spend, Zero Conversions</h4>
-                          <p className="text-sm text-gray-600">Campaigns with high spend but no conversions</p>
+                  <div className="p-6">
+                    <div className="flex items-center justify-center min-h-96 bg-white rounded-lg border-2 border-dashed border-gray-300">
+                      <div className="text-center">
+                        <div className="mb-4">
+                          <BarChart3 className="h-16 w-16 mx-auto text-gray-400" />
                         </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-4 py-3 text-left font-medium text-gray-700">Campaign</th>
-                                <th className="px-4 py-3 text-left font-medium text-gray-700">Cost</th>
-                                <th className="px-4 py-3 text-left font-medium text-gray-700">Clicks</th>
-                                <th className="px-4 py-3 text-left font-medium text-gray-700">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                              {getHighSpendZeroConversionsCampaignsData().slice(0, 10).map((campaign, index) => (
-                                <tr key={index} className="hover:bg-gray-50">
-                                  <td className="px-4 py-3 text-gray-900 max-w-xs truncate">
-                                    {campaign.name}
-                                  </td>
-                                  <td className="px-4 py-3 text-gray-900">
-                                    €{campaign.cost.toFixed(2)}
-                                  </td>
-                                  <td className="px-4 py-3 text-gray-900">
-                                    {campaign.clicks}
-                                  </td>
-                                  <td className="px-4 py-3">
-                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                      campaign.status === 'ENABLED' ? 'bg-green-100 text-green-800' : 
-                                      campaign.status === 'PAUSED' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                                    }`}>
-                                      {campaign.status}
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-
-                      {/* Best Performing Campaigns Table */}
-                      <div className="bg-white rounded-lg shadow">
-                        <div className="p-6 border-b">
-                          <h4 className="text-lg font-semibold text-gray-900">Best Performing Campaigns</h4>
-                          <p className="text-sm text-gray-600">Top campaigns by ROAS performance</p>
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-4 py-3 text-left font-medium text-gray-700">Campaign</th>
-                                <th className="px-4 py-3 text-left font-medium text-gray-700">ROAS</th>
-                                <th className="px-4 py-3 text-left font-medium text-gray-700">Conversions</th>
-                                <th className="px-4 py-3 text-left font-medium text-gray-700">Cost</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                              {getBestPerformingCampaignsData().slice(0, 10).map((campaign, index) => (
-                                <tr key={index} className="hover:bg-gray-50">
-                                  <td className="px-4 py-3 text-gray-900 max-w-xs truncate">
-                                    {campaign.name}
-                                  </td>
-                                  <td className="px-4 py-3 text-gray-900">
-                                    {campaign.roas.toFixed(2)}x
-                                  </td>
-                                  <td className="px-4 py-3 text-gray-900">
-                                    {campaign.conversions.toFixed(1)}
-                                  </td>
-                                  <td className="px-4 py-3 text-gray-900">
-                                    €{campaign.cost.toFixed(2)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                          Charts Section Ready
+                        </h3>
+                        <p className="text-gray-500 max-w-sm">
+                          This clean canvas is ready for your new charts and visualizations. Start building your dashboard here!
+                        </p>
                       </div>
                     </div>
                   </div>
