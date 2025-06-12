@@ -238,7 +238,7 @@ export default function Dashboard() {
   // Campaign pre-filters state
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
 
-  // Campaign drill-down state  
+  // Campaign drill-down state
   const [adGroupData, setAdGroupData] = useState<{[campaignId: string]: AdGroupData}>({});
 
   // Campaign Performance view mode
@@ -814,12 +814,12 @@ if (cachedData) {
     } else {
       console.warn('⚠️ Failed to fetch KPI comparison, using fallback');
       // Fallback to small random changes if API fails
-      const percentageChanges: {[key: string]: number} = {};
-      kpiConfig.forEach(kpi => {
+  const percentageChanges: {[key: string]: number} = {};
+  kpiConfig.forEach(kpi => {
         const change = (Math.random() - 0.5) * 10; // Smaller range as fallback
-        percentageChanges[kpi.id] = change;
-      });
-      setKpiPercentageChanges(percentageChanges);
+    percentageChanges[kpi.id] = change;
+  });
+  setKpiPercentageChanges(percentageChanges);
     }
   } catch (error) {
     console.error('❌ Error fetching KPI comparison:', error);
@@ -877,12 +877,12 @@ console.log("🌐 Making fresh API call for campaigns");
           } else {
             console.warn('⚠️ Failed to fetch KPI comparison, using fallback');
             // Fallback to small random changes if API fails
-            const percentageChanges: {[key: string]: number} = {};
-            kpiConfig.forEach(kpi => {
+        const percentageChanges: {[key: string]: number} = {};
+        kpiConfig.forEach(kpi => {
               const change = (Math.random() - 0.5) * 10; // Smaller range as fallback
-              percentageChanges[kpi.id] = change;
-            });
-            setKpiPercentageChanges(percentageChanges);
+          percentageChanges[kpi.id] = change;
+        });
+        setKpiPercentageChanges(percentageChanges);
           }
         } catch (error) {
           console.error('❌ Error fetching KPI comparison:', error);
@@ -1441,10 +1441,10 @@ console.log("🌐 Making fresh API call for campaigns");
 
   const getPerformanceColor = (level: 'high' | 'medium' | 'low'): string => {
     switch (level) {
-      case 'high': return 'bg-green-100 text-green-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'low': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'high': return 'text-green-600';
+      case 'medium': return 'text-yellow-600';
+      case 'low': return 'text-red-600';
+      default: return 'text-gray-600';
     }
   };
 
@@ -1512,7 +1512,17 @@ console.log("🌐 Making fresh API call for campaigns");
 
   // Enhanced Y-axis orientation with intelligent scaling for vastly different metrics
   const getYAxisOrientation = (metricId: string, selectedMetrics: string[], chartData: any[]): 'left' | 'right' => {
-    // Define metric types and their typical scales
+    // If only one metric, always use left axis
+    if (selectedMetrics.length === 1) {
+      return 'left';
+    }
+
+    // For exactly two metrics, always put the second selected metric on the right axis
+    if (selectedMetrics.length === 2) {
+      return selectedMetrics.indexOf(metricId) === 0 ? 'left' : 'right';
+    }
+
+    // For 3+ metrics, use scale-based logic
     const metricScales = {
       // Large count metrics (typically 1000s-10000s)
       'clicks': 'large-count',
@@ -1536,40 +1546,36 @@ console.log("🌐 Making fresh API call for campaigns");
       'roas': 'ratio'
     };
 
-    // If only one metric, use left axis
-    if (selectedMetrics.length === 1) {
-      return 'left';
-    }
+    // Get the scale type for the current metric
+    const currentScale = metricScales[metricId as keyof typeof metricScales] || 'unknown';
 
-    // Calculate actual ranges for intelligent assignment
+    // For 3+ metrics, calculate actual ranges for intelligent assignment
     const metricRanges = selectedMetrics.map(metric => {
       let maxValue = 0;
       chartData.forEach(dataPoint => {
         const value = dataPoint[metric] || 0;
         if (value > maxValue) maxValue = value;
       });
-      return { metric, maxValue, scale: metricScales[metric as keyof typeof metricScales] || 'unknown' };
+      return { metric, maxValue };
     });
 
     // Sort by max value to identify large vs small metrics
     metricRanges.sort((a, b) => b.maxValue - a.maxValue);
     
-    // If there's a significant scale difference (>10x), separate them
     const largestMetric = metricRanges[0];
     const currentMetric = metricRanges.find(m => m.metric === metricId);
     
     if (currentMetric && largestMetric.maxValue > 0) {
-      const scaleDifference = largestMetric.maxValue / currentMetric.maxValue;
+      const scaleDifference = largestMetric.maxValue / (currentMetric.maxValue || 1);
       
-      // If current metric is significantly smaller than the largest, put it on right axis
-      if (scaleDifference >= 10 && currentMetric.metric !== largestMetric.metric) {
+      // Put metrics with significantly different scales on the right axis
+      if (scaleDifference >= 20 && currentMetric.metric !== largestMetric.metric) {
         return 'right';
       }
     }
 
-    // Default assignment based on metric type
-    const rightAxisMetrics = ['ctr', 'avgCpc', 'cost', 'roas', 'cpa', 'poas', 'conversionsValue', 'conversionRate'];
-    return rightAxisMetrics.includes(metricId) ? 'right' : 'left';
+    // Default to left axis
+    return 'left';
   };
 
   // Helper to check if we need dual Y-axis (updated to use new orientation logic)
@@ -1898,23 +1904,19 @@ console.log("🌐 Making fresh API call for campaigns");
           </div>
 
           {/* Dynamic Chart Section */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="bg-white rounded-lg p-6">
             <div className="mb-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-5">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900">Performance Trends</h3>
-                  <p className="text-sm text-gray-600">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">Performance Trends</h3>
+                  <p className="text-sm text-gray-500">
                     {selectedChartMetrics.length === 1 
                       ? `${kpiConfig.find(k => k.id === selectedChartMetrics[0])?.label} over ${selectedDateRange ? formatDateRangeDisplay(selectedDateRange) : 'the selected period'}`
-                      : `Comparing ${selectedChartMetrics.length} metrics over ${selectedDateRange ? formatDateRangeDisplay(selectedDateRange) : 'the selected period'}`
+                      : `${selectedChartMetrics.length} metrics over ${selectedDateRange ? formatDateRangeDisplay(selectedDateRange) : 'the selected period'}`
                     }
-                    {' • '}
-                    <span className="font-medium text-gray-700">
-                      {dateGranularity.charAt(0).toUpperCase() + dateGranularity.slice(1)} view
-                    </span>
                   </p>
                 </div>
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-3">
                   {/* Date Granularity Toggle */}
                   <div className="flex bg-gray-100 rounded-lg p-1">
                     <button
@@ -1922,7 +1924,7 @@ console.log("🌐 Making fresh API call for campaigns");
                         setDateGranularity('daily');
                         setManualGranularityOverride(true);
                       }}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                      className={`px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
                         dateGranularity === 'daily'
                           ? 'bg-white text-gray-900 shadow-sm'
                           : 'text-gray-600 hover:text-gray-900'
@@ -1935,7 +1937,7 @@ console.log("🌐 Making fresh API call for campaigns");
                         setDateGranularity('weekly');
                         setManualGranularityOverride(true);
                       }}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                      className={`px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
                         dateGranularity === 'weekly'
                           ? 'bg-white text-gray-900 shadow-sm'
                           : 'text-gray-600 hover:text-gray-900'
@@ -1948,7 +1950,7 @@ console.log("🌐 Making fresh API call for campaigns");
                         setDateGranularity('monthly');
                         setManualGranularityOverride(true);
                       }}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                      className={`px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
                         dateGranularity === 'monthly'
                           ? 'bg-white text-gray-900 shadow-sm'
                           : 'text-gray-600 hover:text-gray-900'
@@ -1962,7 +1964,7 @@ console.log("🌐 Making fresh API call for campaigns");
                   <div className="flex bg-gray-100 rounded-lg p-1">
                     <button
                       onClick={() => setChartType('line')}
-                      className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                      className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
                         chartType === 'line'
                           ? 'bg-white text-gray-900 shadow-sm'
                           : 'text-gray-600 hover:text-gray-900'
@@ -1973,7 +1975,7 @@ console.log("🌐 Making fresh API call for campaigns");
                     </button>
                     <button
                       onClick={() => setChartType('bar')}
-                      className={`flex items-center space-x-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 ${
+                      className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
                         chartType === 'bar'
                           ? 'bg-white text-gray-900 shadow-sm'
                           : 'text-gray-600 hover:text-gray-900'
@@ -1998,19 +2000,18 @@ console.log("🌐 Making fresh API call for campaigns");
                       key={kpi.id}
                       onClick={() => toggleKpiSelection(kpi.id)}
                       disabled={isSelected && !canDeselect}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 ${
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center space-x-2 border ${
                         isSelected
-                          ? 'bg-blue-500 text-white shadow-lg'
+                          ? 'bg-teal-50 text-teal-700 border-teal-200 shadow-sm'
                           : canSelect 
-                            ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                            : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                            ? 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
+                            : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
                       }`}
                     >
                       <span>{kpi.label}</span>
                       {isSelected && (
                         <div 
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: getKpiChartColor(kpi.id) }}
+                          className="w-2 h-2 rounded-full bg-teal-600"
                         />
                       )}
                     </button>
@@ -2019,16 +2020,16 @@ console.log("🌐 Making fresh API call for campaigns");
               </div>
               
               {selectedChartMetrics.length >= 4 && (
-                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <p className="text-amber-700 text-sm">
-                    💡 Maximum 4 KPIs selected. Deselect a metric to add others.
+                <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                  <p className="text-gray-600 text-sm">
+                    Maximum 4 KPIs selected. Deselect a metric to add others.
                   </p>
                 </div>
               )}
             </div>
 
             {/* Enhanced Chart */}
-            <div className="h-96 p-4">
+            <div className="h-[480px] bg-gray-50/30 rounded-lg px-2 py-6">
               <ResponsiveContainer width="100%" height="100%">
                 {(() => {
                   // Cache chart data calculation to avoid multiple expensive calls
@@ -2037,37 +2038,51 @@ console.log("🌐 Making fresh API call for campaigns");
                   return chartType === 'line' ? (
                 <LineChart
                       data={chartData}
-                      margin={{ top: 20, right: needsDualYAxis(selectedChartMetrics, chartData) ? 60 : 40, left: 40, bottom: 20 }}
+                      margin={{ top: 20, right: needsDualYAxis(selectedChartMetrics, chartData) ? 50 : 25, left: 35, bottom: 25 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeWidth={0.75} vertical={false} />
                   <XAxis 
                     dataKey="dateFormatted" 
-                    stroke="#9ca3af"
-                    fontSize={12}
-                    tickLine={false}
+                    stroke="#475569"
+                    fontSize={11}
+                    tickLine={true}
+                    tickSize={6}
+                    axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+                    dy={12}
+                    tick={{ fill: '#475569' }}
+                    tickMargin={8}
                   />
-                      
-                      {/* Primary Y-Axis (Left) */}
                   <YAxis 
                         yAxisId="left"
-                    stroke="#9ca3af"
-                    fontSize={12}
-                    tickLine={false}
+                    stroke="#475569"
+                    fontSize={11}
+                    tickLine={true}
+                    tickSize={6}
+                    axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+                    dx={-10}
+                    width={48}
+                    tick={{ fill: '#475569' }}
+                    tickMargin={8}
                         domain={getLeftAxisDomain(selectedChartMetrics, chartData)}
                     tickFormatter={(value) => {
                           const leftMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'left');
                           return leftMetrics.length > 0 ? formatLeftYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
                         }}
                       />
-                      
                       {/* Secondary Y-Axis (Right) - Only if needed */}
                       {needsDualYAxis(selectedChartMetrics, chartData) && (
                         <YAxis 
                           yAxisId="right"
                           orientation="right"
-                          stroke="#9ca3af"
-                          fontSize={12}
-                          tickLine={false}
+                      stroke="#475569"
+                      fontSize={11}
+                      tickLine={true}
+                      tickSize={6}
+                      axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+                      dx={10}
+                      width={48}
+                      tick={{ fill: '#475569' }}
+                      tickMargin={8}
                           domain={getRightAxisDomain(selectedChartMetrics, chartData)}
                           tickFormatter={(value) => {
                             const rightMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'right');
@@ -2075,13 +2090,13 @@ console.log("🌐 Making fresh API call for campaigns");
                           }}
                         />
                       )}
-                      
                   <Tooltip 
                     contentStyle={{
                       backgroundColor: 'white',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '6px',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                      fontSize: '12px'
                     }}
                         formatter={(value: any, name: string) => {
                           const kpi = kpiConfig.find(k => k.id === name);
@@ -2089,7 +2104,6 @@ console.log("🌐 Making fresh API call for campaigns");
                         }}
                     labelFormatter={(label) => label}
                   />
-                      
                       {/* Legend - Removed since KPI selection buttons already show numbered colors */}
                       {/* {selectedChartMetrics.length > 1 && (
                         <Legend 
@@ -2097,7 +2111,6 @@ console.log("🌐 Making fresh API call for campaigns");
                           formatter={(value) => kpiConfig.find(k => k.id === value)?.label || value}
                         />
                       )} */}
-                      
                       {/* Multiple Lines */}
                       {selectedChartMetrics.map((metricId) => (
                   <Line
@@ -2106,50 +2119,71 @@ console.log("🌐 Making fresh API call for campaigns");
                     type="monotone"
                           dataKey={metricId}
                           stroke={getKpiChartColor(metricId)}
-                    strokeWidth={3}
+                    strokeWidth={2}
                     dot={{ 
                             fill: getKpiChartColor(metricId),
-                      strokeWidth: 2, 
-                      r: 4 
+                      strokeWidth: 0, 
+                      r: 3
                     }}
-                    activeDot={{ r: 6, stroke: 'white', strokeWidth: 2 }}
+                    activeDot={{ 
+                      r: 5, 
+                      stroke: 'white', 
+                      strokeWidth: 2, 
+                      fill: getKpiChartColor(metricId)
+                    }}
                   />
                       ))}
                 </LineChart>
                   ) : (
                     <BarChart
                       data={chartData}
-                      margin={{ top: 20, right: needsDualYAxis(selectedChartMetrics, chartData) ? 60 : 40, left: 40, bottom: 20 }}
+                      margin={{ top: 20, right: needsDualYAxis(selectedChartMetrics, chartData) ? 50 : 25, left: 35, bottom: 25 }}
+                      barCategoryGap="30%"
+                      barGap={4}
                     >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeWidth={0.75} vertical={false} />
                       <XAxis 
                         dataKey="dateFormatted" 
-                        stroke="#9ca3af"
-                        fontSize={12}
-                        tickLine={false}
+                        stroke="#475569"
+                        fontSize={11}
+                        tickLine={true}
+                        tickSize={6}
+                        axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+                        dy={12}
+                        tick={{ fill: '#475569' }}
+                        tickMargin={8}
                       />
-                      
-                      {/* Primary Y-Axis (Left) */}
                       <YAxis 
                         yAxisId="left"
-                        stroke="#9ca3af"
-                        fontSize={12}
-                        tickLine={false}
+                        stroke="#475569"
+                        fontSize={11}
+                        tickLine={true}
+                        tickSize={6}
+                        axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+                        dx={-10}
+                        width={48}
+                        tick={{ fill: '#475569' }}
+                        tickMargin={8}
                         domain={getLeftAxisDomain(selectedChartMetrics, chartData)}
                         tickFormatter={(value) => {
                           const leftMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'left');
                           return leftMetrics.length > 0 ? formatLeftYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
                         }}
                       />
-                      
                       {/* Secondary Y-Axis (Right) - Only if needed */}
                       {needsDualYAxis(selectedChartMetrics, chartData) && (
                         <YAxis 
                           yAxisId="right"
                           orientation="right"
-                          stroke="#9ca3af"
-                          fontSize={12}
-                          tickLine={false}
+                          stroke="#475569"
+                          fontSize={11}
+                          tickLine={true}
+                          tickSize={6}
+                          axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+                          dx={10}
+                          width={48}
+                          tick={{ fill: '#475569' }}
+                          tickMargin={8}
                           domain={getRightAxisDomain(selectedChartMetrics, chartData)}
                           tickFormatter={(value) => {
                             const rightMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'right');
@@ -2157,13 +2191,13 @@ console.log("🌐 Making fresh API call for campaigns");
                           }}
                         />
                       )}
-                      
                       <Tooltip 
                         contentStyle={{
                           backgroundColor: 'white',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '6px',
+                          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                          fontSize: '12px'
                         }}
                         formatter={(value: any, name: string) => {
                           const kpi = kpiConfig.find(k => k.id === name);
@@ -2171,23 +2205,17 @@ console.log("🌐 Making fresh API call for campaigns");
                         }}
                         labelFormatter={(label) => label}
                       />
-                      
-                      {/* Legend - Removed since KPI selection buttons already show numbered colors */}
-                      {/* {selectedChartMetrics.length > 1 && (
-                        <Legend 
-                          wrapperStyle={{ paddingTop: '20px' }}
-                          formatter={(value) => kpiConfig.find(k => k.id === value)?.label || value}
-                        />
-                      )} */}
-                      
-                      {/* Multiple Bars */}
-                      {selectedChartMetrics.map((metricId) => (
+                      {/* Multiple Bars with minimal styling */}
+                      {selectedChartMetrics.map((metricId, index) => (
                         <Bar
                           key={metricId}
                           yAxisId={needsDualYAxis(selectedChartMetrics, chartData) ? getYAxisOrientation(metricId, selectedChartMetrics, chartData) : 'left'}
                           dataKey={metricId}
                           fill={getKpiChartColor(metricId)}
+                          fillOpacity={0.85}
                           name={metricId}
+                          radius={[3, 3, 0, 0]}
+                          maxBarSize={selectedChartMetrics.length === 1 ? 32 : 24}
                         />
                       ))}
                     </BarChart>
@@ -2398,7 +2426,7 @@ console.log("🌐 Making fresh API call for campaigns");
               </div>
             </div>
             
-            {(() => {
+                          {(() => {
               const filteredCampaigns = getFilteredAndSortedCampaigns();
               
               if (filteredCampaigns.length === 0) {
@@ -2423,10 +2451,10 @@ console.log("🌐 Making fresh API call for campaigns");
                   <div className="overflow-x-auto" style={{ height: 'calc(100vh - 280px)' }}>
                     <table className="w-full">
                       {/* Sticky Header */}
-                      <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 z-10">
+                      <thead className="sticky top-0 bg-white border-b border-gray-100 z-10">
                         <tr>
                           {/* Bulk Selection Checkbox */}
-                          <th className="px-4 py-3 text-left">
+                          <th className="px-4 py-4 text-left">
                             <input
                               type="checkbox"
                               checked={filteredCampaigns.length > 0 && filteredCampaigns.every(c => selectedCampaigns.includes(c.id))}
@@ -2445,20 +2473,20 @@ console.log("🌐 Making fresh API call for campaigns");
                           {/* Campaign Name */}
                           <th 
                             onClick={() => handleSort('name')}
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            className="px-6 py-4 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center space-x-1">
+                            <div className="flex items-center space-x-1.5">
                               <span>Campaign</span>
                               {getSortIcon('name')}
                             </div>
-                        </th>
+                          </th>
                           
                           {/* Clicks */}
                           <th 
                             onClick={() => handleSort('clicks')}
-                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center justify-end space-x-1">
+                            <div className="flex items-center justify-end space-x-1.5">
                               <span>Clicks</span>
                               {getSortIcon('clicks')}
                             </div>
@@ -2467,9 +2495,9 @@ console.log("🌐 Making fresh API call for campaigns");
                           {/* Impressions */}
                           <th 
                             onClick={() => handleSort('impressions')}
-                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center justify-end space-x-1">
+                            <div className="flex items-center justify-end space-x-1.5">
                               <span>Impressions</span>
                               {getSortIcon('impressions')}
                             </div>
@@ -2478,9 +2506,9 @@ console.log("🌐 Making fresh API call for campaigns");
                           {/* CTR */}
                           <th 
                             onClick={() => handleSort('ctr')}
-                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center justify-end space-x-1">
+                            <div className="flex items-center justify-end space-x-1.5">
                               <span>CTR</span>
                               {getSortIcon('ctr')}
                             </div>
@@ -2489,10 +2517,10 @@ console.log("🌐 Making fresh API call for campaigns");
                           {/* CPC */}
                           <th 
                             onClick={() => handleSort('avgCpc')}
-                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center justify-end space-x-1">
-                              <span>CPC</span>
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <span>Avg. CPC</span>
                               {getSortIcon('avgCpc')}
                             </div>
                         </th>
@@ -2500,9 +2528,9 @@ console.log("🌐 Making fresh API call for campaigns");
                           {/* Cost */}
                           <th 
                             onClick={() => handleSort('cost')}
-                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center justify-end space-x-1">
+                            <div className="flex items-center justify-end space-x-1.5">
                               <span>Cost</span>
                               {getSortIcon('cost')}
                             </div>
@@ -2511,10 +2539,10 @@ console.log("🌐 Making fresh API call for campaigns");
                           {/* Conversions */}
                           <th 
                             onClick={() => handleSort('conversions')}
-                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center justify-end space-x-1">
-                              <span>Conversions</span>
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <span>Conv.</span>
                               {getSortIcon('conversions')}
                             </div>
                           </th>
@@ -2522,9 +2550,9 @@ console.log("🌐 Making fresh API call for campaigns");
                           {/* Conv. Value */}
                           <th 
                             onClick={() => handleSort('conversionsValue')}
-                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center justify-end space-x-1">
+                            <div className="flex items-center justify-end space-x-1.5">
                               <span>Conv. Value</span>
                               {getSortIcon('conversionsValue')}
                             </div>
@@ -2533,9 +2561,9 @@ console.log("🌐 Making fresh API call for campaigns");
                           {/* CPA */}
                           <th 
                             onClick={() => handleSort('cpa')}
-                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
                           >
-                            <div className="flex items-center justify-end space-x-1">
+                            <div className="flex items-center justify-end space-x-1.5">
                               <span>CPA</span>
                               {getSortIcon('cpa')}
                             </div>
@@ -2564,9 +2592,7 @@ console.log("🌐 Making fresh API call for campaigns");
                           {filteredCampaigns.map((campaign, index) => (
                             <tr 
                               key={campaign.id} 
-                              className={`transition-colors ${
-                                index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                              } hover:bg-blue-50`}
+                              className="transition-colors border-b border-gray-50 hover:bg-opacity-50 hover:bg-gray-50"
                             >
                               {/* Bulk Selection Checkbox */}
                               <td className="px-4 py-4">
@@ -2579,24 +2605,24 @@ console.log("🌐 Making fresh API call for campaigns");
                               </td>
                               
                               {/* Campaign Name with Status */}
-                              <td className="px-6 py-4">
+                              <td className="px-6 py-5">
                                 <div className="flex items-center space-x-2">
                                   {getStatusIcon(campaign.status)}
                                   <div>
-                                    <button className="text-sm font-medium text-blue-600 hover:text-blue-800 text-left">
-                                {campaign.name}
+                                    <button className="text-sm text-gray-900 hover:text-blue-600 transition-colors text-left">
+                                      {campaign.name}
                                     </button>
-                                    <div className="text-xs text-gray-500">
+                                    <div className="text-xs text-gray-500 mt-0.5">
                                       ID: {campaign.id} • {campaign.status}
-                              </div>
+                                    </div>
                                   </div>
-                              </div>
-                            </td>
+                                </div>
+                              </td>
                               
                               {/* Clicks */}
-                              <td className="px-6 py-4 text-right">
+                              <td className="px-6 py-5 text-right">
                                 <div 
-                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'clicks'))}`}
+                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'clicks', campaign.clicks, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
@@ -2605,9 +2631,9 @@ console.log("🌐 Making fresh API call for campaigns");
                               </td>
                               
                               {/* Impressions */}
-                              <td className="px-6 py-4 text-right">
+                              <td className="px-6 py-5 text-right">
                                 <div 
-                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'impressions'))}`}
+                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'impressions', campaign.impressions, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
@@ -2616,9 +2642,9 @@ console.log("🌐 Making fresh API call for campaigns");
                               </td>
                               
                               {/* CTR */}
-                              <td className="px-6 py-4 text-right">
+                              <td className="px-6 py-5 text-right">
                                 <div 
-                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'ctr'))}`}
+                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'ctr', campaign.ctr, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
@@ -2627,9 +2653,9 @@ console.log("🌐 Making fresh API call for campaigns");
                               </td>
                               
                               {/* CPC */}
-                              <td className="px-6 py-4 text-right">
+                              <td className="px-6 py-5 text-right">
                                 <div 
-                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'avgCpc'))}`}
+                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'avgCpc', campaign.avgCpc, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
@@ -2638,9 +2664,9 @@ console.log("🌐 Making fresh API call for campaigns");
                               </td>
                               
                               {/* Cost */}
-                              <td className="px-6 py-4 text-right">
+                              <td className="px-6 py-5 text-right">
                                 <div 
-                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'cost'))}`}
+                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'cost', campaign.cost, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
@@ -2649,9 +2675,9 @@ console.log("🌐 Making fresh API call for campaigns");
                               </td>
                               
                               {/* Conversions */}
-                              <td className="px-6 py-4 text-right">
+                              <td className="px-6 py-5 text-right">
                                 <div 
-                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversions'))}`}
+                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'conversions', campaign.conversions, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
@@ -2660,9 +2686,9 @@ console.log("🌐 Making fresh API call for campaigns");
                               </td>
                               
                               {/* Conv. Value */}
-                              <td className="px-6 py-4 text-right">
+                              <td className="px-6 py-5 text-right">
                                 <div 
-                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversionsValue'))}`}
+                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'conversionsValue', campaign.conversionsValue, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
@@ -2671,9 +2697,9 @@ console.log("🌐 Making fresh API call for campaigns");
                               </td>
                               
                               {/* CPA */}
-                              <td className="px-6 py-4 text-right">
+                              <td className="px-6 py-5 text-right">
                                 <div 
-                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'cpa'))}`}
+                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'cpa', campaign.cpa, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
@@ -2682,9 +2708,9 @@ console.log("🌐 Making fresh API call for campaigns");
                               </td>
                               
                               {/* ROAS */}
-                              <td className="px-6 py-4 text-right">
+                              <td className="px-6 py-5 text-right">
                                 <div 
-                                  className={`text-sm font-medium px-2 py-1 rounded cursor-pointer hover:bg-blue-50 transition-colors ${getPerformanceColor(getPerformanceIndicator(campaign, 'roas'))}`}
+                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'roas', campaign.roas, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
@@ -2705,12 +2731,12 @@ console.log("🌐 Making fresh API call for campaigns");
                       </tbody>
                         
                         {/* Totals Footer */}
-                        <tfoot className="bg-gray-100 border-t-2 border-gray-300">
-                          <tr className="font-bold text-gray-900">
-                            <td className="px-4 py-4"></td>
-                            <td className="px-6 py-4 text-sm">
-                              TOTAL
-                              <div className="text-xs font-normal text-gray-500">
+                        <tfoot className="border-t border-gray-100">
+                          <tr className="text-gray-900">
+                            <td className="px-4 py-5"></td>
+                            <td className="px-6 py-5">
+                              <div className="text-sm font-medium">TOTAL</div>
+                              <div className="text-xs text-gray-500 mt-0.5">
                                 {filteredCampaigns.length} campaigns
                               </div>
                             </td>
@@ -2719,16 +2745,16 @@ console.log("🌐 Making fresh API call for campaigns");
                               const totals = calculateTableTotals();
                               return (
                                 <>
-                                  <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.clicks)}</td>
-                                  <td className="px-6 py-4 text-right text-sm">{formatLargeNumber(totals.impressions)}</td>
-                                  <td className="px-6 py-4 text-right text-sm">{formatPercentage(totals.ctr)}</td>
-                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.avgCpc)}</td>
-                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cost)}</td>
-                                  <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.conversions)}</td>
-                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.conversionsValue)}</td>
-                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cpa)}</td>
-                                  <td className="px-6 py-4 text-right text-sm">{totals.roas.toFixed(2)}x</td>
-                                  <td className="px-6 py-4"></td>
+                                  <td className="px-6 py-5 text-right text-sm">{formatNumber(totals.clicks)}</td>
+                                  <td className="px-6 py-5 text-right text-sm">{formatLargeNumber(totals.impressions)}</td>
+                                  <td className="px-6 py-5 text-right text-sm">{formatPercentage(totals.ctr)}</td>
+                                  <td className="px-6 py-5 text-right text-sm">{formatCurrency(totals.avgCpc)}</td>
+                                  <td className="px-6 py-5 text-right text-sm">{formatCurrency(totals.cost)}</td>
+                                  <td className="px-6 py-5 text-right text-sm">{formatNumber(totals.conversions)}</td>
+                                  <td className="px-6 py-5 text-right text-sm">{formatCurrency(totals.conversionsValue)}</td>
+                                  <td className="px-6 py-5 text-right text-sm">{formatCurrency(totals.cpa)}</td>
+                                  <td className="px-6 py-5 text-right text-sm">{totals.roas.toFixed(2)}x</td>
+                                  <td className="px-6 py-5"></td>
                                 </>
                               );
                             })()}
@@ -4652,15 +4678,15 @@ console.log("🌐 Making fresh API call for campaigns");
       <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 shadow-sm z-50">
         <div className="flex items-center justify-between h-full px-6">
           {/* Left Section - Branding */}
-          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3">
             <div className="flex items-center justify-center w-8 h-8 bg-teal-600 rounded-lg">
               <KovvarIcon className="h-5 w-5 text-white" />
-            </div>
-            <div>
+              </div>
+              <div>
               <h1 className="text-lg font-semibold text-gray-900">Kovvar</h1>
+              </div>
             </div>
-          </div>
-
+            
           {/* Right Section - Controls */}
           <div className="flex items-center space-x-3">
             {/* Account Switcher */}
