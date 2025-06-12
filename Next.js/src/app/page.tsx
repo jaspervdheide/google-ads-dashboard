@@ -810,15 +810,35 @@ if (cachedData) {
   console.log("✅ Returning cached campaigns data");
   setCampaignData(cachedData);
   
-  // Generate percentage changes for cached data too (was missing!)
-  const percentageChanges: {[key: string]: number} = {};
-  kpiConfig.forEach(kpi => {
-    // Generate realistic percentage changes between -15% and +25%
-    const change = (Math.random() - 0.4) * 40; // Slight bias toward positive
-    percentageChanges[kpi.id] = change;
-  });
-  setKpiPercentageChanges(percentageChanges);
-  console.log('📊 Generated percentage changes for cached data:', percentageChanges);
+  // Fetch real percentage changes for cached data too
+  try {
+    const apiDateRange = getApiDateRange(selectedDateRange);
+    const comparisonResponse = await fetch(`/api/kpi-comparison?customerId=${selectedAccount}&dateRange=${apiDateRange.days}`);
+    const comparisonResult = await comparisonResponse.json();
+    
+    if (comparisonResult.success) {
+      setKpiPercentageChanges(comparisonResult.data.changes);
+      console.log('📊 Real percentage changes for cached data:', comparisonResult.data.changes);
+    } else {
+      console.warn('⚠️ Failed to fetch KPI comparison, using fallback');
+      // Fallback to small random changes if API fails
+      const percentageChanges: {[key: string]: number} = {};
+      kpiConfig.forEach(kpi => {
+        const change = (Math.random() - 0.5) * 10; // Smaller range as fallback
+        percentageChanges[kpi.id] = change;
+      });
+      setKpiPercentageChanges(percentageChanges);
+    }
+  } catch (error) {
+    console.error('❌ Error fetching KPI comparison:', error);
+    // Fallback to small random changes if API fails
+    const percentageChanges: {[key: string]: number} = {};
+    kpiConfig.forEach(kpi => {
+      const change = (Math.random() - 0.5) * 10; // Smaller range as fallback
+      percentageChanges[kpi.id] = change;
+    });
+    setKpiPercentageChanges(percentageChanges);
+  }
   
   return;
 }
@@ -850,16 +870,38 @@ console.log("🌐 Making fresh API call for campaigns");
         saveToCache(cacheKey, result.data);
         console.log("💾 Saved campaigns to cache successfully", { cacheKey });
         
-        // Generate static percentage changes for KPIs (simulate historical comparison)
-        const percentageChanges: {[key: string]: number} = {};
-        kpiConfig.forEach(kpi => {
-          // Generate realistic percentage changes between -15% and +25%
-          const change = (Math.random() - 0.4) * 40; // Slight bias toward positive
-          percentageChanges[kpi.id] = change;
-        });
-        setKpiPercentageChanges(percentageChanges);
-        
-        console.log('📊 Generated percentage changes:', percentageChanges);
+        // Fetch real KPI percentage changes from historical comparison
+        try {
+          const comparisonResponse = await fetch(`/api/kpi-comparison?customerId=${selectedAccount}&dateRange=${apiDateRange.days}`);
+          const comparisonResult = await comparisonResponse.json();
+          
+          if (comparisonResult.success) {
+            setKpiPercentageChanges(comparisonResult.data.changes);
+            console.log('📊 Real KPI percentage changes:', comparisonResult.data.changes);
+            console.log('📊 Comparison periods:', {
+              current: comparisonResult.data.currentPeriod,
+              previous: comparisonResult.data.previousPeriod
+            });
+          } else {
+            console.warn('⚠️ Failed to fetch KPI comparison, using fallback');
+            // Fallback to small random changes if API fails
+            const percentageChanges: {[key: string]: number} = {};
+            kpiConfig.forEach(kpi => {
+              const change = (Math.random() - 0.5) * 10; // Smaller range as fallback
+              percentageChanges[kpi.id] = change;
+            });
+            setKpiPercentageChanges(percentageChanges);
+          }
+        } catch (error) {
+          console.error('❌ Error fetching KPI comparison:', error);
+          // Fallback to small random changes if API fails
+          const percentageChanges: {[key: string]: number} = {};
+          kpiConfig.forEach(kpi => {
+            const change = (Math.random() - 0.5) * 10; // Smaller range as fallback
+            percentageChanges[kpi.id] = change;
+          });
+          setKpiPercentageChanges(percentageChanges);
+        }
       } else {
         setError(result.message || 'Failed to fetch campaign data');
       }
@@ -1600,25 +1642,17 @@ console.log("🌐 Making fresh API call for campaigns");
   // Helper function to toggle KPI selection
   const toggleKpiSelection = (kpiId: string) => {
     setSelectedChartMetrics(prev => {
-      console.log('🔄 Toggle KPI:', kpiId, 'Current selection:', prev);
-      
       if (prev.includes(kpiId)) {
         // Remove if already selected (but keep at least one)
         if (prev.length > 1) {
-          const newSelection = prev.filter(id => id !== kpiId);
-          console.log('✅ Deselecting KPI:', kpiId, 'New selection:', newSelection);
-          return newSelection;
+          return prev.filter(id => id !== kpiId);
         }
-        console.log('⚠️ Cannot deselect last KPI:', kpiId);
         return prev;
       } else {
         // Add if not selected (but max 4 KPIs)
         if (prev.length < 4) {
-          const newSelection = [...prev, kpiId];
-          console.log('✅ Selecting KPI:', kpiId, 'New selection:', newSelection);
-          return newSelection;
+          return [...prev, kpiId];
         }
-        console.log('⚠️ Cannot select more than 4 KPIs');
         return prev;
       }
     });
@@ -1914,8 +1948,8 @@ console.log("🌐 Making fresh API call for campaigns");
         <h2 className="text-3xl font-bold text-gray-900 mb-2">Performance Dashboard</h2>
         <p className="text-gray-600">
           {selectedAccountData && selectedDateRange
-            ? `Analytics for ${getDisplayName(selectedAccountData)} • ${formatDateRangeDisplay(selectedDateRange)}`
-            : 'Multi-country PPC campaign management'
+            ? `Analytics for ${getDisplayName(selectedAccountData)} • ${formatDateRangeDisplay(selectedDateRange)} vs Previous Period`
+            : 'Multi-country PPC campaign management with historical comparison'
           }
         </p>
       </div>
