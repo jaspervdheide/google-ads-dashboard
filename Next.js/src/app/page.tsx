@@ -10,8 +10,6 @@ import {
   User,
   TrendingUp,
   ChevronDown,
-  Plus,
-  ChevronRight,
   AlertTriangle,
   AlertCircle,
   Info,
@@ -1716,13 +1714,37 @@ console.log("🌐 Making fresh API call for campaigns");
     <>
       {/* Page Title */}
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Performance Dashboard</h2>
-        <p className="text-gray-600">
-          {selectedAccountData && selectedDateRange
-            ? `Analytics for ${getDisplayName(selectedAccountData)} • ${formatDateRangeDisplay(selectedDateRange)} vs Previous Period`
-            : 'Multi-country PPC campaign management with historical comparison'
-          }
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center space-x-3 mb-1">
+              <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+              <div className="w-2 h-2 bg-teal-600 rounded-full"></div>
+            </div>
+            {selectedAccountData && (
+              <div className="flex items-center space-x-2 text-sm text-gray-500">
+                <span className="font-medium text-gray-700">{getDisplayName(selectedAccountData)}</span>
+                {selectedDateRange && (
+                  <>
+                    <span>•</span>
+                    <span>{formatDateRangeDisplay(selectedDateRange)}</span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* Optional: Status indicator */}
+          {campaignData && (
+            <div className="hidden sm:flex items-center space-x-3 text-sm">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="text-gray-600">Live data</span>
+              </div>
+              <div className="text-gray-400">•</div>
+              <span className="text-gray-600">{campaignData.campaigns.length} campaigns</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Error Message */}
@@ -4626,55 +4648,27 @@ console.log("🌐 Making fresh API call for campaigns");
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
-      {/* Enhanced Header */}
-      <header className="fixed top-0 left-0 right-0 h-18 bg-gradient-to-r from-white to-gray-50 border-b border-gray-200 shadow-sm z-50">
+      {/* Minimal Header */}
+      <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 shadow-sm z-50">
         <div className="flex items-center justify-between h-full px-6">
           {/* Left Section - Branding */}
-          <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center justify-center w-10 h-10 bg-teal-600 rounded-lg">
-                <KovvarIcon className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Kovvar | PPC Performance</h1>
-                <p className="text-sm text-gray-500">Multi-country PPC management</p>
-              </div>
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center justify-center w-8 h-8 bg-teal-600 rounded-lg">
+              <KovvarIcon className="h-5 w-5 text-white" />
             </div>
-            
-            {/* Breadcrumbs */}
-            <div className="hidden lg:flex items-center space-x-2 text-sm text-gray-600">
-              <span>Dashboard</span>
-              <ChevronRight className="h-4 w-4" />
-              <span className="text-gray-900 font-medium">
-                {navigationItems.find(item => item.id === currentPage)?.name || 'Dashboard'}
-              </span>
+            <div>
+              <h1 className="text-lg font-semibold text-gray-900">Kovvar</h1>
             </div>
           </div>
 
-          {/* Center Section - Search & Actions */}
-          <div className="hidden md:flex items-center space-x-4 flex-1 max-w-2xl mx-8">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search campaigns, keywords..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-              <Plus className="h-4 w-4" />
-              <span className="font-medium">Create Campaign</span>
-            </button>
-          </div>
-
-          {/* Right Section - Account & User */}
-          <div className="flex items-center space-x-4">
+          {/* Right Section - Controls */}
+          <div className="flex items-center space-x-3">
             {/* Account Switcher */}
             {selectedAccountData && (
               <div className="relative">
                 <button
                   onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
-                  className="account-button flex items-center space-x-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="account-button flex items-center space-x-2 px-3 py-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border-0"
                 >
                   <div className="text-left">
                     <div className="text-sm font-medium text-gray-900">
@@ -4718,7 +4712,7 @@ console.log("🌐 Making fresh API call for campaigns");
             <div className="relative">
               <button
                 onClick={() => setDateDropdownOpen(!dateDropdownOpen)}
-                className="date-button flex items-center space-x-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="date-button flex items-center space-x-2 px-3 py-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border-0"
               >
                 <div className="text-left">
                   <div className="text-sm font-medium text-gray-900">
@@ -4784,18 +4778,11 @@ console.log("🌐 Making fresh API call for campaigns");
               )}
             </div>
 
-            {/* Performance Summary */}
-            {(campaignData || filteredAccounts.length > 0) && (
-              <div className="hidden xl:block text-sm text-gray-600">
-                <span className="font-medium">Today:</span> {formatNumber(todayMetrics.clicks)} clicks • {formatCurrency(todayMetrics.spend)} spent
-              </div>
-            )}
-
             {/* Notifications */}
             <div className="relative">
               <button 
                 onClick={() => setAnomalyDropdownOpen(!anomalyDropdownOpen)}
-                className="anomaly-button p-2 text-gray-400 hover:text-gray-600 transition-colors relative"
+                className="anomaly-button p-2 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors relative"
               >
                 <Bell className="h-5 w-5" />
                 {anomalyData && anomalyData.summary.total > 0 && (
@@ -4907,21 +4894,14 @@ console.log("🌐 Making fresh API call for campaigns");
               )}
             </div>
 
-            {/* User Avatar */}
-            <button className="flex items-center space-x-2 p-1 hover:bg-gray-100 rounded-lg transition-colors">
-              <div className="h-8 w-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-medium text-sm">
-                JV
-              </div>
-            </button>
-
-            {/* Refresh Button (Icon Only) */}
+            {/* Refresh Button */}
             <button
               onClick={handleRefresh}
               disabled={loading}
-              className={`p-2 rounded-lg border transition-colors ${
+              className={`p-2 rounded-lg transition-colors ${
                 loading
-                  ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:border-gray-400 hover:text-gray-700'
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-700'
               }`}
               title="Refresh all data"
             >
@@ -4931,28 +4911,15 @@ console.log("🌐 Making fresh API call for campaigns");
             </button>
 
             {/* Settings */}
-            <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-              <Settings className="h-5 w-5" />
+            <button className="p-2 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors">
+              <Settings className="h-4 w-4" />
             </button>
           </div>
         </div>
       </header>
 
       {/* Premium Sidebar */}
-      <aside className="fixed left-0 top-18 bottom-0 w-[280px] bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 shadow-xl z-30">
-        {/* Branding Section */}
-        <div className="p-6 border-b border-gray-700/50">
-          <div className="flex items-center space-x-3 mb-2">
-            <div className="flex items-center justify-center w-8 h-8 bg-teal-500/20 rounded-lg backdrop-blur-sm border border-teal-400/30">
-              <KovvarIcon className="h-5 w-5 text-teal-200" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-white">Kovvar</h1>
-            </div>
-          </div>
-          <p className="text-sm text-gray-300 ml-11">Kovvar PPC Intelligence</p>
-        </div>
-
+      <aside className="fixed left-0 top-16 bottom-0 w-[240px] bg-white border-r border-gray-200 shadow-sm z-30">
         {/* Navigation */}
         <nav className="flex-1 p-4">
           <ul className="space-y-1">
@@ -4963,21 +4930,21 @@ console.log("🌐 Making fresh API call for campaigns");
                 <li key={item.id}>
                   <button
                     onClick={() => setCurrentPage(item.id)}
-                    className={`group w-full flex items-center space-x-3 px-6 py-3 text-left transition-all duration-200 rounded-xl font-medium tracking-wide ${
+                    className={`group w-full flex items-center space-x-3 px-4 py-3 text-left transition-all duration-200 rounded-lg font-medium ${
                       isActive
-                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/25 border-l-4 border-blue-300'
-                        : 'text-gray-300 hover:bg-white/10 hover:text-white hover:shadow-lg hover:shadow-white/5'
+                        ? 'bg-teal-50 text-teal-700 border-r-2 border-teal-600'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                     }`}
                   >
                     <IconComponent 
                       className={`h-5 w-5 transition-all duration-200 ${
                         isActive 
-                          ? 'text-white drop-shadow-sm' 
-                          : 'text-gray-400 group-hover:text-white group-hover:scale-105'
+                          ? 'text-teal-600' 
+                          : 'text-gray-400 group-hover:text-gray-600'
                       }`} 
                     />
                     <span className={`transition-all duration-200 ${
-                      isActive ? 'text-white font-semibold' : 'group-hover:text-white'
+                      isActive ? 'font-semibold' : ''
                     }`}>
                       {item.name}
                     </span>
@@ -4989,28 +4956,25 @@ console.log("🌐 Making fresh API call for campaigns");
         </nav>
 
         {/* Bottom User Section */}
-        <div className="p-4 border-t border-gray-700/50">
-          <div className="bg-white/5 rounded-xl p-4 backdrop-blur-sm">
-            <div className="flex items-center space-x-3 mb-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+        <div className="p-4 border-t border-gray-100">
+          <div className="bg-gray-50 rounded-lg p-3">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center">
                 <User className="h-4 w-4 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">Jasper van der Heide</p>
-                <p className="text-xs text-gray-400">
-                  {filteredAccounts.length > 0 ? `${filteredAccounts.length} accounts connected` : '3 accounts connected'}
+                <p className="text-sm font-medium text-gray-900 truncate">Jasper van der Heide</p>
+                <p className="text-xs text-gray-500">
+                  {filteredAccounts.length > 0 ? `${filteredAccounts.length} accounts` : '3 accounts'}
                 </p>
               </div>
-              <button className="text-gray-400 hover:text-white transition-colors duration-200 hover:bg-white/10 p-1.5 rounded-lg">
-                <Settings className="h-4 w-4" />
-              </button>
             </div>
           </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="ml-[280px] pt-18">
+      <main className="ml-[240px] pt-16">
         <div className="p-8">
           {renderPageContent()}
         </div>
