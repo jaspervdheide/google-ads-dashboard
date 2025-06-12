@@ -42,7 +42,8 @@ import {
   Edit,
   Zap,
   PieChart as PieChartIcon,
-  RefreshCw
+  RefreshCw,
+  Percent
   } from 'lucide-react';
 import { clearCache, getFromCache, saveToCache } from "./utils/cache.js";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, PieChart, Pie, Cell, AreaChart, Area, Legend } from 'recharts';
@@ -1121,9 +1122,9 @@ console.log("🌐 Making fresh API call for campaigns");
       gradientTo: 'to-cyan-600'
     },
     {
-      id: 'roas',
-      label: 'ROAS',
-      icon: BarChart3,
+      id: 'conversionRate',
+      label: 'Conversion Rate',
+      icon: Percent,
       color: 'indigo',
       bgColor: 'bg-indigo-500',
       textColor: 'text-indigo-600',
@@ -1182,9 +1183,6 @@ console.log("🌐 Making fresh API call for campaigns");
       case 'ctr':
       case 'conversionRate':
         return formatPercentage(value);
-      case 'roas':
-        // ROAS should be displayed as multiplier (e.g., 2.45x)
-        return value > 0 ? `${value.toFixed(2)}x` : '0.00x';
       case 'poas':
         // POAS as percentage
         return value > 0 ? `${value.toFixed(1)}%` : '0.0%';
@@ -1953,9 +1951,13 @@ console.log("🌐 Making fresh API call for campaigns");
                   {/* Background gradient on hover */}
                   <div className={`absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-300 bg-gradient-to-br ${kpi.gradientFrom} ${kpi.gradientTo}`} />
                   
-                  {/* Icon */}
-                  <div className={`w-10 h-10 ${kpi.bgColor} rounded-lg flex items-center justify-center mb-3`}>
-                    <IconComponent className="h-5 w-5 text-white" />
+                  {/* Enhanced 3D Icon */}
+                  <div className={`w-12 h-12 ${kpi.bgColor} rounded-xl flex items-center justify-center mb-3 shadow-lg transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3`}
+                       style={{
+                         background: `linear-gradient(135deg, ${kpi.gradientFrom.replace('from-', '').replace('-400', '')}-400, ${kpi.gradientTo.replace('to-', '').replace('-600', '')}-600)`,
+                         boxShadow: `0 8px 16px -4px ${kpi.bgColor.replace('bg-', '').replace('-500', '')}-500/40, inset 0 1px 0 rgba(255,255,255,0.2)`
+                       }}>
+                    <IconComponent className="h-6 w-6 text-white drop-shadow-sm" />
                   </div>
                   
                   {/* Value */}
@@ -1968,16 +1970,22 @@ console.log("🌐 Making fresh API call for campaigns");
                     </div>
                   </div>
                   
-                  {/* Percentage change */}
-                  <div className="absolute bottom-4 right-4 flex items-center space-x-1">
-                    {percentageChange >= 0 ? (
-                      <ArrowUp className={`h-3 w-3 ${isPositive ? 'text-green-500' : 'text-red-500'}`} />
-                    ) : (
-                      <ArrowDown className={`h-3 w-3 ${isPositive ? 'text-green-500' : 'text-red-500'}`} />
-                    )}
-                    <span className={`text-xs font-semibold ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
-                      {Math.abs(percentageChange).toFixed(1)}%
-                    </span>
+                  {/* Enhanced Percentage change with box */}
+                  <div className="absolute bottom-4 right-4">
+                    <div className={`flex items-center space-x-1 px-2 py-1 rounded-lg shadow-sm border transition-all duration-300 ${
+                      isPositive 
+                        ? 'bg-green-50 border-green-200 hover:bg-green-100' 
+                        : 'bg-red-50 border-red-200 hover:bg-red-100'
+                    }`}>
+                      {percentageChange >= 0 ? (
+                        <ArrowUp className={`h-3 w-3 ${isPositive ? 'text-green-600' : 'text-red-600'}`} />
+                      ) : (
+                        <ArrowDown className={`h-3 w-3 ${isPositive ? 'text-green-600' : 'text-red-600'}`} />
+                      )}
+                      <span className={`text-xs font-bold ${isPositive ? 'text-green-700' : 'text-red-700'}`}>
+                        {Math.abs(percentageChange).toFixed(1)}%
+                      </span>
+                    </div>
                   </div>
                   
                   {/* Multi-selection indicator */}
