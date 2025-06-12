@@ -5,7 +5,6 @@ import {
   LayoutDashboard, 
   Target, 
   Search, 
-  FileBarChart, 
   Settings, 
   Bell, 
   User,
@@ -35,7 +34,6 @@ import {
   History,
   CalendarDays,
   ArrowUpDown,
-  Filter,
   MoreHorizontal,
   Play,
   Pause,
@@ -46,7 +44,7 @@ import {
   Percent
   } from 'lucide-react';
 import { clearCache, getFromCache, saveToCache } from "./utils/cache.js";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, ScatterChart, Scatter, PieChart, Pie, Cell, AreaChart, Area, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import HoverMetricsChart from '../components/HoverMetricsChart';
 
 // Custom Kovvar Icon Component
@@ -201,7 +199,7 @@ const navigationItems = [
 ];
 
 export default function Dashboard() {
-  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
+  const [, setAllAccounts] = useState<Account[]>([]);
   const [filteredAccounts, setFilteredAccounts] = useState<Account[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [campaignData, setCampaignData] = useState<CampaignData | null>(null);
@@ -228,7 +226,7 @@ export default function Dashboard() {
 
   // Enhanced chart state for multi-KPI comparison
   const [historicalData, setHistoricalData] = useState<any[]>([]);
-  const [historicalDataLoading, setHistoricalDataLoading] = useState(false);
+  const [, setHistoricalDataLoading] = useState(false);
   const [dateGranularity, setDateGranularity] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [manualGranularityOverride, setManualGranularityOverride] = useState<boolean>(false);
 
@@ -242,16 +240,13 @@ export default function Dashboard() {
   // Campaign pre-filters state
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
 
-  // Campaign drill-down state
-  const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
+  // Campaign drill-down state  
   const [adGroupData, setAdGroupData] = useState<{[campaignId: string]: AdGroupData}>({});
-  const [adGroupLoading, setAdGroupLoading] = useState<{[campaignId: string]: boolean}>({});
 
   // Campaign Performance view mode
   const [campaignViewMode, setCampaignViewMode] = useState<'table' | 'charts'>('table');
 
   // Pagination state
-  const [tablePage, setTablePage] = useState<number>(1);
   const [itemsPerPage] = useState<number>(10);
 
   // Hover metrics chart state
