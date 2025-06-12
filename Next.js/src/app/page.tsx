@@ -230,7 +230,7 @@ export default function Dashboard() {
 
   // Premium campaign table state
   const [campaignSearch, setCampaignSearch] = useState<string>('');
-  const [campaignSort, setCampaignSort] = useState<{field: string, direction: 'asc' | 'desc' | null}>({field: '', direction: null});
+  const [campaignSort, setCampaignSort] = useState<{field: string, direction: 'asc' | 'desc' | null}>({field: 'name', direction: 'asc'});
   const [statusFilter, setStatusFilter] = useState<'active' | 'all'>('active');
   const [selectedCampaigns, setSelectedCampaigns] = useState<string[]>([]);
   const [bulkActionOpen, setBulkActionOpen] = useState<boolean>(false);
@@ -1365,11 +1365,11 @@ console.log("🌐 Making fresh API call for campaigns");
 
   const getSortIcon = (field: string) => {
     if (campaignSort.field !== field || campaignSort.direction === null) {
-      return <ArrowUpDown className="h-4 w-4 text-gray-400" />;
+      return <ArrowUpDown className="h-3 w-3 text-gray-400/50" />;
     }
     return campaignSort.direction === 'asc' 
-      ? <ArrowUp className="h-4 w-4 text-blue-600" />
-      : <ArrowDown className="h-4 w-4 text-blue-600" />;
+      ? <ArrowUp className="h-3 w-3 text-gray-500" />
+      : <ArrowDown className="h-3 w-3 text-gray-500" />;
   };
 
   const selectAllCampaigns = () => {
@@ -1425,15 +1425,29 @@ console.log("🌐 Making fresh API call for campaigns");
     if (!campaignData) return 'medium';
     const allCampaigns = campaignData.campaigns;
     if (allCampaigns.length < 3) return 'medium';
-    const values = allCampaigns.map(c => c[metric as keyof Campaign] as number).sort((a, b) => b - a);
+
+    // Get all non-zero values to avoid skewing the thresholds
+    const nonZeroValues = allCampaigns
+      .map(c => c[metric as keyof Campaign] as number)
+      .filter(val => val > 0)
+      .sort((a, b) => b - a);
+
+    if (nonZeroValues.length === 0) return 'medium';
+
     const value = campaign[metric as keyof Campaign] as number;
-    const highThreshold = values[Math.floor(values.length * 0.33)];
-    const lowThreshold = values[Math.floor(values.length * 0.67)];
+    const highThreshold = nonZeroValues[Math.floor(nonZeroValues.length * 0.33)];
+    const lowThreshold = nonZeroValues[Math.floor(nonZeroValues.length * 0.67)];
+
+    // For metrics where lower values are better
     if (['cost', 'avgCpc', 'cpa'].includes(metric)) {
+      if (value === 0) return 'medium';
       if (value <= lowThreshold) return 'high';
       if (value <= highThreshold) return 'medium';
       return 'low';
     }
+
+    // For metrics where higher values are better
+    if (value === 0) return 'low';
     if (value >= highThreshold) return 'high';
     if (value >= lowThreshold) return 'medium';
     return 'low';
@@ -1441,11 +1455,20 @@ console.log("🌐 Making fresh API call for campaigns");
 
   const getPerformanceColor = (level: 'high' | 'medium' | 'low'): string => {
     switch (level) {
-      case 'high': return 'text-green-600';
-      case 'medium': return 'text-yellow-600';
-      case 'low': return 'text-red-600';
-      default: return 'text-gray-600';
+      case 'high': return 'before:bg-emerald-500';
+      case 'medium': return 'before:bg-amber-500';
+      case 'low': return 'before:bg-rose-500';
+      default: return 'before:bg-gray-400';
     }
+  };
+
+  const getPerformanceIndicatorClass = (metric: string) => {
+    return `
+      relative pl-4
+      before:content-[''] before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2
+      before:w-2 before:h-2 before:rounded-full
+      text-gray-700
+    `;
   };
 
   // Helper function to toggle KPI selection
@@ -2449,12 +2472,12 @@ console.log("🌐 Making fresh API call for campaigns");
               if (campaignViewMode === 'table') {
                 return (
                   <div className="overflow-x-auto" style={{ height: 'calc(100vh - 280px)' }}>
-                    <table className="w-full">
+                    <table className="w-full relative">
                       {/* Sticky Header */}
-                      <thead className="sticky top-0 bg-white border-b border-gray-100 z-10">
+                      <thead className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-gray-100 z-10">
                         <tr>
                           {/* Bulk Selection Checkbox */}
-                          <th className="px-4 py-4 text-left">
+                          <th className="px-4 py-3 text-left">
                             <input
                               type="checkbox"
                               checked={filteredCampaigns.length > 0 && filteredCampaigns.every(c => selectedCampaigns.includes(c.id))}
@@ -2466,124 +2489,139 @@ console.log("🌐 Making fresh API call for campaigns");
                                   selectAllCampaigns();
                                 }
                               }}
-                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                              className="w-4 h-4 text-blue-600/75 bg-gray-50 border-gray-200 rounded focus:ring-blue-500/20"
                             />
-                        </th>
+                          </th>
                           
                           {/* Campaign Name */}
                           <th 
                             onClick={() => handleSort('name')}
-                            className="px-6 py-4 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
+                            className="px-6 py-3 text-left text-xs text-gray-500 uppercase tracking-wide cursor-pointer group"
                           >
                             <div className="flex items-center space-x-1.5">
-                              <span>Campaign</span>
-                              {getSortIcon('name')}
+                              <span>CAMPAIGN</span>
+                              <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                {getSortIcon('name')}
+                              </span>
                             </div>
                           </th>
                           
-                          {/* Clicks */}
+                          {/* Clicks - Secondary Metric */}
                           <th 
                             onClick={() => handleSort('clicks')}
-                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
+                            className="px-6 py-3 text-right text-xs text-gray-500 uppercase tracking-wide cursor-pointer group"
                           >
                             <div className="flex items-center justify-end space-x-1.5">
                               <span>Clicks</span>
-                              {getSortIcon('clicks')}
+                              <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                {getSortIcon('clicks')}
+                              </span>
                             </div>
-                        </th>
+                          </th>
                           
-                          {/* Impressions */}
+                          {/* Impressions - Secondary Metric */}
                           <th 
                             onClick={() => handleSort('impressions')}
-                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
+                            className="px-6 py-3 text-right text-xs text-gray-500 uppercase tracking-wide cursor-pointer group"
                           >
                             <div className="flex items-center justify-end space-x-1.5">
                               <span>Impressions</span>
-                              {getSortIcon('impressions')}
+                              <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                {getSortIcon('impressions')}
+                              </span>
                             </div>
-                        </th>
+                          </th>
                           
-                          {/* CTR */}
+                          {/* CTR - Secondary Metric */}
                           <th 
                             onClick={() => handleSort('ctr')}
-                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
+                            className="px-6 py-3 text-right text-xs text-gray-500 uppercase tracking-wide cursor-pointer group"
                           >
                             <div className="flex items-center justify-end space-x-1.5">
                               <span>CTR</span>
-                              {getSortIcon('ctr')}
+                              <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                {getSortIcon('ctr')}
+                              </span>
                             </div>
-                        </th>
+                          </th>
                           
-                          {/* CPC */}
+                          {/* CPC - Secondary Metric */}
                           <th 
                             onClick={() => handleSort('avgCpc')}
-                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
+                            className="px-6 py-3 text-right text-xs text-gray-500 uppercase tracking-wide cursor-pointer group"
                           >
                             <div className="flex items-center justify-end space-x-1.5">
                               <span>Avg. CPC</span>
-                              {getSortIcon('avgCpc')}
+                              <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                {getSortIcon('avgCpc')}
+                              </span>
                             </div>
-                        </th>
+                          </th>
                           
-                          {/* Cost */}
+                          {/* Cost - Primary Metric */}
                           <th 
                             onClick={() => handleSort('cost')}
-                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
+                            className="px-6 py-3 text-right text-xs text-gray-500 uppercase tracking-wide cursor-pointer group"
                           >
                             <div className="flex items-center justify-end space-x-1.5">
                               <span>Cost</span>
-                              {getSortIcon('cost')}
+                              <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                {getSortIcon('cost')}
+                              </span>
                             </div>
                           </th>
                           
-                          {/* Conversions */}
+                          {/* Conversions - Key Metric */}
                           <th 
                             onClick={() => handleSort('conversions')}
-                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
+                            className="px-6 py-3 text-right text-xs text-gray-500 uppercase tracking-wide cursor-pointer group"
                           >
                             <div className="flex items-center justify-end space-x-1.5">
                               <span>Conv.</span>
-                              {getSortIcon('conversions')}
+                              <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                {getSortIcon('conversions')}
+                              </span>
                             </div>
                           </th>
                           
-                          {/* Conv. Value */}
+                          {/* Conv. Value - Key Metric */}
                           <th 
                             onClick={() => handleSort('conversionsValue')}
-                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
+                            className="px-6 py-3 text-right text-xs text-gray-500 uppercase tracking-wide cursor-pointer group"
                           >
                             <div className="flex items-center justify-end space-x-1.5">
                               <span>Conv. Value</span>
-                              {getSortIcon('conversionsValue')}
+                              <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                {getSortIcon('conversionsValue')}
+                              </span>
                             </div>
                           </th>
                           
-                          {/* CPA */}
+                          {/* CPA - Primary Metric */}
                           <th 
                             onClick={() => handleSort('cpa')}
-                            className="px-6 py-4 text-right text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-50 transition-colors"
+                            className="px-6 py-3 text-right text-xs text-gray-500 uppercase tracking-wide cursor-pointer group"
                           >
                             <div className="flex items-center justify-end space-x-1.5">
                               <span>CPA</span>
-                              {getSortIcon('cpa')}
+                              <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                {getSortIcon('cpa')}
+                              </span>
                             </div>
                           </th>
                           
-                          {/* ROAS */}
+                          {/* ROAS - Key Metric */}
                           <th 
                             onClick={() => handleSort('roas')}
-                            className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                            className="px-6 py-3 text-right text-xs text-gray-500 uppercase tracking-wide cursor-pointer group"
                           >
-                            <div className="flex items-center justify-end space-x-1">
+                            <div className="flex items-center justify-end space-x-1.5">
                               <span>ROAS</span>
-                              {getSortIcon('roas')}
+                              <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                {getSortIcon('roas')}
+                              </span>
                             </div>
                           </th>
-                          
-                          {/* Actions */}
-                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
-                            Actions
-                        </th>
                         </tr>
                       </thead>
                         
@@ -2609,57 +2647,65 @@ console.log("🌐 Making fresh API call for campaigns");
                                 <div className="flex items-center space-x-2">
                                   {getStatusIcon(campaign.status)}
                                   <div>
-                                    <button className="text-sm text-gray-900 hover:text-blue-600 transition-colors text-left">
+                                    <button className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors text-left">
                                       {campaign.name}
                                     </button>
-                                    <div className="text-xs text-gray-500 mt-0.5">
+                                    <div className="text-xs text-gray-400 mt-0.5">
                                       ID: {campaign.id} • {campaign.status}
                                     </div>
                                   </div>
                                 </div>
                               </td>
                               
-                              {/* Clicks */}
+                              {/* Clicks - Secondary Metric */}
                               <td className="px-6 py-5 text-right">
                                 <div 
-                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
+                                  className="text-sm text-gray-600 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'clicks', campaign.clicks, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
-                                  {formatNumber(campaign.clicks)}
+                                  <div className={`inline-flex items-center ${getPerformanceIndicatorClass('clicks')} ${getPerformanceColor(getPerformanceIndicator(campaign, 'clicks'))}`}>
+                                    {formatNumber(campaign.clicks)}
+                                  </div>
                                 </div>
                               </td>
                               
-                              {/* Impressions */}
+                              {/* Impressions - Secondary Metric */}
                               <td className="px-6 py-5 text-right">
                                 <div 
-                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
+                                  className="text-sm text-gray-600 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'impressions', campaign.impressions, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
-                                  {formatLargeNumber(campaign.impressions)}
+                                  <div className={`inline-flex items-center ${getPerformanceIndicatorClass('impressions')} ${getPerformanceColor(getPerformanceIndicator(campaign, 'impressions'))}`}>
+                                    {formatLargeNumber(campaign.impressions)}
+                                  </div>
                                 </div>
                               </td>
                               
                               {/* CTR */}
                               <td className="px-6 py-5 text-right">
                                 <div 
-                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
+                                  className="text-sm text-gray-600 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'ctr', campaign.ctr, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
-                                  {formatPercentage(campaign.ctr)}
+                                  <div className={`inline-flex items-center ${getPerformanceIndicatorClass('ctr')} ${getPerformanceColor(getPerformanceIndicator(campaign, 'ctr'))}`}>
+                                    {formatPercentage(campaign.ctr)}
+                                  </div>
                                 </div>
                               </td>
                               
                               {/* CPC */}
                               <td className="px-6 py-5 text-right">
                                 <div 
-                                  className="text-sm text-gray-700 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
+                                  className="text-sm text-gray-600 px-2 py-1 rounded cursor-pointer hover:bg-gray-50 hover:bg-opacity-50 transition-colors"
                                   onMouseEnter={(e) => handleMetricHover(e, 'avgCpc', campaign.avgCpc, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
-                                  {formatCurrency(campaign.avgCpc)}
+                                  <div className={`inline-flex items-center ${getPerformanceIndicatorClass('avgCpc')} ${getPerformanceColor(getPerformanceIndicator(campaign, 'avgCpc'))}`}>
+                                    {formatCurrency(campaign.avgCpc)}
+                                  </div>
                                 </div>
                               </td>
                               
@@ -2670,7 +2716,9 @@ console.log("🌐 Making fresh API call for campaigns");
                                   onMouseEnter={(e) => handleMetricHover(e, 'cost', campaign.cost, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
-                                  {formatCurrency(campaign.cost)}
+                                  <div className={`inline-flex items-center ${getPerformanceIndicatorClass('cost')} ${getPerformanceColor(getPerformanceIndicator(campaign, 'cost'))}`}>
+                                    {formatCurrency(campaign.cost)}
+                                  </div>
                                 </div>
                               </td>
                               
@@ -2681,7 +2729,9 @@ console.log("🌐 Making fresh API call for campaigns");
                                   onMouseEnter={(e) => handleMetricHover(e, 'conversions', campaign.conversions, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
-                                  {formatNumber(campaign.conversions)}
+                                  <div className={`inline-flex items-center ${getPerformanceIndicatorClass('conversions')} ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversions'))}`}>
+                                    {formatNumber(campaign.conversions)}
+                                  </div>
                                 </div>
                               </td>
                               
@@ -2692,7 +2742,9 @@ console.log("🌐 Making fresh API call for campaigns");
                                   onMouseEnter={(e) => handleMetricHover(e, 'conversionsValue', campaign.conversionsValue, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
-                                  {formatCurrency(campaign.conversionsValue)}
+                                  <div className={`inline-flex items-center ${getPerformanceIndicatorClass('conversionsValue')} ${getPerformanceColor(getPerformanceIndicator(campaign, 'conversionsValue'))}`}>
+                                    {formatCurrency(campaign.conversionsValue)}
+                                  </div>
                                 </div>
                               </td>
                               
@@ -2703,7 +2755,9 @@ console.log("🌐 Making fresh API call for campaigns");
                                   onMouseEnter={(e) => handleMetricHover(e, 'cpa', campaign.cpa, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
-                                  {formatCurrency(campaign.cpa)}
+                                  <div className={`inline-flex items-center ${getPerformanceIndicatorClass('cpa')} ${getPerformanceColor(getPerformanceIndicator(campaign, 'cpa'))}`}>
+                                    {formatCurrency(campaign.cpa)}
+                                  </div>
                                 </div>
                               </td>
                               
@@ -2714,29 +2768,22 @@ console.log("🌐 Making fresh API call for campaigns");
                                   onMouseEnter={(e) => handleMetricHover(e, 'roas', campaign.roas, campaign.name, campaign.id)}
                                   onMouseLeave={handleMetricLeave}
                                 >
-                                  {campaign.roas.toFixed(2)}x
+                                  <div className={`inline-flex items-center ${getPerformanceIndicatorClass('roas')} ${getPerformanceColor(getPerformanceIndicator(campaign, 'roas'))}`}>
+                                    {campaign.roas.toFixed(2)}x
+                                  </div>
                                 </div>
                               </td>
-                              
-                              {/* Actions */}
-                              <td className="px-6 py-4 text-center">
-                                <div className="relative">
-                                  <button className="text-gray-400 hover:text-gray-600 transition-colors">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </button>
-                                </div>
-                            </td>
                           </tr>
                         ))}
                       </tbody>
                         
                         {/* Totals Footer */}
-                        <tfoot className="border-t border-gray-100">
-                          <tr className="text-gray-900">
-                            <td className="px-4 py-5"></td>
-                            <td className="px-6 py-5">
-                              <div className="text-sm font-medium">TOTAL</div>
-                              <div className="text-xs text-gray-500 mt-0.5">
+                        <tfoot className="sticky bottom-0 bg-white border-t border-gray-100 shadow-sm z-10">
+                          <tr className="font-medium text-gray-900">
+                            <td className="px-4 py-4"></td>
+                            <td className="px-6 py-4">
+                              <div className="text-sm">TOTAL</div>
+                              <div className="text-xs text-gray-400 mt-0.5">
                                 {filteredCampaigns.length} campaigns
                               </div>
                             </td>
@@ -2745,16 +2792,15 @@ console.log("🌐 Making fresh API call for campaigns");
                               const totals = calculateTableTotals();
                               return (
                                 <>
-                                  <td className="px-6 py-5 text-right text-sm">{formatNumber(totals.clicks)}</td>
-                                  <td className="px-6 py-5 text-right text-sm">{formatLargeNumber(totals.impressions)}</td>
-                                  <td className="px-6 py-5 text-right text-sm">{formatPercentage(totals.ctr)}</td>
-                                  <td className="px-6 py-5 text-right text-sm">{formatCurrency(totals.avgCpc)}</td>
-                                  <td className="px-6 py-5 text-right text-sm">{formatCurrency(totals.cost)}</td>
-                                  <td className="px-6 py-5 text-right text-sm">{formatNumber(totals.conversions)}</td>
-                                  <td className="px-6 py-5 text-right text-sm">{formatCurrency(totals.conversionsValue)}</td>
-                                  <td className="px-6 py-5 text-right text-sm">{formatCurrency(totals.cpa)}</td>
-                                  <td className="px-6 py-5 text-right text-sm">{totals.roas.toFixed(2)}x</td>
-                                  <td className="px-6 py-5"></td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.clicks)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatLargeNumber(totals.impressions)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatPercentage(totals.ctr)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.avgCpc)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cost)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.conversions)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.conversionsValue)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cpa)}</td>
+                                  <td className="px-6 py-4 text-right text-sm">{totals.roas.toFixed(2)}x</td>
                                 </>
                               );
                             })()}
@@ -3403,9 +3449,9 @@ console.log("🌐 Making fresh API call for campaigns");
           </div>
         ) : (
           <div className="overflow-x-auto" style={{ height: 'calc(100vh - 280px)' }}>
-            <table className="w-full">
+            <table className="w-full relative">
               {/* Sticky Header */}
-              <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 z-10">
+              <thead className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-gray-100 z-10">
                 <tr>
                   {/* Bulk Selection Checkbox */}
                   <th className="px-4 py-3 text-left">
@@ -3725,12 +3771,12 @@ console.log("🌐 Making fresh API call for campaigns");
               </tbody>
               
               {/* Totals Footer */}
-              <tfoot className="bg-gray-100 border-t-2 border-gray-300">
-                <tr className="font-bold text-gray-900">
+              <tfoot className="sticky bottom-0 bg-white border-t border-gray-100 shadow-sm z-10">
+                <tr className="font-medium text-gray-900">
                   <td className="px-4 py-4"></td>
-                  <td className="px-6 py-4 text-sm">
-                    TOTAL
-                    <div className="text-xs font-normal text-gray-500">
+                  <td className="px-6 py-4">
+                    <div className="text-sm">TOTAL</div>
+                    <div className="text-xs text-gray-400 mt-0.5">
                       {filteredAdGroups.length} groups
                     </div>
                   </td>
@@ -3749,8 +3795,6 @@ console.log("🌐 Making fresh API call for campaigns");
                         <td className="px-6 py-4 text-right text-sm">{formatNumber(totals.conversions)}</td>
                         <td className="px-6 py-4 text-right text-sm">{formatCurrency(totals.cpa)}</td>
                         <td className="px-6 py-4 text-right text-sm">{totals.roas.toFixed(2)}x</td>
-                        <td className="px-6 py-4"></td>
-                        <td className="px-6 py-4"></td>
                         <td className="px-6 py-4"></td>
                       </>
                     );
