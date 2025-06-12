@@ -246,8 +246,7 @@ export default function Dashboard() {
   // Campaign Performance view mode
   const [campaignViewMode, setCampaignViewMode] = useState<'table' | 'charts'>('table');
 
-  // Pagination state
-  const [itemsPerPage] = useState<number>(10);
+  // Pagination state removed as it was unused
 
   // Hover metrics chart state
   const [hoverChart, setHoverChart] = useState({
@@ -936,63 +935,7 @@ console.log("🌐 Making fresh API call for campaigns");
   };
 
   // Fetch ad groups for a specific campaign
-  const fetchAdGroups = async (campaignId: string) => {
-    console.log("🔄 FETCHING AD GROUPS DATA");
-    
-    // 1. At the very start
-    console.log("🔍 fetchAdGroups called with:", { selectedAccount, dateRange: selectedDateRange });
-    
-    if (!selectedAccount || !selectedDateRange) return;
-    
-    // 1. Check cache at start
-    const cached = getFromCache('adgroups', 30);
-    
-    // 2. After the cache check
-    console.log("💽 Cache result:", { cached: !!cached, cacheExists: cached !== null });
-    
-    // 2. If cached exists, return cached data
-    if (cached) {
-      console.log("💾 Using cached ad groups");
-      
-      // 3. Before the return cached
-      console.log("✅ Returning cached ad groups data");
-      
-      setAdGroupData(prev => ({ ...prev, [campaignId]: cached }));
-      setAdGroupLoading(prev => ({ ...prev, [campaignId]: false }));
-      return;
-    }
-    
-    // 3. If no cached data, proceed with normal API call
-    console.log("🔄 Fetching fresh ad groups");
-    
-    // 4. Before the API call
-    console.log("🌐 Making fresh API call for ad groups");
-    
-    try {
-      setAdGroupLoading(prev => ({ ...prev, [campaignId]: true }));
-      
-      const apiDateRange = getApiDateRange(selectedDateRange);
-      const response = await fetch(`/api/ad-groups?customerId=${selectedAccount}&campaignId=${campaignId}&dateRange=${apiDateRange.days}`);
-      const result = await response.json();
-      
-      if (result.success) {
-        console.log(`📊 Ad Groups Fetched for campaign ${campaignId}:`, result.data);
-        setAdGroupData(prev => ({ ...prev, [campaignId]: result.data }));
-        
-        // 4. After successful API response, save to cache
-        saveToCache('adgroups', result.data);
-        
-        // 5. After saving cache
-        console.log("💾 Saved ad groups to cache successfully");
-      } else {
-        console.error('Failed to fetch ad groups:', result.message);
-      }
-    } catch (err) {
-      console.error('Error fetching ad groups:', err);
-    } finally {
-      setAdGroupLoading(prev => ({ ...prev, [campaignId]: false }));
-    }
-  };
+  // fetchAdGroups function removed as it was unused
 
   const fetchAnomalies = async () => {
     console.log("🔄 FETCHING ANOMALIES DATA");
@@ -1507,132 +1450,7 @@ console.log("🌐 Making fresh API call for campaigns");
     }
   };
 
-  // Campaign Performance Chart Data Functions
-  const getCampaignCostDistributionData = () => {
-    if (!campaignData) return [];
-    
-    const ranges = [
-      { name: '€0-€50', min: 0, max: 50 },
-      { name: '€50-€200', min: 50, max: 200 },
-      { name: '€200-€500', min: 200, max: 500 },
-      { name: '€500-€1000', min: 500, max: 1000 },
-      { name: '€1000+', min: 1000, max: Infinity }
-    ];
-
-    const filteredCampaigns = getFilteredAndSortedCampaigns();
-    
-    return ranges.map(range => ({
-      name: range.name,
-      count: filteredCampaigns.filter(campaign => campaign.cost >= range.min && campaign.cost < range.max).length,
-      totalCost: filteredCampaigns
-        .filter(campaign => campaign.cost >= range.min && campaign.cost < range.max)
-        .reduce((sum, campaign) => sum + campaign.cost, 0)
-    }));
-  };
-
-  const getCampaignStatusDistributionData = () => {
-    if (!campaignData) return [];
-    
-    const filteredCampaigns = getFilteredAndSortedCampaigns();
-    const statusCounts = {
-      ENABLED: 0,
-      PAUSED: 0,
-      REMOVED: 0
-    };
-
-    filteredCampaigns.forEach(campaign => {
-      if (campaign.status in statusCounts) {
-        statusCounts[campaign.status as keyof typeof statusCounts]++;
-      }
-    });
-
-    return Object.entries(statusCounts).map(([status, count]) => ({
-      name: status,
-      value: count,
-      percentage: filteredCampaigns.length > 0 ? ((count / filteredCampaigns.length) * 100) : 0
-    }));
-  };
-
-  const getTopSpendingCampaignsData = () => {
-    if (!campaignData) return [];
-    
-    const filteredCampaigns = getFilteredAndSortedCampaigns();
-    
-    return filteredCampaigns
-      .sort((a, b) => b.cost - a.cost)
-      .slice(0, 15)
-      .map(campaign => ({
-        name: campaign.name.length > 20 ? campaign.name.substring(0, 20) + '...' : campaign.name,
-        cost: campaign.cost,
-        conversions: campaign.conversions,
-        roas: campaign.roas,
-        cpa: campaign.cpa
-      }));
-  };
-
-  const getCampaignPerformanceQuadrantData = () => {
-    if (!campaignData) return [];
-    
-    const filteredCampaigns = getFilteredAndSortedCampaigns();
-    
-    return filteredCampaigns
-      .filter(campaign => campaign.impressions > 100) // Only campaigns with significant data
-      .slice(0, 50) // Limit for performance
-      .map(campaign => ({
-        name: campaign.name,
-        roas: campaign.roas,
-        cost: campaign.cost,
-        conversions: campaign.conversions,
-        ctr: campaign.ctr
-      }));
-  };
-
-  const getHighSpendZeroConversionsCampaignsData = () => {
-    if (!campaignData) return [];
-    
-    const filteredCampaigns = getFilteredAndSortedCampaigns();
-    const threshold = getHighSpendThreshold();
-    
-    return filteredCampaigns
-      .filter(campaign => campaign.cost > threshold && campaign.conversions === 0)
-      .sort((a, b) => b.cost - a.cost)
-      .slice(0, 50);
-  };
-
-  const getBestPerformingCampaignsData = () => {
-    if (!campaignData) return [];
-    
-    const filteredCampaigns = getFilteredAndSortedCampaigns();
-    
-    return filteredCampaigns
-      .filter(campaign => campaign.conversions > 0 && campaign.roas > 0)
-      .sort((a, b) => b.roas - a.roas)
-      .slice(0, 50);
-  };
-
-  // Colors for charts
-  const CAMPAIGN_CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
-
-  // Generate mock chart data (for now - later can be replaced with real historical data)
-  const generateChartData = (metricId: string, currentValue: number) => {
-    if (!selectedDateRange || !historicalData || historicalData.length === 0) {
-      console.log('📊 No historical data available for single metric chart');
-      return [];
-    }
-    
-    console.log('📊 Generating single metric chart data:', {
-      metricId,
-      historicalDataLength: historicalData.length
-    });
-    
-    // Use real historical data
-    return historicalData.map((day: any) => ({
-      date: day.date,
-      dateFormatted: day.dateFormatted,
-      value: day[metricId] || 0,
-      formattedValue: formatKPIValue(metricId, day[metricId] || 0)
-    }));
-  };
+  // Helper function to toggle KPI selection
 
   // Helper function to toggle KPI selection
   const toggleKpiSelection = (kpiId: string) => {
@@ -1853,49 +1671,7 @@ console.log("🌐 Making fresh API call for campaigns");
   };
 
   // Y-axis formatter based on metric type (for single metric compatibility)
-  const formatYAxis = (value: number, metricId: string): string => {
-    switch (metricId) {
-      case 'cost':
-      case 'conversionsValue':
-      case 'avgCpc':
-      case 'cpa':
-        // Currency formatting
-        if (value >= 1000000) {
-          return `€${(value / 1000000).toFixed(1)}M`;
-        } else if (value >= 1000) {
-          return `€${(value / 1000).toFixed(0)}K`;
-        } else if (value >= 1) {
-          return `€${value.toFixed(0)}`;
-    } else {
-          return `€${value.toFixed(2)}`;
-        }
-      
-      case 'clicks':
-      case 'impressions':
-      case 'conversions':
-        // Count formatting
-        if (value >= 1000000) {
-          return `${(value / 1000000).toFixed(1)}M`;
-        } else if (value >= 1000) {
-          return `${(value / 1000).toFixed(0)}K`;
-        } else {
-          return value.toFixed(0);
-        }
-      
-      case 'ctr':
-      case 'conversionRate':
-      case 'poas':
-        // Percentage formatting
-        return `${value.toFixed(1)}%`;
-      
-      case 'roas':
-        // ROAS formatting (multiplier)
-        return `${value.toFixed(1)}x`;
-      
-      default:
-        return value.toFixed(1);
-    }
-  };
+  // formatYAxis function removed as it was unused
 
   // Render page content based on current page
   const renderPageContent = () => {
@@ -4211,49 +3987,11 @@ console.log("🌐 Making fresh API call for campaigns");
     );
 
     // Chart data preparation
-    const getHighSpendZeroConversionData = () => {
-      return keywordData
-        .filter(item => item.cost > 5 && item.conversions === 0)
-        .sort((a, b) => b.cost - a.cost)
-        .slice(0, 20)
-        .map(item => ({
-          name: item.keyword_text.length > 20 ? item.keyword_text.substring(0, 20) + '...' : item.keyword_text,
-          cost: item.cost,
-          clicks: item.clicks,
-          impressions: item.impressions
-        }));
-    };
+    // getHighSpendZeroConversionData removed as it was unused
 
-    const getCostDistributionData = () => {
-      const ranges = [
-        { name: '€0-€1', min: 0, max: 1 },
-        { name: '€1-€5', min: 1, max: 5 },
-        { name: '€5-€20', min: 5, max: 20 },
-        { name: '€20-€50', min: 20, max: 50 },
-        { name: '€50+', min: 50, max: Infinity }
-      ];
+    // getCostDistributionData removed as it was unused
 
-      return ranges.map(range => ({
-        name: range.name,
-        count: keywordData.filter(item => item.cost >= range.min && item.cost < range.max).length,
-        totalCost: keywordData
-          .filter(item => item.cost >= range.min && item.cost < range.max)
-          .reduce((sum, item) => sum + item.cost, 0)
-      }));
-    };
-
-    const getPerformanceQuadrantData = () => {
-      return keywordData
-        .filter(item => item.impressions > 100) // Only items with significant data
-        .slice(0, 50) // Limit for performance
-        .map(item => ({
-          name: item.keyword_text,
-          conversionRate: item.clicks > 0 ? (item.conversions / item.clicks) * 100 : 0,
-          impressionShare: Math.random() * 100, // Placeholder - would need actual impression share data
-          cost: item.cost,
-          conversions: item.conversions
-        }));
-    };
+    // getPerformanceQuadrantData removed as it was unused
 
     // New chart data functions for enhanced charts view
     const getMatchTypeDistributionData = () => {
@@ -4372,17 +4110,7 @@ console.log("🌐 Making fresh API call for campaigns");
       }
     };
 
-    // Toggle column visibility
-    const toggleColumn = (columnId: string) => {
-      const column = availableColumns.find(col => col.id === columnId);
-      if (column?.always) return; // Can't toggle always-visible columns
-
-      setSelectedColumns(prev => 
-        prev.includes(columnId) 
-          ? prev.filter(id => id !== columnId)
-          : [...prev, columnId]
-      );
-    };
+    // toggleColumn function removed as it was unused
 
     // Get visible columns based on data type
     const getVisibleColumns = () => {
