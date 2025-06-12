@@ -1945,46 +1945,70 @@ console.log("🌐 Making fresh API call for campaigns");
                 <div
                   key={kpi.id}
                   className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 relative overflow-hidden group cursor-pointer"
-                  style={{ height: '140px' }}
+                  style={{ height: '160px' }}
                   onClick={() => toggleKpiSelection(kpi.id)}
                 >
                   {/* Background gradient on hover */}
                   <div className={`absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-300 bg-gradient-to-br ${kpi.gradientFrom} ${kpi.gradientTo}`} />
                   
-                  {/* Enhanced 3D Icon */}
-                  <div className={`w-12 h-12 ${kpi.bgColor} rounded-xl flex items-center justify-center mb-3 shadow-lg transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3`}
-                       style={{
-                         background: `linear-gradient(135deg, ${kpi.gradientFrom.replace('from-', '').replace('-400', '')}-400, ${kpi.gradientTo.replace('to-', '').replace('-600', '')}-600)`,
-                         boxShadow: `0 8px 16px -4px ${kpi.bgColor.replace('bg-', '').replace('-500', '')}-500/40, inset 0 1px 0 rgba(255,255,255,0.2)`
-                       }}>
-                    <IconComponent className="h-6 w-6 text-white drop-shadow-sm" />
-                  </div>
-                  
-                  {/* Value */}
-                  <div className="mb-2">
-                    <div className="text-2xl font-bold text-gray-900 leading-tight">
-                      {formattedValue}
+                  {/* Main Content Area */}
+                  <div className="flex justify-between h-full">
+                    {/* Left Side - Icon, Value, Label */}
+                    <div className="flex-1">
+                      {/* Enhanced 3D Icon */}
+                      <div className={`w-12 h-12 ${kpi.bgColor} rounded-xl flex items-center justify-center mb-3 shadow-lg transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3`}
+                           style={{
+                             background: `linear-gradient(135deg, ${kpi.gradientFrom.replace('from-', '').replace('-400', '')}-400, ${kpi.gradientTo.replace('to-', '').replace('-600', '')}-600)`,
+                             boxShadow: `0 8px 16px -4px ${kpi.bgColor.replace('bg-', '').replace('-500', '')}-500/40, inset 0 1px 0 rgba(255,255,255,0.2)`
+                           }}>
+                        <IconComponent className="h-6 w-6 text-white drop-shadow-sm" />
+                      </div>
+                      
+                      {/* Value */}
+                      <div className="mb-2">
+                        <div className="text-2xl font-bold text-gray-900 leading-tight">
+                          {formattedValue}
+                        </div>
+                        <div className="text-sm text-gray-600 font-medium">
+                          {kpi.label}
+                        </div>
+                      </div>
+                      
+                      {/* Enhanced Percentage change with box */}
+                      <div className="absolute bottom-4 left-6">
+                        <div className={`flex items-center space-x-1 px-2 py-1 rounded-lg shadow-sm border transition-all duration-300 ${
+                          isPositive 
+                            ? 'bg-green-50 border-green-200 hover:bg-green-100' 
+                            : 'bg-red-50 border-red-200 hover:bg-red-100'
+                        }`}>
+                          {percentageChange >= 0 ? (
+                            <ArrowUp className={`h-3 w-3 ${isPositive ? 'text-green-600' : 'text-red-600'}`} />
+                          ) : (
+                            <ArrowDown className={`h-3 w-3 ${isPositive ? 'text-green-600' : 'text-red-600'}`} />
+                          )}
+                          <span className={`text-xs font-bold ${isPositive ? 'text-green-700' : 'text-red-700'}`}>
+                            {Math.abs(percentageChange).toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600 font-medium">
-                      {kpi.label}
-                    </div>
-                  </div>
-                  
-                  {/* Enhanced Percentage change with box */}
-                  <div className="absolute bottom-4 right-4">
-                    <div className={`flex items-center space-x-1 px-2 py-1 rounded-lg shadow-sm border transition-all duration-300 ${
-                      isPositive 
-                        ? 'bg-green-50 border-green-200 hover:bg-green-100' 
-                        : 'bg-red-50 border-red-200 hover:bg-red-100'
-                    }`}>
-                      {percentageChange >= 0 ? (
-                        <ArrowUp className={`h-3 w-3 ${isPositive ? 'text-green-600' : 'text-red-600'}`} />
-                      ) : (
-                        <ArrowDown className={`h-3 w-3 ${isPositive ? 'text-green-600' : 'text-red-600'}`} />
-                      )}
-                      <span className={`text-xs font-bold ${isPositive ? 'text-green-700' : 'text-red-700'}`}>
-                        {Math.abs(percentageChange).toFixed(1)}%
-                      </span>
+                    
+                    {/* Right Side - Mini Graph */}
+                    <div className="w-20 h-full flex flex-col justify-center">
+                      <div className="h-16 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={generateChartData(kpi.id, value)}>
+                            <Line 
+                              type="monotone" 
+                              dataKey="value" 
+                              stroke={getKpiChartColor(kpi.id)}
+                              strokeWidth={2}
+                              dot={false}
+                              activeDot={{ r: 3, fill: getKpiChartColor(kpi.id) }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
                   </div>
                   
