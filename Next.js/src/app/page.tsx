@@ -1600,17 +1600,25 @@ console.log("🌐 Making fresh API call for campaigns");
   // Helper function to toggle KPI selection
   const toggleKpiSelection = (kpiId: string) => {
     setSelectedChartMetrics(prev => {
+      console.log('🔄 Toggle KPI:', kpiId, 'Current selection:', prev);
+      
       if (prev.includes(kpiId)) {
         // Remove if already selected (but keep at least one)
         if (prev.length > 1) {
-          return prev.filter(id => id !== kpiId);
+          const newSelection = prev.filter(id => id !== kpiId);
+          console.log('✅ Deselecting KPI:', kpiId, 'New selection:', newSelection);
+          return newSelection;
         }
+        console.log('⚠️ Cannot deselect last KPI:', kpiId);
         return prev;
       } else {
         // Add if not selected (but max 4 KPIs)
         if (prev.length < 4) {
-          return [...prev, kpiId];
+          const newSelection = [...prev, kpiId];
+          console.log('✅ Selecting KPI:', kpiId, 'New selection:', newSelection);
+          return newSelection;
         }
+        console.log('⚠️ Cannot select more than 4 KPIs');
         return prev;
       }
     });
@@ -1944,86 +1952,117 @@ console.log("🌐 Making fresh API call for campaigns");
               return (
                 <div
                   key={kpi.id}
-                  className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 relative overflow-hidden group cursor-pointer"
-                  style={{ height: '160px' }}
+                  className="group relative cursor-pointer transition-all duration-200 hover:-translate-y-1"
+                  style={{
+                    height: '160px',
+                    background: 'white',
+                    boxShadow: selectedChartMetrics.includes(kpi.id) 
+                      ? `0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 1px ${getKpiChartColor(kpi.id)}`
+                      : '0 1px 3px rgba(0, 0, 0, 0.1)',
+                    border: selectedChartMetrics.includes(kpi.id) 
+                      ? 'none'
+                      : '1px solid #e5e7eb',
+                    borderRadius: '12px',
+                    padding: '24px'
+                  }}
                   onClick={() => toggleKpiSelection(kpi.id)}
                 >
-                  {/* Background gradient on hover */}
-                  <div className={`absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity duration-300 bg-gradient-to-br ${kpi.gradientFrom} ${kpi.gradientTo}`} />
+                  {/* Clean Icon */}
+                  <div 
+                    className="w-8 h-8 rounded-lg flex items-center justify-center mb-3"
+                    style={{
+                      backgroundColor: selectedChartMetrics.includes(kpi.id) 
+                        ? `${getKpiChartColor(kpi.id)}20` 
+                        : '#f3f4f6',
+                      border: selectedChartMetrics.includes(kpi.id)
+                        ? `1px solid ${getKpiChartColor(kpi.id)}`
+                        : '1px solid transparent'
+                    }}
+                  >
+                    <IconComponent 
+                      className="h-4 w-4" 
+                      style={{ 
+                        color: selectedChartMetrics.includes(kpi.id) 
+                          ? getKpiChartColor(kpi.id) 
+                          : '#6b7280' 
+                      }}
+                    />
+                  </div>
                   
-                  {/* Main Content Area */}
-                  <div className="flex justify-between h-full">
-                    {/* Left Side - Icon, Value, Label */}
-                    <div className="flex-1">
-                      {/* Enhanced 3D Icon */}
-                      <div className={`w-12 h-12 ${kpi.bgColor} rounded-xl flex items-center justify-center mb-3 shadow-lg transform transition-all duration-300 group-hover:scale-110 group-hover:rotate-3`}
-                           style={{
-                             background: `linear-gradient(135deg, ${kpi.gradientFrom.replace('from-', '').replace('-400', '')}-400, ${kpi.gradientTo.replace('to-', '').replace('-600', '')}-600)`,
-                             boxShadow: `0 8px 16px -4px ${kpi.bgColor.replace('bg-', '').replace('-500', '')}-500/40, inset 0 1px 0 rgba(255,255,255,0.2)`
-                           }}>
-                        <IconComponent className="h-6 w-6 text-white drop-shadow-sm" />
-                      </div>
-                      
-                      {/* Value */}
-                      <div className="mb-2">
-                        <div className="text-2xl font-bold text-gray-900 leading-tight">
-                          {formattedValue}
-                        </div>
-                        <div className="text-sm text-gray-600 font-medium">
-                          {kpi.label}
-                        </div>
-                      </div>
-                      
-                      {/* Enhanced Percentage change with box */}
-                      <div className="absolute bottom-4 left-6">
-                        <div className={`flex items-center space-x-1 px-2 py-1 rounded-lg shadow-sm border transition-all duration-300 ${
-                          isPositive 
-                            ? 'bg-green-50 border-green-200 hover:bg-green-100' 
-                            : 'bg-red-50 border-red-200 hover:bg-red-100'
-                        }`}>
-                          {percentageChange >= 0 ? (
-                            <ArrowUp className={`h-3 w-3 ${isPositive ? 'text-green-600' : 'text-red-600'}`} />
-                          ) : (
-                            <ArrowDown className={`h-3 w-3 ${isPositive ? 'text-green-600' : 'text-red-600'}`} />
-                          )}
-                          <span className={`text-xs font-bold ${isPositive ? 'text-green-700' : 'text-red-700'}`}>
-                            {Math.abs(percentageChange).toFixed(1)}%
-                          </span>
-                        </div>
-                      </div>
+                  {/* Value */}
+                  <div className="mb-2">
+                    <div className="text-2xl font-bold text-gray-900 leading-tight">
+                      {formattedValue}
                     </div>
-                    
-                    {/* Right Side - Mini Graph */}
-                    <div className="w-20 h-full flex flex-col justify-center">
-                      <div className="h-16 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={generateChartData(kpi.id, value)}>
-                            <Line 
-                              type="monotone" 
-                              dataKey="value" 
-                              stroke={getKpiChartColor(kpi.id)}
-                              strokeWidth={2}
-                              dot={false}
-                              activeDot={{ r: 3, fill: getKpiChartColor(kpi.id) }}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
+                    <div className="text-sm text-gray-600 font-medium">
+                      {kpi.label}
                     </div>
                   </div>
                   
-                  {/* Multi-selection indicator */}
+                  {/* Enhanced Status Label */}
+                  <div className="flex items-center justify-between">
+                    <div 
+                      className="text-xs font-semibold px-2 py-1 rounded-md border"
+                      style={{
+                        color: Math.abs(percentageChange) >= 20 
+                          ? isPositive ? '#047857' : '#dc2626'
+                          : Math.abs(percentageChange) >= 10
+                          ? isPositive ? '#047857' : '#dc2626'
+                          : Math.abs(percentageChange) >= 5
+                          ? '#d97706'
+                          : '#6b7280',
+                        backgroundColor: Math.abs(percentageChange) >= 20 
+                          ? isPositive ? '#f0fdf4' : '#fef2f2'
+                          : Math.abs(percentageChange) >= 10
+                          ? isPositive ? '#f0fdf4' : '#fef2f2'
+                          : Math.abs(percentageChange) >= 5
+                          ? '#fffbeb'
+                          : '#f9fafb',
+                        borderColor: Math.abs(percentageChange) >= 20 
+                          ? isPositive ? '#bbf7d0' : '#fecaca'
+                          : Math.abs(percentageChange) >= 10
+                          ? isPositive ? '#bbf7d0' : '#fecaca'
+                          : Math.abs(percentageChange) >= 5
+                          ? '#fed7aa'
+                          : '#e5e7eb'
+                      }}
+                    >
+                      {Math.abs(percentageChange) >= 20 
+                        ? isPositive ? 'Excellent' : 'Needs Attention'
+                        : Math.abs(percentageChange) >= 10
+                        ? isPositive ? 'Good' : 'Declining'
+                        : Math.abs(percentageChange) >= 5
+                        ? 'Stable'
+                        : 'Minimal Change'
+                      }
+                    </div>
+                    
+                    {/* Minimal Percentage */}
+                    <div className="flex items-center space-x-1">
+                    {percentageChange >= 0 ? (
+                      <ArrowUp className={`h-3 w-3 ${isPositive ? 'text-green-500' : 'text-red-500'}`} />
+                    ) : (
+                      <ArrowDown className={`h-3 w-3 ${isPositive ? 'text-green-500' : 'text-red-500'}`} />
+                    )}
+                      <span 
+                        className="text-xs font-medium px-1.5 py-0.5 rounded"
+                        style={{
+                          backgroundColor: isPositive ? '#dcfce7' : '#fef2f2',
+                          color: isPositive ? '#166534' : '#dc2626'
+                        }}
+                      >
+                      {Math.abs(percentageChange).toFixed(1)}%
+                    </span>
+                    </div>
+                  </div>
+                  
+                  {/* Clean selection indicator */}
                   {selectedChartMetrics.includes(kpi.id) && (
-                    <div className="absolute top-2 right-2 flex items-center space-x-1">
+                    <div className="absolute top-3 right-3">
                       <div 
-                        className="w-3 h-3 rounded-full border-2 border-white shadow-lg"
+                        className="w-3 h-3 rounded-full border-2 border-white shadow-sm"
                         style={{ backgroundColor: getKpiChartColor(kpi.id) }}
                       />
-                      {selectedChartMetrics.length > 1 && (
-                        <span className="text-xs font-bold text-gray-600">
-                          {selectedChartMetrics.indexOf(kpi.id) + 1}
-                        </span>
-                      )}
                     </div>
                   )}
                 </div>
@@ -2162,7 +2201,7 @@ console.log("🌐 Making fresh API call for campaigns");
             </div>
 
             {/* Enhanced Chart */}
-            <div className="h-96">
+            <div className="h-96 p-4">
               <ResponsiveContainer width="100%" height="100%">
                 {(() => {
                   // Cache chart data calculation to avoid multiple expensive calls
@@ -2171,7 +2210,7 @@ console.log("🌐 Making fresh API call for campaigns");
                   return chartType === 'line' ? (
                 <LineChart
                       data={chartData}
-                      margin={{ top: 5, right: needsDualYAxis(selectedChartMetrics, chartData) ? 50 : 30, left: 20, bottom: 5 }}
+                      margin={{ top: 20, right: needsDualYAxis(selectedChartMetrics, chartData) ? 60 : 40, left: 40, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis 
@@ -2221,7 +2260,7 @@ console.log("🌐 Making fresh API call for campaigns");
                           const kpi = kpiConfig.find(k => k.id === name);
                           return [formatKPIValue(name, value), kpi?.label || name];
                         }}
-                    labelFormatter={(label) => `Date: ${label}`}
+                    labelFormatter={(label) => label}
                   />
                       
                       {/* Legend - Removed since KPI selection buttons already show numbered colors */}
@@ -2253,7 +2292,7 @@ console.log("🌐 Making fresh API call for campaigns");
                   ) : (
                     <BarChart
                       data={chartData}
-                      margin={{ top: 5, right: needsDualYAxis(selectedChartMetrics, chartData) ? 50 : 30, left: 20, bottom: 5 }}
+                      margin={{ top: 20, right: needsDualYAxis(selectedChartMetrics, chartData) ? 60 : 40, left: 40, bottom: 20 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis 
@@ -2303,7 +2342,7 @@ console.log("🌐 Making fresh API call for campaigns");
                           const kpi = kpiConfig.find(k => k.id === name);
                           return [formatKPIValue(name, value), kpi?.label || name];
                         }}
-                        labelFormatter={(label) => `Date: ${label}`}
+                        labelFormatter={(label) => label}
                       />
                       
                       {/* Legend - Removed since KPI selection buttons already show numbered colors */}
