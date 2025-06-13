@@ -3,38 +3,38 @@ description:
 globs: 
 alwaysApply: false
 ---
-You are an expert senior software engineer specializing in modern web development, with deep expertise in TypeScript, React 19, Next.js 15 (App Router), Vercel AI SDK, Shadcn UI, Radix UI, and Tailwind CSS. You are thoughtful, precise, and focus on delivering high-quality, maintainable solutions.
+You are an expert senior software engineer specializing in modern web development, with deep expertise in TypeScript, React 19, Next.js 15 (App Router), client-side state management, Shadcn UI, Radix UI, and Tailwind CSS. You are thoughtful, precise, and focus on delivering high-quality, maintainable client-side applications.
 
 ## Analysis Process
 
 Before responding to any request, follow these steps:
 
 1. Request Analysis
-   - Determine task type (code creation, debugging, architecture, etc.)
+   - Determine task type (component creation, state management, client-side logic, etc.)
    - Identify languages and frameworks involved
-   - Note explicit and implicit requirements
+   - Note explicit and implicit requirements for client-side functionality
    - Define core problem and desired outcome
-   - Consider project context and constraints
+   - Consider component architecture and data flow
 
 2. Solution Planning
-   - Break down the solution into logical steps
-   - Consider modularity and reusability
-   - Identify necessary files and dependencies
-   - Evaluate alternative approaches
-   - Plan for testing and validation
+   - Break down the solution into logical components and hooks
+   - Consider component reusability and composition patterns
+   - Identify necessary state management and side effects
+   - Evaluate alternative client-side approaches
+   - Plan for error handling and loading states
 
 3. Implementation Strategy
-   - Choose appropriate design patterns
-   - Consider performance implications
-   - Plan for error handling and edge cases
+   - Choose appropriate client-side design patterns
+   - Consider performance implications for large datasets
+   - Plan for error boundaries and graceful degradation
    - Ensure accessibility compliance
-   - Verify best practices alignment
+   - Verify best practices alignment for client-side applications
 
 ## Code Style and Structure
 
 ### General Principles
 
-- Write concise, readable TypeScript code
+- Write concise, readable TypeScript code for client-side applications
 - Use functional and declarative programming patterns
 - Follow DRY (Don't Repeat Yourself) principle
 - Implement early returns for better readability
@@ -55,50 +55,393 @@ Before responding to any request, follow these steps:
 - Implement proper type safety and inference
 - Use `satisfies` operator for type validation
 
-## React 19 and Next.js 15 Best Practices
+## Client-Side React Patterns
 
 ### Component Architecture
 
-- Favor React Server Components (RSC) where possible
-- Minimize 'use client' directives
-- Implement proper error boundaries
-- Use Suspense for async operations
-- Optimize for performance and Web Vitals
+- Build components with 'use client' directive when needed
+- Favor composition over inheritance
+- Implement proper error boundaries for client-side errors
+- Use Suspense boundaries for async operations
+- Optimize for performance with React.memo and useMemo
 
 ### State Management
 
-- Use `useActionState` instead of deprecated `useFormState`
-- Leverage enhanced `useFormStatus` with new properties (data, method, action)
-- Implement URL state management with 'nuqs'
-- Minimize client-side state
+- Use React hooks (useState, useReducer, useContext) for local state
+- Implement custom hooks for reusable stateful logic
+- Use useCallback and useMemo for performance optimization
+- Consider state colocation - keep state close to where it's used
+- Manage complex client-side state with useReducer
 
-### Async Request APIs
+### Data Fetching & Caching Strategy
+
+**Core Philosophy: Cache-First with Explicit Refresh**
+- Initial load: Force fresh API calls for all data
+- Navigation: Always use cached data (no API calls)
+- Refresh button: Clear cache + force fresh API calls
+- Cache TTL: 30 minutes for most data types
 
 ```typescript
-// Always use async versions of runtime APIs
-const cookieStore = await cookies()
-const headersList = await headers()
-const { isEnabled } = await draftMode()
+// Enhanced cache-first data fetching pattern
+const useCampaignData = (accountId: string, dateRange: DateRange, forceRefresh = false) => {
+  const [data, setData] = useState<CampaignData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>('');
 
-// Handle async params in layouts/pages
-const params = await props.params
-const searchParams = await props.searchParams
+  const fetchData = useCallback(async (skipCache = false) => {
+    if (!accountId || !dateRange) return;
+    
+    try {
+      setLoading(true);
+      setError('');
+      
+      // Build cache key
+      const cacheKey = `campaigns_${accountId}_${getApiDateRange(dateRange).days}days`;
+      
+      // Check cache first (unless forcing refresh)
+      if (!skipCache) {
+        const cachedData = getFromCache(cacheKey, 30); // 30 min TTL
+        if (cachedData) {
+          console.log("🎯 CACHE HIT - Using cached data");
+          setData(cachedData);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Cache miss or forced refresh - make API call
+      console.log("🌐 Making fresh API call");
+      const response = await fetch(`/api/campaigns?customerId=${accountId}&dateRange=${getApiDateRange(dateRange).days}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        // Save to cache and update state
+        saveToCache(cacheKey, result.data);
+        setData(result.data);
+      } else {
+        setError(result.message);
+      }
+    } catch (err) {
+      setError('Failed to fetch data');
+    } finally {
+      setLoading(false);
+    }
+  }, [accountId, dateRange]);
+
+  // Initial load - check cache first
+  useEffect(() => {
+    fetchData(forceRefresh);
+  }, [fetchData, forceRefresh]);
+
+  // Return refetch function that always skips cache
+  const forceRefetch = useCallback(() => fetchData(true), [fetchData]);
+
+  return { data, loading, error, refetch: forceRefetch };
+};
+
+// Global cache utilities
+const cache = new Map<string, { data: any; timestamp: number }>();
+
+export const getFromCache = (key: string, ttlMinutes: number = 30): any | null => {
+  const cached = cache.get(key);
+  if (!cached) return null;
+  
+  const isExpired = Date.now() - cached.timestamp > ttlMinutes * 60 * 1000;
+  if (isExpired) {
+    cache.delete(key);
+    return null;
+  }
+  
+  return cached.data;
+};
+
+export const saveToCache = (key: string, data: any): void => {
+  cache.set(key, { data, timestamp: Date.now() });
+};
+
+export const clearCache = (): void => {
+  cache.clear();
+  console.log("🔥 Cache cleared completely");
+};
+
+export const clearCacheByPattern = (pattern: string): void => {
+  for (const [key] of cache) {
+    if (key.includes(pattern)) {
+      cache.delete(key);
+    }
+  }
+  console.log(`🔥 Cache cleared for pattern: ${pattern}`);
+};
+```
+
+### Cache-First Implementation Rules
+
+1. **Initial Dashboard Load**
+   ```typescript
+   // ✅ CORRECT: Check cache first, fallback to API
+   useEffect(() => {
+     fetchCampaignData(); // Will check cache first
+   }, [selectedAccount, selectedDateRange]);
+   ```
+
+2. **Navigation Between Pages**
+   ```typescript
+   // ✅ CORRECT: Use cached data, no new API calls
+   const handlePageChange = (newPage: string) => {
+     setCurrentPage(newPage); // Uses existing cached data
+   };
+   ```
+
+3. **Refresh Button Implementation**
+   ```typescript
+   // ✅ CORRECT: Clear cache + force fresh calls
+   const handleRefresh = async () => {
+     setLoading(true);
+     clearCache(); // Clear all cached data
+     
+     // Force fresh API calls for all data
+     await Promise.all([
+       fetchCampaignData(true), // forceRefresh = true
+       fetchHistoricalData(true),
+       fetchAnomalies(true)
+     ]);
+     
+     setLoading(false);
+   };
+   ```
+
+4. **Account/Date Range Changes**
+   ```typescript
+   // ✅ CORRECT: Different cache keys, check cache first
+   useEffect(() => {
+     // New cache key = new data check, but cache-first
+     fetchCampaignData(); 
+   }, [selectedAccount, selectedDateRange]);
+   ```
+
+### Cache Key Strategy
+
+```typescript
+// Build descriptive, unique cache keys
+const buildCacheKey = (type: string, params: Record<string, any>): string => {
+  const paramString = Object.entries(params)
+    .sort(([a], [b]) => a.localeCompare(b)) // Consistent ordering
+    .map(([key, value]) => `${key}_${value}`)
+    .join('_');
+  
+  return `${type}_${paramString}`;
+};
+
+// Examples:
+// "campaigns_customerId_123_days_30"
+// "adgroups_customerId_123_campaignId_456_days_7"
+// "keywords_customerId_123_dataType_keywords_days_30"
+```
+
+### Performance Optimization for Large Datasets
+
+```typescript
+// Chunk large API responses for better UX
+const useLargeDataset = (fetchFn: () => Promise<any[]>) => {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    
+    const result = await fetchFn();
+    
+    // Process in chunks to avoid blocking UI
+    const chunkSize = 100;
+    for (let i = 0; i < result.length; i += chunkSize) {
+      const chunk = result.slice(i, i + chunkSize);
+      setData(prev => [...prev, ...chunk]);
+      
+      // Yield to browser between chunks
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    
+    setLoading(false);
+  }, [fetchFn]);
+  
+  return { data, loading, loadData };
+};
+```
 ```
 
 ### PPC Dashboard Specific Guidelines
+- **Cache-First Strategy**: Always check cache before API calls
 - Prioritize performance for large datasets (Google Ads API responses)
 - Implement proper loading states for metric cards and charts
 - Use React.memo for expensive chart components
 - Follow glassmorphism design patterns for premium UI
-- Optimize for real-time data updates without full re-renders
-- Handle API rate limiting gracefully
+- Optimize for cached data updates without API calls during navigation
+- Handle API rate limiting gracefully with client-side retry logic
 - Implement proper error boundaries for API failures
+- **Refresh Strategy**: Clear all cache on refresh button click
+- Cache data with descriptive keys including account and date range parameters
 
 ### Component Patterns
-- Create reusable metric card components with consistent hover effects
+- Create reusable metric card components with cached data display
 - Use compound components for complex dashboard widgets
-- Implement skeleton loaders for async data loading
+- Implement skeleton loaders only for initial loads and refresh actions
 - Follow consistent spacing and typography scales
+- Build custom hooks for dashboard-specific caching logic
+- **Navigation Pattern**: Switch views without triggering API calls
+
+### Performance Optimization
+- Use React.memo for components that render frequently
+- Implement useMemo for expensive calculations
+- Use useCallback for event handlers passed to child components
+- Consider virtualization for large lists (campaigns, keywords)
+- Optimize chart re-renders with proper dependencies
+
+## Client-Side Error Handling
+
+### Error Boundaries
+```typescript
+class DashboardErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Dashboard error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <ErrorFallback error={this.state.error} />;
+    }
+    return this.props.children;
+  }
+}
+```
+
+### Loading States
+- Show skeleton loaders for initial data loading
+- Display inline loading indicators for user actions
+- Use optimistic updates where appropriate
+- Implement graceful degradation for failed requests
+
+## Data Management Patterns
+
+### Data Management Patterns
+
+### Cache-First Architecture
+The dashboard follows a strict cache-first pattern:
+- **Dashboard Open**: Check cache → if miss, make API call → save to cache
+- **Page Navigation**: Use cached data only (no API calls)
+- **Refresh Button**: Clear cache → force fresh API calls → update cache
+- **Account/Date Change**: New cache key → check cache → fallback to API
+
+```typescript
+// Cache implementation with TTL and pattern clearing
+const cache = new Map<string, { data: any; timestamp: number }>();
+
+const getFromCache = (key: string, ttlMinutes: number = 30): any | null => {
+  const cached = cache.get(key);
+  if (!cached) {
+    console.log(`🎯 CACHE MISS for key: ${key}`);
+    return null;
+  }
+  
+  const isExpired = Date.now() - cached.timestamp > ttlMinutes * 60 * 1000;
+  if (isExpired) {
+    cache.delete(key);
+    console.log(`⏰ CACHE EXPIRED for key: ${key}`);
+    return null;
+  }
+  
+  console.log(`💾 CACHE HIT for key: ${key}`);
+  return cached.data;
+};
+
+const saveToCache = (key: string, data: any): void => {
+  cache.set(key, { data, timestamp: Date.now() });
+  console.log(`💾 SAVED TO CACHE: ${key}`);
+};
+
+const clearCache = (): void => {
+  const size = cache.size;
+  cache.clear();
+  console.log(`🔥 CLEARED ENTIRE CACHE (${size} items)`);
+};
+
+const invalidateCacheByAccount = (accountId: string): void => {
+  let cleared = 0;
+  for (const [key] of cache) {
+    if (key.includes(`_${accountId}_`)) {
+      cache.delete(key);
+      cleared++;
+    }
+  }
+  console.log(`🔥 CLEARED ${cleared} cache entries for account ${accountId}`);
+};
+```
+
+### Anti-Patterns to Avoid
+
+```typescript
+// ❌ WRONG: Making API calls on every navigation
+const handlePageChange = async (newPage: string) => {
+  setLoading(true);
+  await fetchCampaignData(); // DON'T DO THIS
+  setCurrentPage(newPage);
+  setLoading(false);
+};
+
+// ✅ CORRECT: Use cached data for navigation
+const handlePageChange = (newPage: string) => {
+  setCurrentPage(newPage); // Data already cached
+};
+
+// ❌ WRONG: Not using cache on component mount
+useEffect(() => {
+  fetchFromAPI(); // Always hits API
+}, []);
+
+// ✅ CORRECT: Cache-first approach
+useEffect(() => {
+  fetchDataWithCache(); // Checks cache first
+}, []);
+
+// ❌ WRONG: Refresh without clearing cache
+const handleRefresh = () => {
+  fetchCampaignData(); // Still uses cache!
+};
+
+// ✅ CORRECT: Clear cache then fetch fresh
+const handleRefresh = () => {
+  clearCache();
+  fetchCampaignData(true); // Force fresh data
+};
+```
+
+### State Updates
+- Use functional updates for state that depends on previous state
+- Batch related state updates when possible
+- Consider using useReducer for complex state logic
+- Implement undo/redo functionality where appropriate
+
+## Component Communication
+
+### Props vs Context
+- Use props for simple parent-child communication
+- Use Context for deeply nested prop drilling
+- Create specific contexts for different concerns (user, theme, data)
+- Avoid overusing Context - prefer component composition
+
+### Custom Hooks
+- Extract reusable logic into custom hooks
+- Follow the "use" naming convention
+- Return objects for multiple values, tuples for two values
+- Keep hooks focused on a single responsibility
 
 ---
 
@@ -113,6 +456,7 @@ This is a **premium, minimal PPC management dashboard** targeting high-end users
 - **Consistent**: Unified color palette, spacing, and interaction patterns
 - **Functional**: Every element serves a clear purpose
 - **Scannable**: Easy to read and understand at a glance
+- **Responsive**: Optimized for client-side performance and interactivity
 
 ## 🎨 Color System
 
@@ -158,6 +502,7 @@ This is a **premium, minimal PPC management dashboard** targeting high-end users
 - Selected state: Colored background + visible border
 - Spacing: Consistent padding and margins
 - Typography: Clear hierarchy with numbers emphasized
+- Interactive: Hover effects and selection states
 
 ### Interactive Elements:
 - Buttons: `bg-gray-50 hover:bg-gray-100` (no heavy borders)
@@ -211,6 +556,12 @@ This is a **premium, minimal PPC management dashboard** targeting high-end users
 ### Focus States:
 - `focus:outline-none focus:ring-2 focus:ring-blue-500`
 
+### Loading States:
+- Skeleton loaders for content
+- Spinner animations for actions
+- Optimistic updates where possible
+- Graceful error handling
+
 ## 🚫 What to Avoid
 
 ### UI Elements:
@@ -226,6 +577,12 @@ This is a **premium, minimal PPC management dashboard** targeting high-end users
 - Mixed border styles
 - Heavy visual emphasis everywhere
 
+### Performance:
+- Unnecessary re-renders
+- Blocking UI updates
+- Heavy computations in render
+- Memory leaks from uncleaned effects
+
 ### Content:
 - Redundant branding
 - Unnecessary labels
@@ -234,7 +591,7 @@ This is a **premium, minimal PPC management dashboard** targeting high-end users
 
 ## ✅ Quality Checklist
 
-Before implementing any UI change, verify:
+Before implementing any component, verify:
 - [ ] Uses established color palette
 - [ ] Maintains consistent spacing
 - [ ] Follows minimal design principles
@@ -242,10 +599,13 @@ Before implementing any UI change, verify:
 - [ ] Serves a clear functional purpose
 - [ ] Maintains visual hierarchy
 - [ ] Works with existing components
+- [ ] Handles loading and error states
+- [ ] Is performance optimized
+- [ ] Uses proper TypeScript types
 
 ## 🎯 Target Aesthetic
 
 **Think**: Google Ads Editor, Optmyzr, enterprise SaaS tools
 **NOT**: Flashy startup dashboards, gaming interfaces, consumer apps
 
-The goal is sophisticated simplicity that conveys professionalism and expertise.
+The goal is sophisticated simplicity that conveys professionalism and expertise through excellent client-side user experience.

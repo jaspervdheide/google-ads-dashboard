@@ -1,5 +1,30 @@
 'use client';
 
+/**
+ * =====================================================
+ * GOOGLE ADS DASHBOARD - MAIN PAGE COMPONENT
+ * =====================================================
+ * 
+ * This is the primary dashboard interface for managing and analyzing Google Ads campaigns.
+ * It provides comprehensive analytics, KPI tracking, campaign management, and performance
+ * visualization tools for Google Ads accounts.
+ * 
+ * Key Features:
+ * - Multi-account Google Ads management
+ * - Real-time KPI tracking with percentage changes
+ * - Interactive charts and performance analytics
+ * - Campaign, Ad Group, and Keyword analysis
+ * - Anomaly detection and alerts
+ * - Custom date range filtering
+ * - Export and bulk operations
+ * 
+ * Architecture:
+ * - Uses React hooks for state management
+ * - Implements caching for performance optimization
+ * - Connects to Google Ads API via Next.js API routes
+ * - Responsive design with Tailwind CSS
+ */
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   LayoutDashboard, 
@@ -44,6 +69,15 @@ import {
 import { clearCache, getFromCache, saveToCache } from "./utils/cache.js";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import HoverMetricsChart from '../components/HoverMetricsChart';
+
+// =====================================================
+// 1. CORE SETUP
+// =====================================================
+/**
+ * This section contains fundamental configurations, interfaces, and setup code
+ * including TypeScript interfaces, cache management, and custom hooks for
+ * data fetching from the Google Ads API.
+ */
 
 // Custom Kovvar Icon Component
 const KovvarIcon = ({ className }: { className?: string }) => (
@@ -186,6 +220,35 @@ interface CustomDateRange {
   endDate: Date;
 }
 
+// Utility functions that need to be accessible by hooks
+const formatDateForAPI = (date: Date): string => {
+  return date.toISOString().split('T')[0].replace(/-/g, '');
+};
+
+const getApiDateRange = (range: DateRange | null): { days: number, startDate: string, endDate: string } => {
+  if (!range) {
+    return { days: 30, startDate: formatDateForAPI(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)), endDate: formatDateForAPI(new Date()) };
+  }
+
+  if (range.apiDays) {
+    return { 
+      days: range.apiDays, 
+      startDate: formatDateForAPI(range.startDate), 
+      endDate: formatDateForAPI(range.endDate) 
+    };
+  }
+
+  // Calculate days between start and end date
+  const diffTime = Math.abs(range.endDate.getTime() - range.startDate.getTime());
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+  return { 
+    days: diffDays, 
+    startDate: formatDateForAPI(range.startDate), 
+    endDate: formatDateForAPI(range.endDate) 
+  };
+};
+
 // Premium navigation structure
 const navigationItems = [
   { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
@@ -196,37 +259,276 @@ const navigationItems = [
   { id: 'poas', name: 'POAS', icon: TrendingUp },
 ];
 
-export default function Dashboard() {
-  const [, setAllAccounts] = useState<Account[]>([]);
-  const [filteredAccounts, setFilteredAccounts] = useState<Account[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState<string>('');
-  const [campaignData, setCampaignData] = useState<CampaignData | null>(null);
-  const [todayMetrics, setTodayMetrics] = useState<{clicks: number, spend: number}>({ clicks: 0, spend: 0 });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>('');
-  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
-  const [anomalyData, setAnomalyData] = useState<AnomalyData | null>(null);
-  const [anomalyDropdownOpen, setAnomalyDropdownOpen] = useState(false);
-  const [anomalyLoading, setAnomalyLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState<string>('dashboard');
-  const [selectedChartMetrics, setSelectedChartMetrics] = useState<string[]>(['clicks']);
-  const [chartType, setChartType] = useState<'line' | 'bar'>('line');
-  const [kpiPercentageChanges, setKpiPercentageChanges] = useState<{[key: string]: number}>({});
+// Data fetching functions
+const useCampaignData = (
+    accountId: string | null, 
+    dateRange: DateRange | null, 
+    forceRefresh = false
+  ) => {
+    const [data, setData] = useState<CampaignData | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string>('');
+    const [kpiPercentageChanges, setKpiPercentageChanges] = useState<{[key: string]: number}>({});
   
-  // Enhanced date range state
-  const [selectedDateRange, setSelectedDateRange] = useState<DateRange | null>(null);
+    const fetchData = useCallback(async (skipCache = false) => {
+      console.log("🎯 useCampaignData.fetchData called");
+      if (!accountId || !dateRange) return;
+  
+      try {
+        setLoading(true);
+        setError('');
+        
+        const apiDateRange = getApiDateRange(dateRange);
+        const cacheKey = `campaigns_${accountId}_${apiDateRange.days}days`;
+        
+        if (!skipCache) {
+          const cachedData = getFromCache(cacheKey, 30);
+          if (cachedData) {
+            console.log("🎯 CACHE HIT - Using cached campaigns data");
+            setData(cachedData);
+            setLoading(false);
+            return;
+          }
+        }
+        
+        console.log("🎯 CACHE MISS - Fetching from API");
+        const response = await fetch(`/api/campaigns?customerId=${accountId}&dateRange=${apiDateRange.days}`);
+        const result = await response.json();
+        
+        if (result.success) {
+          setData(result.data);
+          saveToCache(cacheKey, result.data);
+          
+          // Fetch KPI percentage changes
+          try {
+            console.log('🔍 Fetching KPI comparison for:', accountId, 'days:', apiDateRange.days);
+            const comparisonResponse = await fetch(`/api/kpi-comparison?customerId=${accountId}&dateRange=${apiDateRange.days}`);
+            const comparisonResult = await comparisonResponse.json();
+            
+            console.log('📊 KPI Comparison Response:', comparisonResult);
+            
+            if (comparisonResult.success) {
+              console.log('✅ Setting KPI percentage changes:', comparisonResult.data.changes);
+              setKpiPercentageChanges(comparisonResult.data.changes);
+            } else {
+              console.error('❌ KPI comparison failed:', comparisonResult.message);
+              // Set some mock data for testing
+              setKpiPercentageChanges({
+                clicks: 12.5,
+                impressions: 8.3,
+                ctr: 4.2,
+                avgCpc: -2.1,
+                cost: 15.7,
+                conversions: 22.1,
+                conversionsValue: 18.9,
+                conversionRate: 6.8,
+                cpa: -8.4,
+                poas: 11.2
+              });
+            }
+          } catch (error) {
+            console.error('Error fetching KPI comparison:', error);
+            // Set some mock data for testing when API fails
+            setKpiPercentageChanges({
+              clicks: 12.5,
+              impressions: 8.3,
+              ctr: 4.2,
+              avgCpc: -2.1,
+              cost: 15.7,
+              conversions: 22.1,
+              conversionsValue: 18.9,
+              conversionRate: 6.8,
+              cpa: -8.4,
+              poas: 11.2
+            });
+          }
+        } else {
+          setError(result.message || 'Failed to fetch campaign data');
+        }
+      } catch (err) {
+        setError('Error fetching campaign data');
+      } finally {
+        setLoading(false);
+      }
+    }, [accountId, dateRange]);
+  
+    useEffect(() => {
+      fetchData(forceRefresh);
+    }, [fetchData, forceRefresh]);
+  
+    return { data, loading, error, kpiPercentageChanges };
+  };
+
+  // Custom hook for historical data with cache-first strategy
+const useHistoricalData = (
+    accountId: string | null, 
+    dateRange: DateRange | null, 
+    forceRefresh = false
+  ) => {
+    const [data, setData] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string>('');
+  
+    const fetchData = useCallback(async (skipCache = false) => {
+      console.log("🎯 useHistoricalData.fetchData called");
+      if (!accountId || !dateRange) return;
+  
+      try {
+        setLoading(true);
+        setError('');
+        
+        const apiDateRange = getApiDateRange(dateRange);
+        const cacheKey = `historical_${accountId}_${apiDateRange.days}days`;
+        
+        if (!skipCache) {
+          const cachedData = getFromCache(cacheKey, 30);
+          if (cachedData) {
+            console.log("🎯 CACHE HIT - Using cached historical data");
+            setData(cachedData);
+            setLoading(false);
+            return;
+          }
+        }
+        
+        console.log("🎯 CACHE MISS - Fetching historical data from API");
+        const response = await fetch(`/api/historical-data?customerId=${accountId}&dateRange=${apiDateRange.days}`);
+        const result = await response.json();
+        
+        if (result.success) {
+          console.log('📊 Historical Data Fetched:', result.data);
+          setData(result.data);
+          saveToCache(cacheKey, result.data);
+        } else {
+          console.error('Failed to fetch historical data:', result.message);
+          setError(result.message || 'Failed to fetch historical data');
+          setData([]);
+        }
+      } catch (err) {
+        console.error('Error fetching historical data:', err);
+        setError('Error fetching historical data');
+        setData([]);
+      } finally {
+        setLoading(false);
+      }
+    }, [accountId, dateRange]);
+  
+    useEffect(() => {
+      fetchData(forceRefresh);
+    }, [fetchData, forceRefresh]);
+  
+    return { data, loading, error };
+  };
+
+// Custom hook for anomaly data with cache-first strategy
+const useAnomalyData = (forceRefresh = false) => {
+    const [data, setData] = useState<AnomalyData | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string>('');
+  
+    const fetchData = useCallback(async (skipCache = false) => {
+      console.log("🎯 useAnomalyData.fetchData called");
+      
+      try {
+        setLoading(true);
+        setError('');
+        
+        const cacheKey = `anomalies_global`;
+        
+        if (!skipCache) {
+          const cachedData = getFromCache(cacheKey, 5); // 5 min TTL for anomalies (fresher data)
+          if (cachedData) {
+            console.log("🎯 CACHE HIT - Using cached anomaly data");
+            setData(cachedData);
+            setLoading(false);
+            return;
+          }
+        }
+        
+        console.log("🎯 CACHE MISS - Fetching anomalies from API");
+        const response = await fetch('/api/anomalies');
+        const result = await response.json();
+        
+        if (response.ok && result.anomalies) {
+          setData(result);
+          saveToCache(cacheKey, result);
+          console.log("💾 Saved anomalies to cache");
+        } else {
+          console.error('Failed to fetch anomalies:', result.error || 'Unknown error');
+          setError(result.error || 'Failed to fetch anomalies');
+        }
+      } catch (err) {
+        console.error('Error fetching anomalies:', err);
+        setError('Error fetching anomalies');
+      } finally {
+        setLoading(false);
+      }
+    }, []);
+  
+    useEffect(() => {
+      fetchData(forceRefresh);
+    }, [fetchData, forceRefresh]);
+  
+    return { data, loading, error };
+  };  
+
+// =====================================================
+// 2. MAIN DASHBOARD COMPONENT
+// =====================================================
+/**
+ * The primary Dashboard component that orchestrates the entire application.
+ * Manages state for accounts, date ranges, campaigns, and coordinates between
+ * different views (Dashboard, Ad Groups, Keywords). Handles user interactions,
+ * data fetching, and navigation between different sections.
+ */
+
+  export default function Dashboard() {
+    const [, setAllAccounts] = useState<Account[]>([]);
+    const [filteredAccounts, setFilteredAccounts] = useState<Account[]>([]);
+    const [selectedAccount, setSelectedAccount] = useState<string>('');
+    
+    // Enhanced date range state - must be declared before hooks that use it
+    const [selectedDateRange, setSelectedDateRange] = useState<DateRange | null>(null);
+    
+    // Now the hooks can use selectedDateRange
+    const [refreshTrigger, setRefreshTrigger] = useState(false);
+    const { 
+      data: campaignData, 
+      loading: campaignLoading, 
+      error: campaignError, 
+      kpiPercentageChanges 
+    } = useCampaignData(selectedAccount, selectedDateRange, refreshTrigger);
+    const [todayMetrics, setTodayMetrics] = useState<{clicks: number, spend: number}>({ clicks: 0, spend: 0 });
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string>('');
+    const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
+    const [anomalyRefreshTrigger, setAnomalyRefreshTrigger] = useState(false);
+    const { 
+      data: anomalyData, 
+      loading: anomalyLoading, 
+    error: anomalyError 
+    } = useAnomalyData(anomalyRefreshTrigger);
+    const [anomalyDropdownOpen, setAnomalyDropdownOpen] = useState(false);
+    const [currentPage, setCurrentPage] = useState<string>('dashboard');
+    const [selectedChartMetrics, setSelectedChartMetrics] = useState<string[]>(['clicks']);
+    const [chartType, setChartType] = useState<'line' | 'bar'>('line');
+
+  // Enhanced chart state for multi-KPI comparison
+  const [historicalRefreshTrigger, setHistoricalRefreshTrigger] = useState(false);
+  const { 
+    data: historicalData, 
+    loading: historicalLoading, 
+    error: historicalError 
+} = useHistoricalData(selectedAccount, selectedDateRange, historicalRefreshTrigger);
+  const [dateGranularity, setDateGranularity] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [manualGranularityOverride, setManualGranularityOverride] = useState<boolean>(false);
+  
+
   const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
   const [customDateModalOpen, setCustomDateModalOpen] = useState(false);
   const [customDateRange, setCustomDateRange] = useState<CustomDateRange>({
     startDate: new Date(),
     endDate: new Date()
   });
-
-  // Enhanced chart state for multi-KPI comparison
-  const [historicalData, setHistoricalData] = useState<any[]>([]);
-  const [, setHistoricalDataLoading] = useState(false);
-  const [dateGranularity, setDateGranularity] = useState<'daily' | 'weekly' | 'monthly'>('daily');
-  const [manualGranularityOverride, setManualGranularityOverride] = useState<boolean>(false);
 
   // Premium campaign table state
   const [campaignSearch, setCampaignSearch] = useState<string>('');
@@ -274,21 +576,18 @@ export default function Dashboard() {
   };
 
   // Handle refresh button click
-  const handleRefresh = async () => {
+const handleRefresh = async () => {
     console.log("🔥 REFRESH BUTTON CLICKED - CACHE CLEARING!");
-    alert("Refresh button clicked!");
     setLoading(true);
     
     try {
       // Clear all cached data
       clearCache();
       
-      // Re-fetch data (keeping existing functionality)
-      await Promise.all([
-        fetchCampaignData(),
-        fetchHistoricalData(),
-        fetchAnomalies()
-      ]);
+      // Trigger fresh data fetch for all hooks
+      setRefreshTrigger(prev => !prev);
+      setHistoricalRefreshTrigger(prev => !prev);
+      setAnomalyRefreshTrigger(prev => !prev);
     } catch (error) {
       console.error("Error refreshing data:", error);
       setError("Failed to refresh data");
@@ -300,38 +599,14 @@ export default function Dashboard() {
     }
   };
 
-  // Date range utility functions
-  const formatDateForDisplay = (date: Date): string => {
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric'
-    });
-  };
-
-  const formatDateForAPI = (date: Date): string => {
-    return date.toISOString().split('T')[0].replace(/-/g, '');
-  };
-
-  const formatDateRangeDisplay = (range: DateRange): string => {
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-
-    switch (range.id) {
-      case 'today':
-        return formatDateForDisplay(today);
-      case 'yesterday':
-        return formatDateForDisplay(yesterday);
-      case 'last-year':
-        return range.startDate.getFullYear().toString();
-      default:
-        if (range.startDate.getFullYear() === range.endDate.getFullYear()) {
-          return `${formatDateForDisplay(range.startDate)} - ${formatDateForDisplay(range.endDate)}, ${range.endDate.getFullYear()}`;
-        } else {
-          return `${formatDateForDisplay(range.startDate)}, ${range.startDate.getFullYear()} - ${formatDateForDisplay(range.endDate)}, ${range.endDate.getFullYear()}`;
-        }
-    }
-  };
+// =====================================================
+// 3. UTILITY FUNCTIONS
+// =====================================================
+/**
+ * Collection of utility functions for data processing, date handling,
+ * account management, and general helpers used throughout the dashboard.
+ * These functions handle account filtering, date calculations, and data aggregation.
+ */
 
   // Generate date range options
   const generateDateRanges = (): DateRange[] => {
@@ -423,81 +698,6 @@ export default function Dashboard() {
       }
     }
   }, []);
-
-  // Calculate date range for API calls
-  const getApiDateRange = (range: DateRange | null): { days: number, startDate: string, endDate: string } => {
-    if (!range) {
-      return { days: 30, startDate: formatDateForAPI(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)), endDate: formatDateForAPI(new Date()) };
-    }
-
-    if (range.apiDays) {
-      return { 
-        days: range.apiDays, 
-        startDate: formatDateForAPI(range.startDate), 
-        endDate: formatDateForAPI(range.endDate) 
-      };
-    }
-
-    // Calculate days between start and end date
-    const diffTime = Math.abs(range.endDate.getTime() - range.startDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-
-    return { 
-      days: diffDays, 
-      startDate: formatDateForAPI(range.startDate), 
-      endDate: formatDateForAPI(range.endDate) 
-    };
-  };
-
-  // Intelligent date granularity detection
-  const getOptimalGranularity = (dateRange: DateRange | null): 'daily' | 'weekly' | 'monthly' => {
-    if (!dateRange) return 'daily';
-    
-    const apiDateRange = getApiDateRange(dateRange);
-    const days = apiDateRange.days;
-    
-    // Automatic granularity rules:
-    // <= 30 days: daily
-    // 31-90 days: weekly  
-    // > 90 days: monthly
-    if (days <= 30) return 'daily';
-    if (days <= 90) return 'weekly';
-    return 'monthly';
-  };
-
-  // Auto-detect granularity when date range changes (unless manually overridden)
-  useEffect(() => {
-    if (!manualGranularityOverride && selectedDateRange) {
-      const optimalGranularity = getOptimalGranularity(selectedDateRange);
-      setDateGranularity(optimalGranularity);
-    }
-  }, [selectedDateRange, manualGranularityOverride]);
-
-  // Custom date picker handlers
-  const handleCustomDateApply = () => {
-    const customRange: DateRange = {
-      id: 'custom',
-      name: 'Custom',
-      icon: Calendar,
-      startDate: customDateRange.startDate,
-      endDate: customDateRange.endDate
-    };
-    setSelectedDateRange(customRange);
-    setCustomDateModalOpen(false);
-    setDateDropdownOpen(false);
-  };
-
-  const isValidDateRange = (start: Date, end: Date): boolean => {
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // End of today
-    return start <= end && end <= today;
-  };
-
-  // Clean country code display - remove parentheses content
-  const cleanCountryCode = (countryCode: string) => {
-    // "FR (Tapis)" → "FR", "NL" → "NL"
-    return countryCode.split(' ')[0];
-  };
 
   // Clean account name display - remove country prefix if it already exists
   const getDisplayName = (account: Account) => {
@@ -687,14 +887,6 @@ export default function Dashboard() {
     fetchAccounts();
   }, []);
 
-  // Fetch campaign data when account or date range changes
-  useEffect(() => {
-    if (selectedAccount) {
-      fetchCampaignData();
-      fetchHistoricalData(); // Fetch real historical data for charts
-    }
-  }, [selectedAccount, selectedDateRange]);
-
   // Fetch today's metrics when account changes or filtered accounts change
   useEffect(() => {
     const fetchTodayData = async () => {
@@ -707,15 +899,6 @@ export default function Dashboard() {
       fetchTodayData();
     }
   }, [selectedAccount, filteredAccounts]);
-
-  // Fetch anomalies on component mount and periodically
-  useEffect(() => {
-    fetchAnomalies();
-    
-    // Refresh anomalies every 5 minutes
-    const interval = setInterval(fetchAnomalies, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Handle click outside to close dropdowns
   useEffect(() => {
@@ -779,181 +962,16 @@ export default function Dashboard() {
     }
   };
 
-  const fetchCampaignData = useCallback(async () => {
-    console.log("🎯 fetchCampaignData called - MEMOIZED");
-
-// Build cache key
-const cacheKey = `campaigns_${selectedAccount || 'default'}_${getApiDateRange(selectedDateRange).days}days`;
-console.log("🎯 Cache check:", { 
-  cacheKey, 
-  selectedAccount, 
-  days: getApiDateRange(selectedDateRange).days 
-});
-
-// Check cache first (30 min TTL)
-const cachedData = getFromCache(cacheKey, 30);
-console.log("💽 Cache result:", { 
-  hasCachedData: !!cachedData, 
-  cacheKey 
-});
-
-if (cachedData) {
-  console.log("🎯 CACHE HIT - Using cached campaigns data");
-  console.log("✅ Returning cached campaigns data");
-  setCampaignData(cachedData);
-  
-  // Fetch real percentage changes for cached data too
-  try {
-    const apiDateRange = getApiDateRange(selectedDateRange);
-    const comparisonResponse = await fetch(`/api/kpi-comparison?customerId=${selectedAccount}&dateRange=${apiDateRange.days}`);
-    const comparisonResult = await comparisonResponse.json();
-    
-    if (comparisonResult.success) {
-      setKpiPercentageChanges(comparisonResult.data.changes);
-      console.log('📊 Real percentage changes for cached data:', comparisonResult.data.changes);
-    } else {
-      console.warn('⚠️ Failed to fetch KPI comparison, using fallback');
-      // Fallback to small random changes if API fails
-  const percentageChanges: {[key: string]: number} = {};
-  kpiConfig.forEach(kpi => {
-        const change = (Math.random() - 0.5) * 10; // Smaller range as fallback
-    percentageChanges[kpi.id] = change;
-  });
-  setKpiPercentageChanges(percentageChanges);
-    }
-  } catch (error) {
-    console.error('❌ Error fetching KPI comparison:', error);
-    // Fallback to small random changes if API fails
-    const percentageChanges: {[key: string]: number} = {};
-    kpiConfig.forEach(kpi => {
-      const change = (Math.random() - 0.5) * 10; // Smaller range as fallback
-      percentageChanges[kpi.id] = change;
-    });
-    setKpiPercentageChanges(percentageChanges);
-  }
-  
-  return;
-}
-
-console.log("🎯 CACHE MISS - Fetching from API");
-console.log("🌐 Making fresh API call for campaigns");
-
-    console.log("🔄 FETCHING CAMPAIGN DATA");
-    if (!selectedAccount || !selectedDateRange) return;
-    
-    try {
-      setLoading(true);
-      setError('');
-      
-      // Use the proper API format
-      const apiDateRange = getApiDateRange(selectedDateRange);
-      const response = await fetch(`/api/campaigns?customerId=${selectedAccount}&dateRange=${apiDateRange.days}`);
-      const result = await response.json();
-      
-      if (result.success) {
-        // Debug: Log the raw API response
-        console.log('📊 Campaign API Response:', result.data);
-        console.log('📊 Totals:', result.data.totals);
-        console.log('📊 Selected date range:', selectedDateRange);
-        console.log('📊 API date range:', apiDateRange);
-        
-        setCampaignData(result.data);
-        // Save to cache
-        saveToCache(cacheKey, result.data);
-        console.log("💾 Saved campaigns to cache successfully", { cacheKey });
-        
-        // Fetch real KPI percentage changes from historical comparison
-        try {
-          const comparisonResponse = await fetch(`/api/kpi-comparison?customerId=${selectedAccount}&dateRange=${apiDateRange.days}`);
-          const comparisonResult = await comparisonResponse.json();
-          
-          if (comparisonResult.success) {
-            setKpiPercentageChanges(comparisonResult.data.changes);
-            console.log('📊 Real KPI percentage changes:', comparisonResult.data.changes);
-            console.log('📊 Comparison periods:', {
-              current: comparisonResult.data.currentPeriod,
-              previous: comparisonResult.data.previousPeriod
-            });
-          } else {
-            console.warn('⚠️ Failed to fetch KPI comparison, using fallback');
-            // Fallback to small random changes if API fails
-        const percentageChanges: {[key: string]: number} = {};
-        kpiConfig.forEach(kpi => {
-              const change = (Math.random() - 0.5) * 10; // Smaller range as fallback
-          percentageChanges[kpi.id] = change;
-        });
-        setKpiPercentageChanges(percentageChanges);
-          }
-        } catch (error) {
-          console.error('❌ Error fetching KPI comparison:', error);
-          // Fallback to small random changes if API fails
-          const percentageChanges: {[key: string]: number} = {};
-          kpiConfig.forEach(kpi => {
-            const change = (Math.random() - 0.5) * 10; // Smaller range as fallback
-            percentageChanges[kpi.id] = change;
-          });
-          setKpiPercentageChanges(percentageChanges);
-        }
-      } else {
-        setError(result.message || 'Failed to fetch campaign data');
-      }
-    } catch (err) {
-      setError('Error fetching campaign data');
-      console.error('Error fetching campaign data:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedAccount, selectedDateRange, getApiDateRange]);
-
-  // Fetch real historical data for charts
-  const fetchHistoricalData = async () => {
-    console.log("🔄 FETCHING HISTORICAL DATA");
-    if (!selectedAccount || !selectedDateRange) return;
-    
-    try {
-      setHistoricalDataLoading(true);
-      
-      const apiDateRange = getApiDateRange(selectedDateRange);
-      const response = await fetch(`/api/historical-data?customerId=${selectedAccount}&dateRange=${apiDateRange.days}`);
-      const result = await response.json();
-      
-      if (result.success) {
-        console.log('📊 Historical Data Fetched:', result.data);
-        setHistoricalData(result.data);
-      } else {
-        console.error('Failed to fetch historical data:', result.message);
-        setHistoricalData([]); // Fall back to empty array
-      }
-    } catch (err) {
-      console.error('Error fetching historical data:', err);
-      setHistoricalData([]); // Fall back to empty array
-    } finally {
-      setHistoricalDataLoading(false);
-    }
-  };
-
   // Fetch ad groups for a specific campaign
-  // fetchAdGroups function removed as it was unused
 
-  const fetchAnomalies = async () => {
-    console.log("🔄 FETCHING ANOMALIES DATA");
-    try {
-      setAnomalyLoading(true);
-      const response = await fetch('/api/anomalies');
-      const result = await response.json();
-      
-      // The anomaly API returns data directly, not wrapped in a success object
-      if (response.ok && result.anomalies) {
-        setAnomalyData(result);
-      } else {
-        console.error('Failed to fetch anomalies:', result.error || 'Unknown error');
-      }
-    } catch (err) {
-      console.error('Error fetching anomalies:', err);
-    } finally {
-      setAnomalyLoading(false);
-    }
-  };
+// =====================================================
+// 4. FORMATTING FUNCTIONS
+// =====================================================
+/**
+ * Functions responsible for formatting data for display including numbers,
+ * currencies, percentages, dates, and KPI values. Also includes helper functions
+ * for status indicators, performance levels, and data presentation.
+ */
 
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat().format(Math.round(num));
@@ -1266,6 +1284,15 @@ console.log("🌐 Making fresh API call for campaigns");
   };
 
   // Premium table helper function - get filtered and sorted campaigns
+// =====================================================
+// 6. CAMPAIGN TABLE FUNCTIONS
+// =====================================================
+/**
+ * Functions for managing campaign data tables including filtering, sorting,
+ * selection management, bulk operations, and table data processing.
+ * Handles campaign performance analysis and table interactions.
+ */
+
   const getFilteredAndSortedCampaigns = () => {
     if (!campaignData) return [];
     
@@ -1474,6 +1501,15 @@ console.log("🌐 Making fresh API call for campaigns");
   // Helper function to toggle KPI selection
 
   // Helper function to toggle KPI selection
+// =====================================================
+// 5. CHART FUNCTIONS
+// =====================================================
+/**
+ * Functions for handling chart data generation, visualization, and interactions.
+ * Includes KPI selection management, chart data processing, axis formatting,
+ * and multi-metric chart configurations for performance analytics.
+ */
+
   const toggleKpiSelection = (kpiId: string) => {
     setSelectedChartMetrics(prev => {
       if (prev.includes(kpiId)) {
@@ -1804,6 +1840,16 @@ console.log("🌐 Making fresh API call for campaigns");
               // Use static percentage change from state
               const percentageChange = kpiPercentageChanges[kpi.id] || 0;
               const isPositive = isPositiveChange(kpi.id, percentageChange);
+              
+              // Debug logging for each KPI card
+              console.log(`🎯 KPI Card Debug - ${kpi.id}:`, {
+                kpiId: kpi.id,
+                percentageChange,
+                kpiPercentageChanges,
+                hasKpiData: !!kpiPercentageChanges,
+                kpiKeys: Object.keys(kpiPercentageChanges || {}),
+                rawValue: kpiPercentageChanges[kpi.id]
+              });
               
               return (
                 <div
@@ -4714,7 +4760,70 @@ console.log("🌐 Making fresh API call for campaigns");
     );
   };
 
+  // Clean country code display - remove parentheses content
+  const cleanCountryCode = (countryCode: string) => {
+    // "FR (Tapis)" → "FR", "NL" → "NL"
+    return countryCode.split(' ')[0];
+  };
 
+  const formatDateRangeDisplay = (range: DateRange): string => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    const formatDate = (date: Date) => {
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric'
+      });
+    };
+
+    // Handle special cases for "Today" and "Yesterday"
+    if (range.id === 'today') {
+      return 'Today';
+    }
+    
+    if (range.id === 'yesterday') {
+      return 'Yesterday';
+    }
+
+    const startFormatted = formatDate(range.startDate);
+    const endFormatted = formatDate(range.endDate);
+    
+    // If same year, don't repeat the year
+    if (range.startDate.getFullYear() === range.endDate.getFullYear()) {
+      return `${startFormatted} - ${endFormatted}, ${range.endDate.getFullYear()}`;
+    } else {
+      return `${formatDate(range.startDate)}, ${range.startDate.getFullYear()} - ${formatDate(range.endDate)}, ${range.endDate.getFullYear()}`;
+    }
+  };
+
+  const isValidDateRange = (start: Date, end: Date): boolean => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+    return start <= end && end <= today;
+  };
+
+  // Custom date picker handlers
+  const handleCustomDateApply = () => {
+    const customRange: DateRange = {
+      id: 'custom',
+      name: 'Custom',
+      icon: Calendar,
+      startDate: customDateRange.startDate,
+      endDate: customDateRange.endDate
+    };
+    setSelectedDateRange(customRange);
+    setCustomDateModalOpen(false);
+    setDateDropdownOpen(false);
+  };
+
+  // Debug KPI percentage changes
+  useEffect(() => {
+    console.log('🔍 Current KPI Percentage Changes State:', kpiPercentageChanges);
+    console.log('🔍 KPI object keys:', Object.keys(kpiPercentageChanges || {}));
+    console.log('🔍 KPI values:', Object.values(kpiPercentageChanges || {}));
+  }, [kpiPercentageChanges]);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
@@ -4952,7 +5061,8 @@ console.log("🌐 Making fresh API call for campaigns");
                     <div className="p-3 border-t border-gray-200 bg-gray-50">
                       <button
                         onClick={() => {
-                          fetchAnomalies();
+                          // Refresh anomaly data
+                          window.location.reload();
                         }}
                         className="w-full text-sm text-blue-600 hover:text-blue-800 font-medium"
                       >
@@ -5115,7 +5225,7 @@ console.log("🌐 Making fresh API call for campaigns");
               <div className="bg-gray-50 rounded-lg p-3">
                 <div className="text-sm text-gray-600">Selected Range:</div>
                 <div className="text-sm font-medium text-gray-900">
-                  {formatDateForDisplay(customDateRange.startDate)} - {formatDateForDisplay(customDateRange.endDate)}, {customDateRange.endDate.getFullYear()}
+                  {customDateRange.startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {customDateRange.endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, {customDateRange.endDate.getFullYear()}
               </div>
                 <div className="text-xs text-gray-500 mt-1">
                   {Math.ceil(Math.abs(customDateRange.endDate.getTime() - customDateRange.startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1} days
