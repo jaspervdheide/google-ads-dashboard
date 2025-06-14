@@ -107,6 +107,87 @@ export async function GET(request: Request) {
         });
         
         const traditionalGroups = Array.from(traditionalGroupMap.values());
+        
+        // Fetch Quality Score data for traditional ad groups
+        if (traditionalGroups.length > 0) {
+          console.log('Fetching Quality Score data for traditional ad groups...');
+          
+          // Try a simpler Quality Score query without date filter first
+          const qualityScoreQuery = `
+            SELECT 
+              ad_group_criterion.ad_group,
+              ad_group_criterion.quality_info.quality_score,
+              ad_group_criterion.keyword.text
+            FROM ad_group_criterion 
+            WHERE ad_group_criterion.type = 'KEYWORD'
+              AND ad_group_criterion.status IN ('ENABLED', 'PAUSED')
+              AND ad_group_criterion.quality_info.quality_score > 0
+              AND campaign.advertising_channel_type != 'PERFORMANCE_MAX'
+            LIMIT 1000
+          `;
+          
+          try {
+            console.log('Executing Quality Score query:', qualityScoreQuery);
+            const qualityScoreResults = await customer.query(qualityScoreQuery);
+            console.log(`Quality Score query returned ${qualityScoreResults.length} results`);
+            
+            // Calculate average Quality Score per ad group
+            const qualityScoreMap = new Map();
+            
+            qualityScoreResults.forEach((row: any, index: number) => {
+              const adGroupId = row.ad_group_criterion?.ad_group?.split('/').pop();
+              const qualityScore = row.ad_group_criterion?.quality_info?.quality_score;
+              const keywordText = row.ad_group_criterion?.keyword?.text;
+              
+              // Log first few results for debugging
+              if (index < 5) {
+                console.log(`Quality Score result ${index}:`, {
+                  adGroupId,
+                  qualityScore,
+                  keywordText,
+                  fullAdGroupPath: row.ad_group_criterion?.ad_group
+                });
+              }
+              
+              if (adGroupId && qualityScore && qualityScore > 0) {
+                if (!qualityScoreMap.has(adGroupId)) {
+                  qualityScoreMap.set(adGroupId, {
+                    totalScore: 0,
+                    count: 0
+                  });
+                }
+                
+                const data = qualityScoreMap.get(adGroupId);
+                
+                data.totalScore += qualityScore;
+                data.count += 1;
+              }
+            });
+            
+            console.log(`Quality Score map has ${qualityScoreMap.size} ad groups with data`);
+            
+            // Add Quality Score to traditional ad groups
+            traditionalGroups.forEach(group => {
+              const qualityData = qualityScoreMap.get(group.id);
+              if (qualityData && qualityData.count > 0) {
+                group.avgQualityScore = Math.round((qualityData.totalScore / qualityData.count) * 10) / 10;
+                console.log(`Ad Group ${group.id} (${group.name}) - Quality Score: ${group.avgQualityScore} (from ${qualityData.count} keywords)`);
+              } else {
+                group.avgQualityScore = null; // No Quality Score data available
+                console.log(`Ad Group ${group.id} (${group.name}) - No Quality Score data`);
+              }
+            });
+            
+            console.log(`Successfully calculated Quality Score for ${qualityScoreMap.size} ad groups`);
+          } catch (error) {
+            console.error('Error fetching Quality Score data:', error);
+            // Add null Quality Score to all groups if query fails
+            traditionalGroups.forEach(group => {
+              group.avgQualityScore = null;
+            });
+          }
+        }
+        
         allGroups.push(...traditionalGroups);
         
         console.log(`Successfully retrieved ${traditionalGroups.length} traditional ad groups`);

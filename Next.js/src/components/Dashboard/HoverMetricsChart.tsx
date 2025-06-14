@@ -11,6 +11,8 @@ interface HoverMetricsChartProps {
   metricValue: string | number;
   campaignName: string;
   campaignId: string;
+  onChartHover?: () => void;
+  onChartLeave?: () => void;
 }
 
 interface DailyData {
@@ -25,10 +27,13 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
   metricType,
   metricValue,
   campaignName,
-  campaignId
+  campaignId,
+  onChartHover,
+  onChartLeave
 }) => {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
 
   useEffect(() => {
     if (!isVisible || !campaignId || !metricType) return;
@@ -73,6 +78,9 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
                 break;
               case 'roas':
                 value = day.roas || 0;
+                break;
+              case 'cpa':
+                value = day.cpa || 0;
                 break;
               default:
                 value = 0;
@@ -167,6 +175,12 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
             variationFactor = 0.3;
             trendFactor = (days - i) * 0.004; // Improving ROAS
             break;
+            
+          case 'cpa':
+            // CPA: Cost metric, optimization trend
+            variationFactor = 0.4;
+            trendFactor = -(days - i) * 0.002; // Decreasing CPA is better
+            break;
         }
         
         // Apply variation and trend
@@ -198,7 +212,8 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
         return `€${value.toFixed(2)}`;
       case 'ctr':
       case 'conversionRate':
-        return `${(value * 100).toFixed(2)}%`;
+        // CTR is already formatted as percentage, don't multiply by 100 again
+        return `${value.toFixed(2)}%`;
       case 'roas':
         return `${value.toFixed(2)}x`;
       case 'clicks':
@@ -231,7 +246,7 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
       conversions: 'Conversions',
       conversionsValue: 'Conv. Value',
       cpa: 'CPA',
-      roas: 'ROAS',
+      roas: 'POAS',
       conversionRate: 'Conv. Rate'
     };
     return labels[metric] || metric;
@@ -246,8 +261,6 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
     return recent > previous ? '#10b981' : recent < previous ? '#ef4444' : '#6b7280';
   };
 
-
-
   const getTrendIcon = () => {
     if (dailyData.length < 2) return null;
     
@@ -259,19 +272,49 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
     return null;
   };
 
+  // Calculate position - show on left for last two columns to prevent off-screen
+  const getChartPosition = () => {
+    const chartWidth = 320;
+    const isLastTwoColumns = metricType === 'conversionsValue' || metricType === 'roas';
+    
+    if (isLastTwoColumns) {
+      // Position to the left of the cursor
+      return {
+        left: position.x - chartWidth - 10,
+        top: position.y - 10
+      };
+    } else {
+      // Default position to the right
+      return {
+        left: position.x + 10,
+        top: position.y - 10
+      };
+    }
+  };
+
   if (!isVisible) return null;
+
+  const chartPosition = getChartPosition();
 
   return (
     <div
       className="fixed z-50 bg-white/95 border border-gray-100 rounded-xl"
       style={{
-        left: position.x + 10,
-        top: position.y - 10,
+        left: chartPosition.left,
+        top: chartPosition.top,
         width: '320px',
         height: '240px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
         backdropFilter: 'blur(10px)',
         borderColor: '#f1f5f9'
+      }}
+      onMouseEnter={() => {
+        setIsHovering(true);
+        onChartHover?.();
+      }}
+      onMouseLeave={() => {
+        setIsHovering(false);
+        onChartLeave?.();
       }}
     >
       {/* Header */}

@@ -171,6 +171,7 @@ export const calculateTableTotals = (
   }), { clicks: 0, impressions: 0, cost: 0, conversions: 0, conversionsValue: 0 });
 
   return {
+    campaignCount: campaigns.length,
     ...totals,
     ctr: totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0,
     avgCpc: totals.clicks > 0 ? totals.cost / totals.clicks : 0,

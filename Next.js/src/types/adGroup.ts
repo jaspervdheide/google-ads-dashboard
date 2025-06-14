@@ -24,6 +24,8 @@ export interface AdGroup {
   // Performance Max specific fields
   adStrength?: 'Poor' | 'Good' | 'Excellent';
   assetCoverage?: number;
+  // Traditional ad group specific fields
+  avgQualityScore?: number | null;
 }
 
 export interface AdGroupData {

@@ -4,7 +4,7 @@
 // REACT AND CORE IMPORTS
 // =============================================================================
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
 // =============================================================================
 // UTILITY IMPORTS (from our extracted modules)
@@ -58,7 +58,8 @@ import {
 import { 
   useCampaignData, 
   useHistoricalData, 
-  useAnomalyData 
+  useAnomalyData,
+  useAdGroupData 
 } from '../../hooks';
 
 // =============================================================================
@@ -68,6 +69,7 @@ import {
 import KPICards from './KPICards';
 import Charts from './Charts';
 import CampaignTable from './CampaignTable';
+import AdGroupTable from './AdGroupTable';
 import Keywords from './Keywords';
 
 // =============================================================================
@@ -113,11 +115,11 @@ import {
   PieChart as PieChartIcon,
   RefreshCw,
   Percent,
-  Download, 
   Plus, 
   MoreVertical, 
   Edit3, 
-  FileText
+  FileText,
+  Table
   } from 'lucide-react';
 
 // =============================================================================
@@ -125,8 +127,11 @@ import {
 // =============================================================================
 
 import { clearCache, getFromCache, saveToCache } from "../../app/utils/cache.js";
-import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from 'recharts';
 import HoverMetricsChart from './HoverMetricsChart';
+import ConversionsByTypeChart from './ConversionsByTypeChart';
+import TopCampaignsPerformance from './TopCampaignsPerformance';
+import CampaignPerformanceMatrix from './CampaignPerformanceMatrix';
 
 // =============================================================================
 // TYPE DEFINITIONS (component-specific)
@@ -211,6 +216,7 @@ export default function Dashboard() {
     const [refreshTrigger, setRefreshTrigger] = useState(false);
   const [historicalRefreshTrigger, setHistoricalRefreshTrigger] = useState(false);
   const [anomalyRefreshTrigger, setAnomalyRefreshTrigger] = useState(false);
+  const [adGroupRefreshTrigger, setAdGroupRefreshTrigger] = useState(false);
   
     // UI state management
   const [todayMetrics, setTodayMetrics] = useState<{clicks: number, spend: number}>({ clicks: 0, spend: 0 });
@@ -243,8 +249,14 @@ export default function Dashboard() {
   
   // Campaign pre-filters and view state
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
-  const [adGroupData, setAdGroupData] = useState<{[campaignId: string]: AdGroupData}>({});
   const [campaignViewMode, setCampaignViewMode] = useState<'table' | 'charts'>('table');
+
+  // Ad Group table state
+  const [adGroupSort, setAdGroupSort] = useState<{field: string, direction: 'asc' | 'desc'}>({field: 'name', direction: 'asc'});
+  const [selectedAdGroups, setSelectedAdGroups] = useState<string[]>([]);
+  const [adGroupPageSize, setAdGroupPageSize] = useState<number>(25);
+  const [adGroupTypeFilter, setAdGroupTypeFilter] = useState<'all' | 'traditional' | 'asset'>('all');
+  const [adGroupViewMode, setAdGroupViewMode] = useState<'table' | 'charts'>('table');
 
   // Hover metrics chart state
   const [hoverChart, setHoverChart] = useState({
@@ -255,6 +267,9 @@ export default function Dashboard() {
     campaignName: '',
     campaignId: ''
   });
+  
+  // Ref for hover timeout management
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Table state (missing state variables added)
     const [tablePageSize, setTablePageSize] = useState<number>(25);
@@ -283,7 +298,13 @@ export default function Dashboard() {
       data: anomalyData, 
       loading: anomalyLoading, 
       error: anomalyError 
-    } = useAnomalyData(anomalyRefreshTrigger); 
+    } = useAnomalyData(anomalyRefreshTrigger);
+
+    const { 
+      data: realAdGroupData, 
+      loading: adGroupLoading, 
+      error: adGroupError 
+    } = useAdGroupData(selectedAccount, selectedDateRange, adGroupRefreshTrigger, adGroupTypeFilter); 
 
 // =============================================================================
   // UTILITY FUNCTIONS (component-specific)
@@ -365,6 +386,8 @@ const getPerformanceDistribution = (campaignData: CampaignData | null) => {
     { name: 'Low Performance', value: low, color: '#EF4444' }
   ];
 };
+
+
 
 // =============================================================================
 // DATA FETCHING FUNCTIONS
@@ -627,7 +650,38 @@ const handleMetricHover = (event: React.MouseEvent, metricType: string, metricVa
   });
 };
 
-const handleMetricLeave = () => {
+const handleMetricLeave = (metricType?: string) => {
+  // Clear any existing timeout
+  if (hoverTimeoutRef.current) {
+    clearTimeout(hoverTimeoutRef.current);
+  }
+  
+  // Only add delay for last two columns where chart appears to the left
+  const isLastTwoColumns = metricType === 'conversionsValue' || metricType === 'roas';
+  
+  if (isLastTwoColumns) {
+    // Add delay for last two columns to allow mouse to move to chart
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoverChart(prev => ({ ...prev, isVisible: false }));
+    }, 150);
+  } else {
+    // Hide immediately for other columns
+    setHoverChart(prev => ({ ...prev, isVisible: false }));
+  }
+};
+
+const handleChartHover = () => {
+  // Clear the timeout when hovering over chart
+  if (hoverTimeoutRef.current) {
+    clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = null;
+  }
+  // Keep chart visible when hovering over it
+  setHoverChart(prev => ({ ...prev, isVisible: true }));
+};
+
+const handleChartLeave = () => {
+  // Hide chart immediately when leaving the chart area
   setHoverChart(prev => ({ ...prev, isVisible: false }));
 };
 
@@ -651,13 +705,34 @@ const selectAllCampaigns = () => {
 
 const clearAllCampaigns = () => setSelectedCampaigns([]);
 
-const toggleCampaignSelection = (campaignId: string) => {
-  setSelectedCampaigns(prev => 
-    prev.includes(campaignId) 
-      ? prev.filter(id => id !== campaignId)
-      : [...prev, campaignId]
-  );
-};
+  const toggleCampaignSelection = (campaignId: string) => {
+    setSelectedCampaigns(prev => 
+      prev.includes(campaignId) 
+        ? prev.filter(id => id !== campaignId)
+        : [...prev, campaignId]
+    );
+  };
+
+  // Ad Group handlers
+  const handleAdGroupSort = (column: string) => {
+    setAdGroupSort(prev => ({
+      field: column,
+      direction: prev.field === column && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const handleAdGroupClick = (adGroup: AdGroup) => {
+    console.log('Ad Group clicked:', adGroup);
+    // Add navigation logic here if needed
+  };
+
+  const toggleAdGroupSelection = (adGroupId: string) => {
+    setSelectedAdGroups(prev => 
+      prev.includes(adGroupId) 
+        ? prev.filter(id => id !== adGroupId)
+        : [...prev, adGroupId]
+    );
+  };
 
 // =============================================================================
 // EFFECTS
@@ -694,6 +769,15 @@ useEffect(() => {
     updateTodayMetrics();
   }
 }, [selectedAccount, filteredAccounts, calculateTodayMetrics]); // Fixed: Added calculateTodayMetrics dependency
+
+// Cleanup hover timeout on unmount
+useEffect(() => {
+  return () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+  };
+}, []);
 
 // =============================================================================
 // RENDER HELPERS
@@ -1096,204 +1180,266 @@ return (
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold text-gray-900">Campaign Performance</h2>
                   <div className="flex items-center space-x-3">
-                    {/* Table Controls */}
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-600">Show:</span>
-                      <select
-                        value={tablePageSize}
-                        onChange={(e) => setTablePageSize(Number(e.target.value))}
-                        className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    {/* Campaign Filter Toggle */}
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button
+                        onClick={() => setStatusFilter('active')}
+                        className={`px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                          statusFilter === 'active'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
                       >
-                        <option value={10}>10</option>
-                        <option value={25}>25</option>
-                        <option value={50}>50</option>
-                        <option value={100}>100</option>
-                      </select>
-                      <span className="text-sm text-gray-600">entries</span>
+                        Active
+                      </button>
+                      <button
+                        onClick={() => setStatusFilter('all')}
+                        className={`px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                          statusFilter === 'all'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        All
+                      </button>
                     </div>
 
-                    {/* Search */}
-                    <div className="relative">
-                      <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
-                      <input
-                        type="text"
-                        placeholder="Search campaigns..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
+                    {/* View Mode Toggle */}
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button
+                        onClick={() => setCampaignViewMode('table')}
+                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                          campaignViewMode === 'table'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <Table className="w-4 h-4" />
+                        <span>Table</span>
+                      </button>
+                      <button
+                        onClick={() => setCampaignViewMode('charts')}
+                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                          campaignViewMode === 'charts'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <BarChart3 className="w-4 h-4" />
+                        <span>Graphs</span>
+                      </button>
                     </div>
-
-                    {/* Export Button */}
-                    <button
-                      onClick={handleExport}
-                      className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg transition-colors text-sm"
-                    >
-                      <Download className="h-4 w-4" />
-                      <span>Export</span>
-                    </button>
                   </div>
                 </div>
               </div>
 
-              {/* Table */}
-              <CampaignTable
-                data={campaignData}
-                loading={campaignLoading}
-                searchTerm={searchTerm}
-                pageSize={tablePageSize}
-                sortColumn={tableSortColumn}
-                sortDirection={tableSortDirection}
-                onSort={handleTableSort}
-                onCampaignClick={handleCampaignClick}
-                onMetricHover={handleMetricHover}
-                onMetricLeave={handleMetricLeave}
-              />
+              {/* Table or Charts View */}
+              {campaignViewMode === 'table' ? (
+                <CampaignTable
+                  data={campaignData}
+                  loading={campaignLoading}
+                  searchTerm={searchTerm}
+                  pageSize={tablePageSize}
+                  sortColumn={tableSortColumn}
+                  sortDirection={tableSortDirection}
+                  statusFilter={statusFilter}
+                  onSort={handleTableSort}
+                  onCampaignClick={handleCampaignClick}
+                  onMetricHover={handleMetricHover}
+                  onMetricLeave={handleMetricLeave}
+                  totals={tableTotals}
+                />
+              ) : (
+                /* Premium Charts View */
+                <div className="space-y-8">
+                  {/* Sophisticated Header */}
+                  <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl p-6 border border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Campaign Performance Analytics</h2>
+                        <p className="text-gray-600 text-sm leading-relaxed">
+                          Comprehensive insights into your campaign performance metrics and trends
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
+                          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Campaigns</span>
+                          <div className="text-lg font-bold text-gray-900">
+                            {campaignData?.campaigns?.length || 0}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Charts Layout */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Left Column */}
+                    <div className="flex flex-col h-full">
+                      <TopCampaignsPerformance campaignData={campaignData} />
+                    </div>
+                    
+                    {/* Right Column */}
+                    <div className="flex flex-col space-y-8 h-full">
+                      <ConversionsByTypeChart campaignData={campaignData} />
+                      <CampaignPerformanceMatrix campaignData={campaignData} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Campaigns View */}
+        {/* Ad Groups View */}
         {currentPage === 'campaigns' && (
           <div className="space-y-6">
-            {/* Campaigns Header */}
+            {/* Ad Groups Header */}
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Campaign Management</h1>
-                <p className="text-gray-600 mt-1">Manage and optimize your advertising campaigns</p>
+                <h1 className="text-2xl font-bold text-gray-900">Ad Groups & Asset Groups</h1>
+                <p className="text-gray-600 mt-1">Manage and optimize your ad groups and Performance Max asset groups</p>
               </div>
               <div className="flex items-center space-x-3">
                 <button className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
                   <Plus className="h-4 w-4" />
-                  <span>New Campaign</span>
+                  <span>New Ad Group</span>
                 </button>
               </div>
             </div>
 
-            {/* Campaign Filters */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <div className="flex items-center space-x-4">
-                {/* Status Filter */}
-                <div className="flex items-center space-x-2">
-                  <label className="text-sm font-medium text-gray-700">Status:</label>
-                  <select 
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value as 'active' | 'all')}
-                    className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="all">All Statuses</option>
-                    <option value="active">Active</option>
-                  </select>
-                </div>
+            {/* Data Table */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900">Ad Group Performance</h2>
+                  <div className="flex items-center space-x-3">
+                    {/* Group Type Toggle */}
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button
+                        onClick={() => setAdGroupTypeFilter('all')}
+                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                          adGroupTypeFilter === 'all'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <Target className="w-4 h-4" />
+                        <span>All Groups</span>
+                      </button>
+                      <button
+                        onClick={() => setAdGroupTypeFilter('traditional')}
+                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                          adGroupTypeFilter === 'traditional'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <Search className="w-4 h-4" />
+                        <span>Ad Groups</span>
+                      </button>
+                      <button
+                        onClick={() => setAdGroupTypeFilter('asset')}
+                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                          adGroupTypeFilter === 'asset'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <Zap className="w-4 h-4" />
+                        <span>Asset Groups</span>
+                      </button>
+                    </div>
 
-                {/* Performance Filter */}
-                <div className="flex items-center space-x-2">
-                  <label className="text-sm font-medium text-gray-700">Performance:</label>
-                  <select 
-                    value={performanceFilter}
-                    onChange={(e) => setPerformanceFilter(e.target.value as 'all' | 'high' | 'medium' | 'low')}
-                    className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="all">All</option>
-                    <option value="high">High Performing</option>
-                    <option value="medium">Medium Performing</option>
-                    <option value="low">Low Performing</option>
-                  </select>
+                    {/* View Mode Toggle */}
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button
+                        onClick={() => setAdGroupViewMode('table')}
+                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                          adGroupViewMode === 'table'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <Table className="w-4 h-4" />
+                        <span>Table</span>
+                      </button>
+                      <button
+                        onClick={() => setAdGroupViewMode('charts')}
+                        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                          adGroupViewMode === 'charts'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <BarChart3 className="w-4 h-4" />
+                        <span>Graphs</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
-
-                {/* Clear Filters */}
-                <button 
-                  onClick={() => {
-                    setStatusFilter('all');
-                    setPerformanceFilter('all');
-                    setCampaignSearch('');
-                  }}
-                  className="text-sm text-blue-600 hover:text-blue-700 underline"
-                >
-                  Clear Filters
-                </button>
               </div>
-            </div>
 
-            {/* Campaign Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {displayedCampaigns?.slice(0, 9).map((campaign) => (
-                <div key={campaign.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 text-lg mb-1 truncate">
-                        {campaign.name}
-                      </h3>
-                      <p className="text-sm text-gray-600">ID: {campaign.id}</p>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        campaign.status === 'ENABLED' 
-                          ? 'bg-green-100 text-green-800'
-                          : campaign.status === 'PAUSED'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {campaign.status}
-                      </span>
-                      <button className="p-1 text-gray-400 hover:text-gray-600">
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
+              {/* Table or Charts View */}
+              {adGroupViewMode === 'table' ? (
+                <AdGroupTable
+                  data={realAdGroupData}
+                  loading={adGroupLoading}
+                  searchTerm=""
+                  pageSize={adGroupPageSize}
+                  sortColumn={adGroupSort.field}
+                  sortDirection={adGroupSort.direction}
+                  statusFilter="all"
+                  groupTypeFilter={adGroupTypeFilter}
+                  onSort={handleAdGroupSort}
+                  onAdGroupClick={handleAdGroupClick}
+                  onMetricHover={handleMetricHover}
+                  onMetricLeave={handleMetricLeave}
+                />
+              ) : (
+                /* Premium Charts View */
+                <div className="space-y-8">
+                  {/* Sophisticated Header */}
+                  <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl p-6 border border-gray-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Ad Group Performance Analytics</h2>
+                        <p className="text-gray-600 text-sm leading-relaxed">
+                          Comprehensive insights into your ad group performance metrics and trends
+                        </p>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
+                          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Ad Groups</span>
+                          <div className="text-lg font-bold text-gray-900">
+                            {realAdGroupData?.adGroups?.length || 0}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Campaign Metrics */}
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <p className="text-xs text-gray-600 uppercase tracking-wide">Clicks</p>
-                      <p className="text-lg font-semibold text-gray-900">{formatNumber(campaign.clicks)}</p>
+                  {/* Charts Layout */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Placeholder for future charts */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                      <div className="text-center text-gray-500">
+                        <Target className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">Charts Coming Soon</h3>
+                        <p className="text-sm">Ad group performance charts will be available here</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-gray-600 uppercase tracking-wide">Impressions</p>
-                      <p className="text-lg font-semibold text-gray-900">{formatNumber(campaign.impressions)}</p>
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                      <div className="text-center text-gray-500">
+                        <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">Analytics Coming Soon</h3>
+                        <p className="text-sm">Advanced ad group analytics will be available here</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-gray-600 uppercase tracking-wide">CTR</p>
-                      <p className="text-lg font-semibold text-gray-900">{formatPercentage(campaign.ctr)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-600 uppercase tracking-wide">CPC</p>
-                      <p className="text-lg font-semibold text-gray-900">{formatCurrency(campaign.avgCpc)}</p>
-                    </div>
-                  </div>
-
-                  {/* Campaign Actions */}
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                    <div className="flex items-center space-x-2">
-                      <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors">
-                        <Play className="h-4 w-4" />
-                      </button>
-                      <button className="p-2 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors">
-                        <Pause className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <button
-                      onClick={() => handleCampaignClick(campaign)}
-                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                    >
-                      View Details
-                    </button>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
-
-            {/* Load More */}
-            {displayedCampaigns && displayedCampaigns.length > 9 && (
-              <div className="text-center">
-                <button className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-3 rounded-lg transition-colors">
-                  Load More Campaigns
-                </button>
-              </div>
-            )}
           </div>
         )}
 
@@ -1533,7 +1679,8 @@ return (
       metricValue={hoverChart.metricValue}
       campaignName={hoverChart.campaignName}
       campaignId={hoverChart.campaignId}
-      onClose={handleMetricLeave}
+      onChartHover={handleChartHover}
+      onChartLeave={handleChartLeave}
     />
 
     {/* Click Outside Handlers */}
