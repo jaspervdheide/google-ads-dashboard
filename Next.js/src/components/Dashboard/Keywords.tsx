@@ -4,7 +4,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Search, 
   Target, 
-  AlertTriangle
+  AlertTriangle,
+  BarChart3,
+  Table as TableIcon
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { getFromCache, saveToCache } from "../../app/utils/cache.js";
@@ -15,6 +17,8 @@ import {
   DateRange, 
   getApiDateRange
 } from '../../utils';
+import TopKeywordsPerformance from './TopKeywordsPerformance';
+import KeywordPerformanceMatrix from './KeywordPerformanceMatrix';
 
 // =============================================================================
 // TYPE DEFINITIONS
@@ -63,7 +67,7 @@ const Keywords: React.FC<KeywordsProps> = ({ selectedAccount, selectedDateRange 
   const [keywordsError, setKeywordsError] = useState<string>('');
 
   // View controls
-  const [viewMode, setViewMode] = useState<'table' | 'charts'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'graphs'>('table');
   const [dataType, setDataType] = useState<'keywords' | 'search_terms'>('keywords');
 
   // Table controls
@@ -515,50 +519,54 @@ const Keywords: React.FC<KeywordsProps> = ({ selectedAccount, selectedDateRange 
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             {/* Data Type Toggle */}
-            <div className="flex bg-white rounded-lg p-1 shadow-sm">
+            <div className="flex bg-white rounded-lg p-1 shadow-sm border border-gray-200">
               <button
                 onClick={() => setDataType('keywords')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
                   dataType === 'keywords'
                     ? 'bg-blue-500 text-white shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
-                Keywords
+                <Target className="h-4 w-4" />
+                <span>Keywords</span>
               </button>
               <button
                 onClick={() => setDataType('search_terms')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
                   dataType === 'search_terms'
                     ? 'bg-blue-500 text-white shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
-                Search Terms
+                <Search className="h-4 w-4" />
+                <span>Search Terms</span>
               </button>
             </div>
 
             {/* View Mode Toggle */}
-            <div className="flex bg-white rounded-lg p-1 shadow-sm">
+            <div className="flex bg-white rounded-lg p-1 shadow-sm border border-gray-200">
               <button
                 onClick={() => setViewMode('table')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
                   viewMode === 'table'
                     ? 'bg-blue-500 text-white shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
-                Table
+                <TableIcon className="h-4 w-4" />
+                <span>Table</span>
               </button>
               <button
-                onClick={() => setViewMode('charts')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                  viewMode === 'charts'
+                onClick={() => setViewMode('graphs')}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                  viewMode === 'graphs'
                     ? 'bg-blue-500 text-white shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               >
-                Charts
+                <BarChart3 className="h-4 w-4" />
+                <span>Graphs</span>
               </button>
             </div>
           </div>
@@ -643,7 +651,7 @@ const Keywords: React.FC<KeywordsProps> = ({ selectedAccount, selectedDateRange 
           )}
         </div>
         
-        {/* Table or Charts Content */}
+        {/* Table or Graphs Content */}
         {viewMode === 'table' ? (
           <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 320px)' }}>
             <table className="w-full">
@@ -739,149 +747,58 @@ const Keywords: React.FC<KeywordsProps> = ({ selectedAccount, selectedDateRange 
             )}
           </div>
         ) : (
-          /* Charts View */
-          <div className="p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              {/* Match Type Distribution */}
-              <div className="bg-white rounded-lg shadow p-6">
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Match Type Distribution</h4>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={chartData.matchTypeDistribution}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        fill="#8884d8"
-                      >
-                        {chartData.matchTypeDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Conversions by Match Type */}
-              <div className="bg-white rounded-lg shadow p-6">
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Conversions by Match Type</h4>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData.conversionsPerMatchType}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#3b82f6" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* CPA by Match Type */}
-              <div className="bg-white rounded-lg shadow p-6">
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">CPA by Match Type</h4>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData.cpaPerMatchType}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => [formatCurrency(value as number), 'CPA']} />
-                      <Bar dataKey="value" fill="#10b981" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+          /* Premium Graphs Layout */
+          <div className="p-8 bg-gray-50 min-h-screen">
+            {/* Header */}
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Keyword Performance Analytics</h2>
+              <p className="text-gray-600">Comprehensive insights into keyword and search term performance</p>
             </div>
 
-            {/* Data Tables */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* High Spend, Zero Conversions Table */}
-              <div className="bg-white rounded-lg shadow">
-                <div className="p-6 border-b">
-                  <h4 className="text-lg font-semibold text-gray-900">High Spend, Zero Conversions</h4>
-                  <p className="text-sm text-gray-600">Keywords spending above €5 with no conversions</p>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Keyword</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Cost</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Clicks</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Match Type</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {paginatedTableData.highSpend.map((item, index) => (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-gray-900 max-w-xs truncate">
-                            {item.keyword_text}
-                          </td>
-                          <td className="px-4 py-3 text-gray-900">
-                            {formatCurrency(item.cost || 0)}
-                          </td>
-                          <td className="px-4 py-3 text-gray-900">
-                            {item.clicks || 0}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                              item.match_type === 'EXACT' ? 'bg-green-100 text-green-800' : 
-                              item.match_type === 'PHRASE' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'
-                            }`}>
-                              {item.match_type}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+            {/* Charts Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Left Column */}
+              <div className="flex flex-col h-full">
+                <TopKeywordsPerformance keywordData={{ data: keywordData }} />
               </div>
-
-              {/* Best Performing Keywords Table */}
-              <div className="bg-white rounded-lg shadow">
-                <div className="p-6 border-b">
-                  <h4 className="text-lg font-semibold text-gray-900">Best Performing Keywords</h4>
-                  <p className="text-sm text-gray-600">Top keywords by conversion performance</p>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Keyword</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Conv. Rate</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">Conversions</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-700">ROAS</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {paginatedTableData.bestPerforming.map((item, index) => (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-gray-900 max-w-xs truncate">
-                            {item.keyword_text}
-                          </td>
-                          <td className="px-4 py-3 text-gray-900">
-                            {formatPercentage(((item as any).conversionRate / 100) || 0)}
-                          </td>
-                          <td className="px-4 py-3 text-gray-900">
-                            {formatNumber(item.conversions || 0)}
-                          </td>
-                          <td className="px-4 py-3 text-gray-900">
-                            {formatPercentage(item.roas || 0)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              
+              {/* Right Column */}
+              <div className="flex flex-col justify-between h-full">
+                                 {/* Keyword Type Distribution */}
+                 <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-80 mb-8">
+                   <div className="flex items-center justify-between mb-6">
+                     <div>
+                       <h3 className="text-lg font-semibold text-gray-900">Keyword Distribution</h3>
+                       <p className="text-sm text-gray-600 mt-1">Keywords vs Search Terms breakdown</p>
+                     </div>
+                   </div>
+                   
+                   <div className="h-64">
+                     <ResponsiveContainer width="100%" height="100%">
+                       <PieChart>
+                         <Pie
+                           data={[
+                             { name: 'Keywords', value: keywordData.filter((k: any) => k.type !== 'search_term').length, color: '#3b82f6' },
+                             { name: 'Search Terms', value: keywordData.filter((k: any) => k.type === 'search_term').length, color: '#10b981' }
+                           ]}
+                           dataKey="value"
+                           nameKey="name"
+                           cx="50%"
+                           cy="50%"
+                           outerRadius={80}
+                           innerRadius={40}
+                           paddingAngle={2}
+                         >
+                           <Cell fill="#3b82f6" />
+                           <Cell fill="#10b981" />
+                         </Pie>
+                         <Tooltip />
+                         <Legend />
+                       </PieChart>
+                     </ResponsiveContainer>
+                   </div>
+                 </div>
+                <KeywordPerformanceMatrix keywordData={{ data: keywordData }} />
               </div>
             </div>
           </div>
