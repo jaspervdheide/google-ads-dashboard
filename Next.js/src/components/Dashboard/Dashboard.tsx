@@ -999,12 +999,69 @@ return (
     {/* Main Content */}
     <main className="ml-[240px] pt-16">
       <div className="p-8">
-        {/* Anomaly Notification */}
-        {renderAnomalyNotification()}
-
         {/* Dashboard View */}
         {currentPage === 'dashboard' && (
           <div className="space-y-6">
+            {/* Dashboard Header */}
+            <div className="flex items-center justify-between">
+              {/* Title Section (Left) */}
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+                  {/* Status Indicator Dot */}
+                  <div className={`w-2 h-2 rounded-full ${
+                    !campaignLoading && !error && campaignData 
+                      ? 'bg-green-500' 
+                      : 'bg-blue-500'
+                  }`} />
+                </div>
+                {/* Subtitle: Account + Date Range */}
+                <p className="text-gray-600 mt-1">
+                  {selectedAccount && filteredAccounts.length > 0
+                    ? (() => {
+                        const account = filteredAccounts.find(acc => acc.id === selectedAccount);
+                        const accountName = account ? getDisplayName(account) : 'Unknown Account';
+                        const dateRange = selectedDateRange ? formatDateRangeDisplayLocal(selectedDateRange) : 'Last 30 days';
+                        return (
+                          <>
+                            <span className="font-medium text-gray-700">{accountName}</span>
+                            <span> • {dateRange}</span>
+                          </>
+                        );
+                      })()
+                    : selectedDateRange 
+                      ? formatDateRangeDisplayLocal(selectedDateRange)
+                      : 'Select an account to view data'
+                  }
+                </p>
+              </div>
+
+              {/* Status Section (Right) */}
+              <div className="flex items-center space-x-4 text-sm">
+                {/* Live Data Status */}
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    !campaignLoading && !error && campaignData 
+                      ? 'bg-green-500' 
+                      : 'bg-blue-500'
+                  }`} />
+                  <span className="text-gray-600">
+                    {!campaignLoading && !error && campaignData ? 'Live data' : 'Cached data'}
+                  </span>
+                </div>
+
+                {/* Dot Separator and Campaign Count */}
+                {campaignData?.campaigns && (
+                  <>
+                    <div className="text-gray-400">•</div>
+                    <span className="text-gray-600">
+                      {campaignData.campaigns.length} campaign{campaignData.campaigns.length !== 1 ? 's' : ''}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
             {/* KPI Cards */}
             <KPICards
               campaignData={campaignData}
