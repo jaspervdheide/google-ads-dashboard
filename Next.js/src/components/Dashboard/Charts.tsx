@@ -1,5 +1,5 @@
 import React from 'react';
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar } from 'recharts';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, BarChart, Bar, Area, AreaChart } from 'recharts';
 import { TrendingUp, BarChart3 } from 'lucide-react';
 import { CampaignData } from '../../types';
 import { 
@@ -134,10 +134,27 @@ const Charts: React.FC<ChartsProps> = ({
             const chartData = generateMultiMetricChartData(selectedChartMetrics, historicalData, dateGranularity, selectedDateRange);
             
             return chartType === 'line' ? (
-              <LineChart
+              <AreaChart
                 data={chartData}
                 margin={{ top: 20, right: needsDualYAxis(selectedChartMetrics, chartData) ? 50 : 25, left: 35, bottom: 25 }}
               >
+                {/* SVG Gradient Definitions */}
+                <defs>
+                  {selectedChartMetrics.map((metricId, index) => (
+                    <linearGradient
+                      key={`gradient-${metricId}`}
+                      id={`gradient-${metricId}`}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.15} />
+                      <stop offset="70%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.05} />
+                      <stop offset="100%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0} />
+                    </linearGradient>
+                  ))}
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeWidth={0.75} vertical={false} />
                 <XAxis 
                   dataKey="dateFormatted" 
@@ -201,29 +218,35 @@ const Charts: React.FC<ChartsProps> = ({
                   }}
                   labelFormatter={(label) => label}
                 />
-                {/* Multiple Lines */}
+                {/* Layer 1: Gradient Fill Areas (drawn first, behind lines) */}
                 {selectedChartMetrics.map((metricId) => (
-                  <Line
-                    key={metricId}
+                  <Area
+                    key={`fill-${metricId}`}
                     yAxisId={needsDualYAxis(selectedChartMetrics, chartData) ? getYAxisOrientation(metricId, selectedChartMetrics, chartData) : 'left'}
-                    type="monotone"
+                    type="monotoneX"
+                    dataKey={metricId}
+                    stroke="none"
+                    fill={`url(#gradient-${metricId})`}
+                    dot={false}
+                  />
+                ))}
+                
+                {/* Layer 2: Lines (drawn second, on top of fills) */}
+                {selectedChartMetrics.map((metricId) => (
+                  <Area
+                    key={`line-${metricId}`}
+                    yAxisId={needsDualYAxis(selectedChartMetrics, chartData) ? getYAxisOrientation(metricId, selectedChartMetrics, chartData) : 'left'}
+                    type="monotoneX"
                     dataKey={metricId}
                     stroke={getKpiChartColor(metricId, selectedChartMetrics)}
                     strokeWidth={2}
-                    dot={{ 
-                      fill: getKpiChartColor(metricId, selectedChartMetrics),
-                      strokeWidth: 0, 
-                      r: 3
-                    }}
-                    activeDot={{ 
-                      r: 5, 
-                      stroke: 'white', 
-                      strokeWidth: 2, 
-                      fill: getKpiChartColor(metricId, selectedChartMetrics)
-                    }}
+                    fill="none"
+                    dot={false}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
                 ))}
-              </LineChart>
+              </AreaChart>
             ) : (
               <BarChart
                 data={chartData}
