@@ -40,6 +40,31 @@ const Charts: React.FC<ChartsProps> = ({
   setManualGranularityOverride,
   selectedDateRange
 }) => {
+  // Function to map metric IDs to bar gradient IDs
+  const getKpiGradientId = (metricId: string): string => {
+    return `Gradient${metricId.charAt(0).toUpperCase()}${metricId.slice(1)}`;
+  };
+
+  // Function to format metric names for display
+  const formatMetricName = (metricId: string): string => {
+    const metricNameMap: { [key: string]: string } = {
+      'clicks': 'Clicks',
+      'impressions': 'Impressions',
+      'conversions': 'Conversions',
+      'conversionRate': 'Conversion Rate',
+      'cost': 'Cost',
+      'ctr': 'CTR',
+      'cpc': 'CPC',
+      'cpm': 'CPM',
+      'cpa': 'CPA',
+      'costPerConversion': 'CPA',
+      'roas': 'ROAS',
+      'poas': 'POAS',
+      'searchImpressionShare': 'Search Impression Share',
+      'qualityScore': 'Quality Score'
+    };
+    return metricNameMap[metricId] || metricId.charAt(0).toUpperCase() + metricId.slice(1);
+  };
   return (
     <div className="bg-white rounded-lg p-6">
       <div className="mb-6">
@@ -140,6 +165,7 @@ const Charts: React.FC<ChartsProps> = ({
               >
                 {/* SVG Gradient Definitions */}
                 <defs>
+                  {/* Line Chart Area Fill Gradients */}
                   {selectedChartMetrics.map((metricId, index) => (
                     <linearGradient
                       key={`gradient-${metricId}`}
@@ -152,6 +178,21 @@ const Charts: React.FC<ChartsProps> = ({
                       <stop offset="0%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.15} />
                       <stop offset="70%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.05} />
                       <stop offset="100%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0} />
+                    </linearGradient>
+                  ))}
+                  
+                  {/* Bar Chart Fill Gradients */}
+                  {selectedChartMetrics.map((metricId, index) => (
+                    <linearGradient
+                      key={`barGradient-${metricId}`}
+                      id={`barGradient-${metricId}`}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.85} />
+                      <stop offset="100%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.60} />
                     </linearGradient>
                   ))}
                 </defs>
@@ -206,17 +247,56 @@ const Charts: React.FC<ChartsProps> = ({
                   />
                 )}
                 <Tooltip 
-                  contentStyle={{
-                    backgroundColor: 'white',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '6px',
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-                    fontSize: '12px'
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload || !payload.length) return null;
+                    
+                    const uniquePayload = payload.filter((entry, index, self) => 
+                      index === self.findIndex(e => e.dataKey === entry.dataKey)
+                    );
+                    
+                    return (
+                      <div style={{
+                        backgroundColor: 'white',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                        fontSize: '13px',
+                        padding: '12px',
+                        minWidth: '160px'
+                      }}>
+                        <div style={{ 
+                          fontWeight: '600', 
+                          color: '#111827', 
+                          marginBottom: '8px',
+                          paddingBottom: '6px',
+                          borderBottom: '1px solid #f3f4f6'
+                        }}>
+                          {label}
+                        </div>
+                        {uniquePayload.map((entry: any, index: number) => (
+                          <div key={index} style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            marginBottom: index < uniquePayload.length - 1 ? '4px' : '0'
+                          }}>
+                            <div style={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              backgroundColor: getKpiChartColor(entry.dataKey, selectedChartMetrics),
+                              marginRight: '8px',
+                              flexShrink: 0
+                            }}></div>
+                            <span style={{ color: getKpiChartColor(entry.dataKey, selectedChartMetrics), fontWeight: '500' }}>
+                              {formatMetricName(entry.dataKey)} : {formatKPIValue(entry.dataKey, entry.value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    );
                   }}
-                  formatter={(value: any, name: string) => {
-                    return [formatKPIValue(name, value), name];
-                  }}
-                  labelFormatter={(label) => label}
+                  wrapperStyle={{ outline: 'none' }}
+                  cursor={false}
                 />
                 {/* Layer 1: Gradient Fill Areas (drawn first, behind lines) */}
                 {selectedChartMetrics.map((metricId) => (
@@ -251,9 +331,25 @@ const Charts: React.FC<ChartsProps> = ({
               <BarChart
                 data={chartData}
                 margin={{ top: 20, right: needsDualYAxis(selectedChartMetrics, chartData) ? 50 : 25, left: 35, bottom: 25 }}
-                barCategoryGap="30%"
-                barGap={4}
+                barCategoryGap="20%"
+                barGap={6}
               >
+                {/* SVG Gradient Definitions for Bar Chart */}
+                <defs>
+                  {selectedChartMetrics.map((metricId, index) => (
+                    <linearGradient
+                      key={`bar${getKpiGradientId(metricId)}`}
+                      id={`bar${getKpiGradientId(metricId)}`}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.9} />
+                      <stop offset="100%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.60} />
+                    </linearGradient>
+                  ))}
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeWidth={0.75} vertical={false} />
                 <XAxis 
                   dataKey="dateFormatted" 
@@ -305,29 +401,70 @@ const Charts: React.FC<ChartsProps> = ({
                   />
                 )}
                 <Tooltip 
-                  contentStyle={{
-                    backgroundColor: 'white',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '6px',
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
-                    fontSize: '12px'
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload || !payload.length) return null;
+                    
+                    const uniquePayload = payload.filter((entry, index, self) => 
+                      index === self.findIndex(e => e.dataKey === entry.dataKey)
+                    );
+                    
+                    return (
+                      <div style={{
+                        backgroundColor: 'white',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                        fontSize: '13px',
+                        padding: '12px',
+                        minWidth: '160px'
+                      }}>
+                        <div style={{ 
+                          fontWeight: '600', 
+                          color: '#111827', 
+                          marginBottom: '8px',
+                          paddingBottom: '6px',
+                          borderBottom: '1px solid #f3f4f6'
+                        }}>
+                          {label}
+                        </div>
+                        {uniquePayload.map((entry: any, index: number) => (
+                          <div key={index} style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            marginBottom: index < uniquePayload.length - 1 ? '4px' : '0'
+                          }}>
+                            <div style={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              backgroundColor: getKpiChartColor(entry.dataKey, selectedChartMetrics),
+                              marginRight: '8px',
+                              flexShrink: 0
+                            }}></div>
+                            <span style={{ color: getKpiChartColor(entry.dataKey, selectedChartMetrics), fontWeight: '500' }}>
+                              {formatMetricName(entry.dataKey)} : {formatKPIValue(entry.dataKey, entry.value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    );
                   }}
-                  formatter={(value: any, name: string) => {
-                    return [formatKPIValue(name, value), name];
-                  }}
-                  labelFormatter={(label) => label}
+                  wrapperStyle={{ outline: 'none' }}
+                  cursor={false}
                 />
-                {/* Multiple Bars with minimal styling */}
+                {/* Multiple Bars with gradient fills */}
                 {selectedChartMetrics.map((metricId, index) => (
                   <Bar
                     key={metricId}
                     yAxisId={needsDualYAxis(selectedChartMetrics, chartData) ? getYAxisOrientation(metricId, selectedChartMetrics, chartData) : 'left'}
                     dataKey={metricId}
-                    fill={getKpiChartColor(metricId, selectedChartMetrics)}
-                    fillOpacity={0.85}
+                    fill={`url(#bar${getKpiGradientId(metricId)})`}
                     name={metricId}
-                    radius={[3, 3, 0, 0]}
+                    radius={[6, 6, 0, 0]}
                     maxBarSize={selectedChartMetrics.length === 1 ? 32 : 24}
+                    stroke={getKpiChartColor(metricId, selectedChartMetrics)}
+                    strokeWidth={0.5}
+                    strokeOpacity={0.3}
                   />
                 ))}
               </BarChart>

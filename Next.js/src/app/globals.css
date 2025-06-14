@@ -24,3 +24,24 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Bar Chart Hover Effects */
+.recharts-wrapper .recharts-bar-rectangle {
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+.recharts-wrapper .recharts-bar-rectangle:hover {
+  filter: brightness(1.15) drop-shadow(0 0 6px rgba(59, 130, 246, 0.4));
+  transform: translateY(-1px);
+}
+
+/* Remove grey background on hover */
+.recharts-wrapper .recharts-active-bar {
+  fill: none !important;
+}
+
+.recharts-wrapper .recharts-tooltip-cursor {
+  fill: none !important;
+  stroke: none !important;
+}
