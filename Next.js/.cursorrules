@@ -40,6 +40,152 @@ Before responding to any request, follow these steps:
 - Implement early returns for better readability
 - Structure components logically: exports, subcomponents, helpers, types
 
+### DRY (Don't Repeat Yourself) Principle
+
+**Core Philosophy**: Every piece of knowledge should have a single, unambiguous representation within the system.
+
+#### Code Duplication Patterns to Avoid:
+
+```typescript
+// ❌ WRONG: Duplicate component logic
+const ComponentA = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const result = await api.getData();
+      // handle result
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  // ... rest of component
+};
+
+const ComponentB = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const result = await api.getData();
+      // handle result
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  // ... rest of component
+};
+
+// ✅ CORRECT: Extract to custom hook
+const useApiCall = (apiFunction: () => Promise<any>) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [data, setData] = useState(null);
+  
+  const execute = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await apiFunction();
+      setData(result);
+      return result;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [apiFunction]);
+  
+  return { data, loading, error, execute };
+};
+```
+
+#### DRY Strategies:
+
+**1. Extract Custom Hooks**
+- Reusable stateful logic (data fetching, form handling, etc.)
+- Component lifecycle patterns
+- Complex state management logic
+
+**2. Create Utility Functions**
+- Data transformation and formatting
+- Validation logic
+- API call patterns
+- Cache management functions
+
+**3. Component Composition**
+- Extract common UI patterns into base components
+- Use compound components for complex widgets
+- Create higher-order components for cross-cutting concerns
+
+**4. Constants and Configuration**
+- Move repeated values to constants files
+- Centralize API endpoints and configuration
+- Extract common styling patterns into design tokens
+
+**5. Type Definitions**
+- Share interface definitions across components
+- Create generic types for common patterns
+- Use discriminated unions for variant types
+
+#### DRY Implementation Rules:
+
+1. **Three Strike Rule**: If you copy code more than twice, extract it
+2. **Single Source of Truth**: API endpoints, styling constants, validation rules should have one definition
+3. **Composition Over Duplication**: Prefer component composition over copying similar components
+4. **Shared Logic Extraction**: Extract shared business logic into utility functions or custom hooks
+5. **Configuration Centralization**: Keep all configuration in dedicated files
+
+#### Examples for PPC Dashboard:
+
+```typescript
+// ✅ CORRECT: Centralized metric formatting
+export const formatMetric = (type: MetricType, value: number): string => {
+  const formatters = {
+    currency: (val) => `$${val.toLocaleString()}`,
+    percentage: (val) => `${val.toFixed(2)}%`,
+    number: (val) => val.toLocaleString(),
+    ctr: (val) => `${val.toFixed(2)}%`,
+    cpc: (val) => `$${val.toFixed(2)}`,
+  };
+  return formatters[type]?.(value) || value.toString();
+};
+
+// ✅ CORRECT: Reusable chart configuration
+export const getChartConfig = (metrics: string[]) => ({
+  margin: { top: 20, right: needsDualYAxis(metrics) ? 50 : 25, left: 35, bottom: 25 },
+  cartesianGrid: { strokeDasharray: "3 3", stroke: "#e2e8f0", strokeWidth: 0.75 },
+  xAxis: { stroke: "#475569", fontSize: 11, tickLine: true, tickSize: 6 }
+});
+
+// ✅ CORRECT: Shared tooltip component
+export const CommonTooltip = ({ formatMetricName, formatKPIValue, selectedChartMetrics }) => (
+  <Tooltip 
+    content={({ active, payload, label }) => {
+      // Shared tooltip logic
+    }}
+    wrapperStyle={{ outline: 'none' }}
+    cursor={false}
+  />
+);
+```
+
+#### DRY Anti-Patterns to Avoid:
+
+- **Over-abstraction**: Don't extract code that's only used twice if it's likely to diverge
+- **Premature optimization**: Don't create abstractions before you understand the pattern
+- **God functions**: Avoid creating overly complex utilities that do too many things
+- **False abstractions**: Don't force different use cases into the same abstraction
+
 ### Naming Conventions
 
 - Use descriptive names with auxiliary verbs (isLoading, hasError)

@@ -126,7 +126,7 @@ import {
 
 import { clearCache, getFromCache, saveToCache } from "../../app/utils/cache.js";
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import HoverMetricsChart from '../HoverMetricsChart';
+import HoverMetricsChart from './HoverMetricsChart';
 
 // =============================================================================
 // TYPE DEFINITIONS (component-specific)
@@ -196,7 +196,12 @@ export default function Dashboard() {
     const [selectedAccount, setSelectedAccount] = useState<string>('');
     
   // Date range state - must be declared before hooks that use it
-    const [selectedDateRange, setSelectedDateRange] = useState<DateRange | null>(null);
+    // Initialize date ranges (memoized to prevent infinite re-renders)
+  const dateRanges = useMemo(() => generateDateRanges(), []);
+  
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRange | null>(
+    () => dateRanges.find(range => range.id === 'last-30-days') || null
+  );
     const [customDateRange, setCustomDateRange] = useState<LocalCustomDateRange>({
       startDate: '',
       endDate: ''
@@ -284,8 +289,7 @@ export default function Dashboard() {
   // UTILITY FUNCTIONS (component-specific)
 // =============================================================================
 
-// Initialize date ranges (memoized to prevent infinite re-renders)
-const dateRanges = useMemo(() => generateDateRanges(), []);
+// dateRanges already initialized above with selectedDateRange
 
 // Clean country code display - remove parentheses content
 const cleanCountryCode = (countryCode: string) => {
@@ -1142,6 +1146,8 @@ return (
                 sortDirection={tableSortDirection}
                 onSort={handleTableSort}
                 onCampaignClick={handleCampaignClick}
+                onMetricHover={handleMetricHover}
+                onMetricLeave={handleMetricLeave}
               />
             </div>
           </div>
@@ -1518,6 +1524,17 @@ return (
         </div>
       </div>
     )}
+
+    {/* Hover Metrics Chart */}
+    <HoverMetricsChart
+      isVisible={hoverChart.isVisible}
+      position={hoverChart.position}
+      metricType={hoverChart.metricType}
+      metricValue={hoverChart.metricValue}
+      campaignName={hoverChart.campaignName}
+      campaignId={hoverChart.campaignId}
+      onClose={handleMetricLeave}
+    />
 
     {/* Click Outside Handlers */}
     {accountDropdownOpen && (

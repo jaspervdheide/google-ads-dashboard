@@ -13,6 +13,8 @@ interface CampaignTableProps {
   sortDirection: 'asc' | 'desc';
   onSort: (column: string) => void;
   onCampaignClick: (campaign: Campaign) => void;
+  onMetricHover?: (event: React.MouseEvent, metricType: string, metricValue: string | number, campaignName: string, campaignId: string) => void;
+  onMetricLeave?: () => void;
 }
 
 const CampaignTable: React.FC<CampaignTableProps> = ({
@@ -23,7 +25,9 @@ const CampaignTable: React.FC<CampaignTableProps> = ({
   sortColumn,
   sortDirection,
   onSort,
-  onCampaignClick
+  onCampaignClick,
+  onMetricHover,
+  onMetricLeave
 }) => {
   if (loading) {
     return (
@@ -120,10 +124,12 @@ const CampaignTable: React.FC<CampaignTableProps> = ({
           {filteredCampaigns.map((campaign) => (
             <tr 
               key={campaign.id} 
-              className="hover:bg-gray-50 cursor-pointer"
-              onClick={() => onCampaignClick(campaign)}
+              className="hover:bg-gray-50"
             >
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+              <td 
+                className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer"
+                onClick={() => onCampaignClick(campaign)}
+              >
                 {campaign.name}
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
@@ -137,19 +143,39 @@ const CampaignTable: React.FC<CampaignTableProps> = ({
                   {campaign.status}
                 </span>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+              <td 
+                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
+                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'clicks', campaign.clicks, campaign.name, campaign.id) : undefined}
+                onMouseLeave={onMetricLeave}
+              >
                 {formatNumber(campaign.clicks)}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+              <td 
+                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
+                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'impressions', campaign.impressions, campaign.name, campaign.id) : undefined}
+                onMouseLeave={onMetricLeave}
+              >
                 {formatNumber(campaign.impressions)}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+              <td 
+                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
+                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'ctr', campaign.ctr, campaign.name, campaign.id) : undefined}
+                onMouseLeave={onMetricLeave}
+              >
                 {formatPercentage(campaign.ctr)}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+              <td 
+                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
+                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'avgCpc', campaign.avgCpc, campaign.name, campaign.id) : undefined}
+                onMouseLeave={onMetricLeave}
+              >
                 {formatCurrency(campaign.avgCpc)}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+              <td 
+                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
+                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'cost', campaign.cost, campaign.name, campaign.id) : undefined}
+                onMouseLeave={onMetricLeave}
+              >
                 {formatCurrency(campaign.cost)}
               </td>
             </tr>

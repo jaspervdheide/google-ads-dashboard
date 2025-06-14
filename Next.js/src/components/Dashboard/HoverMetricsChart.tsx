@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { X, TrendingUp, TrendingDown } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { TrendingUp, TrendingDown } from 'lucide-react';
 
 interface HoverMetricsChartProps {
   isVisible: boolean;
@@ -11,7 +11,6 @@ interface HoverMetricsChartProps {
   metricValue: string | number;
   campaignName: string;
   campaignId: string;
-  onClose: () => void;
 }
 
 interface DailyData {
@@ -26,12 +25,10 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
   metricType,
   metricValue,
   campaignName,
-  campaignId,
-  onClose
+  campaignId
 }) => {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isVisible || !campaignId || !metricType) return;
@@ -92,15 +89,12 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
           });
           
           setDailyData(chartData);
-          console.log(`📊 Real API data loaded for ${metricType}:`, chartData.length, 'days');
         } else {
-          console.log('🔄 API data not available, generating realistic mock data');
           // Fallback to improved mock data
           generateRealisticMockData();
         }
       } catch (error) {
         console.error('Error fetching daily metrics:', error);
-        console.log('🔄 API error, generating realistic mock data');
         // Fallback to improved mock data
         generateRealisticMockData();
       }
@@ -252,6 +246,8 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
     return recent > previous ? '#10b981' : recent < previous ? '#ef4444' : '#6b7280';
   };
 
+
+
   const getTrendIcon = () => {
     if (dailyData.length < 2) return null;
     
@@ -267,100 +263,106 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
 
   return (
     <div
-      className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl"
+      className="fixed z-50 bg-white/95 border border-gray-100 rounded-xl"
       style={{
         left: position.x + 10,
         top: position.y - 10,
         width: '320px',
-        height: '240px'
+        height: '240px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+        backdropFilter: 'blur(10px)',
+        borderColor: '#f1f5f9'
       }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-100">
-        <div className="flex items-center space-x-2">
-          <div className="flex items-center space-x-1">
-            {getTrendIcon()}
-            <h4 className="font-medium text-gray-900 text-sm">{getMetricLabel(metricType)}</h4>
-          </div>
+      <div className="p-3 border-b border-gray-100">
+        <div className="flex items-center space-x-1">
+          {getTrendIcon()}
+          <h4 className="text-xs font-medium text-slate-500">{getMetricLabel(metricType)}</h4>
         </div>
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <X className="h-4 w-4" />
-        </button>
       </div>
 
       {/* Content */}
-      <div className="p-3">
+      <div className="p-3 flex flex-col" style={{ height: 'calc(100% - 45px)' }}>
         {/* Campaign name and current value */}
-        <div className="mb-3">
+        <div className="mb-2">
           <p className="text-xs text-gray-500 truncate">{campaignName}</p>
-          <p className="text-lg font-semibold text-gray-900">
+          <p className="text-2xl font-bold text-gray-900 leading-tight">
             {formatMainValue(metricValue, metricType)}
           </p>
-          {error && (
-            <p className="text-xs text-amber-600 mt-1">{error}</p>
-          )}
         </div>
 
-        {/* Chart */}
-        <div className="h-32">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dailyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                <XAxis 
-                  dataKey="formattedDate" 
-                  tick={{ fontSize: 10, fill: '#6b7280' }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval="preserveStartEnd"
-                  ticks={dailyData.length > 0 ? [
-                    dailyData[0]?.formattedDate,
-                    dailyData[Math.floor(dailyData.length * 0.2)]?.formattedDate,
-                    dailyData[Math.floor(dailyData.length * 0.4)]?.formattedDate,
-                    dailyData[Math.floor(dailyData.length * 0.6)]?.formattedDate,
-                    dailyData[Math.floor(dailyData.length * 0.8)]?.formattedDate,
-                    dailyData[dailyData.length - 1]?.formattedDate
-                  ].filter(Boolean) : []}
-                  minTickGap={15}
-                />
-                <YAxis 
-                  tick={{ fontSize: 10, fill: '#6b7280' }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(value) => formatMetricValue(value, metricType)}
-                />
-                <Tooltip
-                  formatter={(value: any) => [formatMetricValue(value, metricType), getMetricLabel(metricType)]}
-                  labelFormatter={(label) => `Date: ${label}`}
-                  contentStyle={{
-                    backgroundColor: 'white',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '6px',
-                    fontSize: '12px'
-                  }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="value" 
-                  stroke={getTrendColor()}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 3, fill: getTrendColor() }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
+        {/* Chart - centered and taking available space */}
+        <div className="flex-1 flex flex-col justify-center min-h-0">
+          <div className="h-28 -mx-1">
+            {loading ? (
+              <div className="flex items-center justify-center h-full mx-1">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={dailyData}
+                  margin={{ top: 5, right: 0, left: 0, bottom: -10 }}
+                  barCategoryGap="0%"
+                  maxBarSize={8}
+                >
+                  <defs>
+                    <linearGradient
+                      id={`bar-${metricType}`}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0%" stopColor={getTrendColor()} stopOpacity={0.9} />
+                      <stop offset="100%" stopColor={getTrendColor()} stopOpacity={0.60} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis 
+                    dataKey="formattedDate" 
+                    tick={false}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={0}
+                    padding={{ left: 0, right: 0 }}
+                  />
+                  <YAxis 
+                    tick={false}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={[0, 'dataMax']}
+                    width={0}
+                  />
+                  <Tooltip
+                    formatter={(value: any) => [formatMetricValue(value, metricType), getMetricLabel(metricType)]}
+                    labelFormatter={(label) => `${label}`}
+                    contentStyle={{
+                      backgroundColor: 'white/95',
+                      border: '1px solid #f1f5f9',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      backdropFilter: 'blur(10px)'
+                    }}
+                  />
+                  <Bar
+                    dataKey="value"
+                    fill={`url(#bar-${metricType})`}
+                    radius={[0.5, 0.5, 0, 0]}
+                    stroke="none"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
 
-        {/* 30-day label */}
-        <p className="text-xs text-gray-400 text-center mt-1">30-day trend</p>
+        {/* Date range and trend label */}
+        <div className="flex justify-between items-center text-xs text-gray-400 mt-2">
+          <span>{dailyData.length > 0 ? dailyData[0]?.formattedDate : 'Start'}</span>
+          <span className="text-center">30-day trend</span>
+          <span>{dailyData.length > 0 ? dailyData[dailyData.length - 1]?.formattedDate : 'End'}</span>
+        </div>
       </div>
     </div>
   );

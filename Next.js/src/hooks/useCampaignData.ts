@@ -54,6 +54,8 @@ const useCampaignData = (
   const [error, setError] = useState<string>('');
   const [kpiPercentageChanges, setKpiPercentageChanges] = useState<{[key: string]: number}>({});
 
+
+
   const fetchData = useCallback(async (skipCache = false) => {
     console.log("🎯 useCampaignData.fetchData called");
     if (!accountId || !dateRange) return;
@@ -65,70 +67,53 @@ const useCampaignData = (
       const apiDateRange = getApiDateRange(dateRange);
       const cacheKey = `campaigns_${accountId}_${apiDateRange.days}days`;
       
+      let dataFromCache = false;
+      
       if (!skipCache) {
         const cachedData = getFromCache(cacheKey, 30);
         if (cachedData) {
           console.log("🎯 CACHE HIT - Using cached campaigns data");
           setData(cachedData);
-          setLoading(false);
-          return;
+          dataFromCache = true;
         }
       }
       
-      console.log("🎯 CACHE MISS - Fetching from API");
-      const response = await fetch(`/api/campaigns?customerId=${accountId}&dateRange=${apiDateRange.days}`);
-      const result = await response.json();
-      
-      if (result.success) {
-        setData(result.data);
-        saveToCache(cacheKey, result.data);
+      // Fetch fresh data if not from cache
+      if (!dataFromCache) {
+        console.log("🎯 CACHE MISS - Fetching from API");
+        const response = await fetch(`/api/campaigns?customerId=${accountId}&dateRange=${apiDateRange.days}`);
+        const result = await response.json();
         
-        // Fetch KPI percentage changes
-        try {
-          console.log('🔍 Fetching KPI comparison for:', accountId, 'days:', apiDateRange.days);
-          const comparisonResponse = await fetch(`/api/kpi-comparison?customerId=${accountId}&dateRange=${apiDateRange.days}`);
-          const comparisonResult = await comparisonResponse.json();
-          
-          console.log('📊 KPI Comparison Response:', comparisonResult);
-          
-          if (comparisonResult.success) {
+        if (result.success) {
+          setData(result.data);
+          saveToCache(cacheKey, result.data);
+        } else {
+          setError(result.message || 'Failed to fetch campaign data');
+          return; // Don't fetch KPI comparison if main data failed
+        }
+      }
+      
+      // Always fetch KPI percentage changes (whether data was cached or fresh)
+      try {
+        console.log('🔍 Fetching KPI comparison for:', accountId, 'days:', apiDateRange.days);
+        const comparisonResponse = await fetch(`/api/kpi-comparison?customerId=${accountId}&dateRange=${apiDateRange.days}`);
+        const comparisonResult = await comparisonResponse.json();
+        
+        console.log('📊 KPI Comparison Response:', comparisonResult);
+        
+                  if (comparisonResult.success) {
             console.log('✅ Setting KPI percentage changes:', comparisonResult.data.changes);
             setKpiPercentageChanges(comparisonResult.data.changes);
           } else {
             console.error('❌ KPI comparison failed:', comparisonResult.message);
-            // Set some mock data for testing
-            setKpiPercentageChanges({
-              clicks: 12.5,
-              impressions: 8.3,
-              ctr: 4.2,
-              avgCpc: -2.1,
-              cost: 15.7,
-              conversions: 22.1,
-              conversionsValue: 18.9,
-              conversionRate: 6.8,
-              cpa: -8.4,
-              poas: 11.2
-            });
+            // Don't set mock data - leave empty object to show no changes
+            setKpiPercentageChanges({});
           }
         } catch (error) {
           console.error('Error fetching KPI comparison:', error);
-          // Set some mock data for testing when API fails
-          setKpiPercentageChanges({
-            clicks: 12.5,
-            impressions: 8.3,
-            ctr: 4.2,
-            avgCpc: -2.1,
-            cost: 15.7,
-            conversions: 22.1,
-            conversionsValue: 18.9,
-            conversionRate: 6.8,
-            cpa: -8.4,
-            poas: 11.2
-          });
+          // Don't set mock data - leave empty object to show no changes
+          setKpiPercentageChanges({});
         }
-      } else {
-        setError(result.message || 'Failed to fetch campaign data');
-      }
     } catch (err) {
       setError('Error fetching campaign data');
     } finally {

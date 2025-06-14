@@ -194,15 +194,7 @@ const KPICards: React.FC<KPICardsProps> = ({
         const percentageChange = kpiPercentageChanges[kpi.id] || 0;
         const isPositive = isPositiveChange(kpi.id, percentageChange);
         
-        // Debug logging for each KPI card
-        console.log(`🎯 KPI Card Debug - ${kpi.id}:`, {
-          kpiId: kpi.id,
-          percentageChange,
-          kpiPercentageChanges,
-          hasKpiData: !!kpiPercentageChanges,
-          kpiKeys: Object.keys(kpiPercentageChanges || {}),
-          rawValue: kpiPercentageChanges[kpi.id]
-        });
+
         
         return (
           <div

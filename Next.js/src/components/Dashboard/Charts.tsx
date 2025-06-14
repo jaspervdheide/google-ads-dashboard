@@ -51,9 +51,11 @@ const Charts: React.FC<ChartsProps> = ({
       'clicks': 'Clicks',
       'impressions': 'Impressions',
       'conversions': 'Conversions',
+      'conversionsValue': 'Conversion Value',
       'conversionRate': 'Conversion Rate',
       'cost': 'Cost',
       'ctr': 'CTR',
+      'avgCpc': 'CPC',
       'cpc': 'CPC',
       'cpm': 'CPM',
       'cpa': 'CPA',
@@ -186,7 +188,7 @@ const Charts: React.FC<ChartsProps> = ({
             <h3 className="text-lg font-semibold text-gray-900 mb-1">Performance Trends</h3>
             <p className="text-sm text-gray-500">
               {selectedChartMetrics.length === 1 
-                ? `${selectedChartMetrics[0]} over ${selectedDateRange ? formatDateRangeDisplay(selectedDateRange) : 'the selected period'}`
+                ? `${formatMetricName(selectedChartMetrics[0])} over ${selectedDateRange ? formatDateRangeDisplay(selectedDateRange) : 'the selected period'}`
                 : `${selectedChartMetrics.length} metrics over ${selectedDateRange ? formatDateRangeDisplay(selectedDateRange) : 'the selected period'}`
               }
             </p>
