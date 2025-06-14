@@ -65,6 +65,119 @@ const Charts: React.FC<ChartsProps> = ({
     };
     return metricNameMap[metricId] || metricId.charAt(0).toUpperCase() + metricId.slice(1);
   };
+
+  // Common tooltip component to avoid duplication
+  const commonTooltip = (
+    <Tooltip 
+      content={({ active, payload, label }) => {
+        if (!active || !payload || !payload.length) return null;
+        
+        const uniquePayload = payload.filter((entry, index, self) => 
+          index === self.findIndex(e => e.dataKey === entry.dataKey)
+        );
+        
+        return (
+          <div style={{
+            backgroundColor: 'white',
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            fontSize: '13px',
+            padding: '12px',
+            minWidth: '160px'
+          }}>
+            <div style={{ 
+              fontWeight: '600', 
+              color: '#111827', 
+              marginBottom: '8px',
+              paddingBottom: '6px',
+              borderBottom: '1px solid #f3f4f6'
+            }}>
+              {label}
+            </div>
+            {uniquePayload.map((entry: any, index: number) => (
+              <div key={index} style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                marginBottom: index < uniquePayload.length - 1 ? '4px' : '0'
+              }}>
+                <div style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: getKpiChartColor(entry.dataKey, selectedChartMetrics),
+                  marginRight: '8px',
+                  flexShrink: 0
+                }}></div>
+                <span style={{ color: getKpiChartColor(entry.dataKey, selectedChartMetrics), fontWeight: '500' }}>
+                  {formatMetricName(entry.dataKey)} : {formatKPIValue(entry.dataKey, entry.value)}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      }}
+      wrapperStyle={{ outline: 'none' }}
+      cursor={false}
+    />
+  );
+
+  // Common axis components to avoid duplication
+  const commonXAxis = (
+    <XAxis 
+      dataKey="dateFormatted" 
+      stroke="#475569"
+      fontSize={11}
+      tickLine={true}
+      tickSize={6}
+      axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+      dy={12}
+      tick={{ fill: '#475569' }}
+      tickMargin={8}
+    />
+  );
+
+  const commonLeftYAxis = (chartData: any) => (
+    <YAxis 
+      yAxisId="left"
+      stroke="#475569"
+      fontSize={11}
+      tickLine={true}
+      tickSize={6}
+      axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+      dx={-10}
+      width={48}
+      tick={{ fill: '#475569' }}
+      tickMargin={8}
+      domain={getLeftAxisDomain(selectedChartMetrics, chartData)}
+      tickFormatter={(value) => {
+        const leftMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'left');
+        return leftMetrics.length > 0 ? formatLeftYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
+      }}
+    />
+  );
+
+  const commonRightYAxis = (chartData: any) => (
+    <YAxis 
+      yAxisId="right"
+      orientation="right"
+      stroke="#475569"
+      fontSize={11}
+      tickLine={true}
+      tickSize={6}
+      axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+      dx={10}
+      width={48}
+      tick={{ fill: '#475569' }}
+      tickMargin={8}
+      domain={getRightAxisDomain(selectedChartMetrics, chartData)}
+      tickFormatter={(value) => {
+        const rightMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'right');
+        return rightMetrics.length > 0 ? formatRightYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
+      }}
+    />
+  );
+
   return (
     <div className="bg-white rounded-lg p-6">
       <div className="mb-6">
@@ -153,151 +266,62 @@ const Charts: React.FC<ChartsProps> = ({
 
       {/* Enhanced Chart */}
       <div className="h-[480px] bg-gray-50/30 rounded-lg px-2 py-6">
-        <ResponsiveContainer width="100%" height="100%">
-          {(() => {
-            // Cache chart data calculation to avoid multiple expensive calls
-            const chartData = generateMultiMetricChartData(selectedChartMetrics, historicalData, dateGranularity, selectedDateRange);
-            
-            return chartType === 'line' ? (
+        {(() => {
+          // Calculate chart data once and reuse for both chart types
+          const chartData = generateMultiMetricChartData(selectedChartMetrics, historicalData, dateGranularity, selectedDateRange);
+          
+          // Common gradient definitions - only include what's needed for current chart type
+          const gradientDefs = (
+            <defs>
+              {chartType === 'line' ? (
+                // Line Chart Area Fill Gradients
+                selectedChartMetrics.map((metricId, index) => (
+                  <linearGradient
+                    key={`gradient-${metricId}`}
+                    id={`gradient-${metricId}`}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop offset="0%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.15} />
+                    <stop offset="70%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.05} />
+                    <stop offset="100%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0} />
+                  </linearGradient>
+                ))
+              ) : (
+                // Bar Chart Fill Gradients
+                selectedChartMetrics.map((metricId, index) => (
+                  <linearGradient
+                    key={`bar${getKpiGradientId(metricId)}`}
+                    id={`bar${getKpiGradientId(metricId)}`}
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop offset="0%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.9} />
+                    <stop offset="100%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.60} />
+                  </linearGradient>
+                ))
+              )}
+            </defs>
+          );
+          
+          return (
+            <ResponsiveContainer width="100%" height="100%">
+              {chartType === 'line' ? (
               <AreaChart
                 data={chartData}
                 margin={{ top: 20, right: needsDualYAxis(selectedChartMetrics, chartData) ? 50 : 25, left: 35, bottom: 25 }}
               >
-                {/* SVG Gradient Definitions */}
-                <defs>
-                  {/* Line Chart Area Fill Gradients */}
-                  {selectedChartMetrics.map((metricId, index) => (
-                    <linearGradient
-                      key={`gradient-${metricId}`}
-                      id={`gradient-${metricId}`}
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="0%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.15} />
-                      <stop offset="70%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.05} />
-                      <stop offset="100%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0} />
-                    </linearGradient>
-                  ))}
-                  
-                  {/* Bar Chart Fill Gradients */}
-                  {selectedChartMetrics.map((metricId, index) => (
-                    <linearGradient
-                      key={`barGradient-${metricId}`}
-                      id={`barGradient-${metricId}`}
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="0%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.85} />
-                      <stop offset="100%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.60} />
-                    </linearGradient>
-                  ))}
-                </defs>
+                {gradientDefs}
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeWidth={0.75} vertical={false} />
-                <XAxis 
-                  dataKey="dateFormatted" 
-                  stroke="#475569"
-                  fontSize={11}
-                  tickLine={true}
-                  tickSize={6}
-                  axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
-                  dy={12}
-                  tick={{ fill: '#475569' }}
-                  tickMargin={8}
-                />
-                <YAxis 
-                  yAxisId="left"
-                  stroke="#475569"
-                  fontSize={11}
-                  tickLine={true}
-                  tickSize={6}
-                  axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
-                  dx={-10}
-                  width={48}
-                  tick={{ fill: '#475569' }}
-                  tickMargin={8}
-                  domain={getLeftAxisDomain(selectedChartMetrics, chartData)}
-                  tickFormatter={(value) => {
-                    const leftMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'left');
-                    return leftMetrics.length > 0 ? formatLeftYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
-                  }}
-                />
+                {commonXAxis}
+                {commonLeftYAxis(chartData)}
                 {/* Secondary Y-Axis (Right) - Only if needed */}
-                {needsDualYAxis(selectedChartMetrics, chartData) && (
-                  <YAxis 
-                    yAxisId="right"
-                    orientation="right"
-                    stroke="#475569"
-                    fontSize={11}
-                    tickLine={true}
-                    tickSize={6}
-                    axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
-                    dx={10}
-                    width={48}
-                    tick={{ fill: '#475569' }}
-                    tickMargin={8}
-                    domain={getRightAxisDomain(selectedChartMetrics, chartData)}
-                    tickFormatter={(value) => {
-                      const rightMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'right');
-                      return rightMetrics.length > 0 ? formatRightYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
-                    }}
-                  />
-                )}
-                <Tooltip 
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload || !payload.length) return null;
-                    
-                    const uniquePayload = payload.filter((entry, index, self) => 
-                      index === self.findIndex(e => e.dataKey === entry.dataKey)
-                    );
-                    
-                    return (
-                      <div style={{
-                        backgroundColor: 'white',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                        fontSize: '13px',
-                        padding: '12px',
-                        minWidth: '160px'
-                      }}>
-                        <div style={{ 
-                          fontWeight: '600', 
-                          color: '#111827', 
-                          marginBottom: '8px',
-                          paddingBottom: '6px',
-                          borderBottom: '1px solid #f3f4f6'
-                        }}>
-                          {label}
-                        </div>
-                        {uniquePayload.map((entry: any, index: number) => (
-                          <div key={index} style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            marginBottom: index < uniquePayload.length - 1 ? '4px' : '0'
-                          }}>
-                            <div style={{
-                              width: '8px',
-                              height: '8px',
-                              borderRadius: '50%',
-                              backgroundColor: getKpiChartColor(entry.dataKey, selectedChartMetrics),
-                              marginRight: '8px',
-                              flexShrink: 0
-                            }}></div>
-                            <span style={{ color: getKpiChartColor(entry.dataKey, selectedChartMetrics), fontWeight: '500' }}>
-                              {formatMetricName(entry.dataKey)} : {formatKPIValue(entry.dataKey, entry.value)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  }}
-                  wrapperStyle={{ outline: 'none' }}
-                  cursor={false}
-                />
+                {needsDualYAxis(selectedChartMetrics, chartData) && commonRightYAxis(chartData)}
+                {commonTooltip}
                 {/* Layer 1: Gradient Fill Areas (drawn first, behind lines) */}
                 {selectedChartMetrics.map((metricId) => (
                   <Area
@@ -334,124 +358,13 @@ const Charts: React.FC<ChartsProps> = ({
                 barCategoryGap="20%"
                 barGap={6}
               >
-                {/* SVG Gradient Definitions for Bar Chart */}
-                <defs>
-                  {selectedChartMetrics.map((metricId, index) => (
-                    <linearGradient
-                      key={`bar${getKpiGradientId(metricId)}`}
-                      id={`bar${getKpiGradientId(metricId)}`}
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="0%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.9} />
-                      <stop offset="100%" stopColor={getKpiChartColor(metricId, selectedChartMetrics)} stopOpacity={0.60} />
-                    </linearGradient>
-                  ))}
-                </defs>
+                {gradientDefs}
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeWidth={0.75} vertical={false} />
-                <XAxis 
-                  dataKey="dateFormatted" 
-                  stroke="#475569"
-                  fontSize={11}
-                  tickLine={true}
-                  tickSize={6}
-                  axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
-                  dy={12}
-                  tick={{ fill: '#475569' }}
-                  tickMargin={8}
-                />
-                <YAxis 
-                  yAxisId="left"
-                  stroke="#475569"
-                  fontSize={11}
-                  tickLine={true}
-                  tickSize={6}
-                  axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
-                  dx={-10}
-                  width={48}
-                  tick={{ fill: '#475569' }}
-                  tickMargin={8}
-                  domain={getLeftAxisDomain(selectedChartMetrics, chartData)}
-                  tickFormatter={(value) => {
-                    const leftMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'left');
-                    return leftMetrics.length > 0 ? formatLeftYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
-                  }}
-                />
+                {commonXAxis}
+                {commonLeftYAxis(chartData)}
                 {/* Secondary Y-Axis (Right) - Only if needed */}
-                {needsDualYAxis(selectedChartMetrics, chartData) && (
-                  <YAxis 
-                    yAxisId="right"
-                    orientation="right"
-                    stroke="#475569"
-                    fontSize={11}
-                    tickLine={true}
-                    tickSize={6}
-                    axisLine={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
-                    dx={10}
-                    width={48}
-                    tick={{ fill: '#475569' }}
-                    tickMargin={8}
-                    domain={getRightAxisDomain(selectedChartMetrics, chartData)}
-                    tickFormatter={(value) => {
-                      const rightMetrics = selectedChartMetrics.filter(m => getYAxisOrientation(m, selectedChartMetrics, chartData) === 'right');
-                      return rightMetrics.length > 0 ? formatRightYAxis(value, selectedChartMetrics, chartData) : value.toFixed(1);
-                    }}
-                  />
-                )}
-                <Tooltip 
-                  content={({ active, payload, label }) => {
-                    if (!active || !payload || !payload.length) return null;
-                    
-                    const uniquePayload = payload.filter((entry, index, self) => 
-                      index === self.findIndex(e => e.dataKey === entry.dataKey)
-                    );
-                    
-                    return (
-                      <div style={{
-                        backgroundColor: 'white',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                        fontSize: '13px',
-                        padding: '12px',
-                        minWidth: '160px'
-                      }}>
-                        <div style={{ 
-                          fontWeight: '600', 
-                          color: '#111827', 
-                          marginBottom: '8px',
-                          paddingBottom: '6px',
-                          borderBottom: '1px solid #f3f4f6'
-                        }}>
-                          {label}
-                        </div>
-                        {uniquePayload.map((entry: any, index: number) => (
-                          <div key={index} style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            marginBottom: index < uniquePayload.length - 1 ? '4px' : '0'
-                          }}>
-                            <div style={{
-                              width: '8px',
-                              height: '8px',
-                              borderRadius: '50%',
-                              backgroundColor: getKpiChartColor(entry.dataKey, selectedChartMetrics),
-                              marginRight: '8px',
-                              flexShrink: 0
-                            }}></div>
-                            <span style={{ color: getKpiChartColor(entry.dataKey, selectedChartMetrics), fontWeight: '500' }}>
-                              {formatMetricName(entry.dataKey)} : {formatKPIValue(entry.dataKey, entry.value)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  }}
-                  wrapperStyle={{ outline: 'none' }}
-                  cursor={false}
-                />
+                {needsDualYAxis(selectedChartMetrics, chartData) && commonRightYAxis(chartData)}
+                {commonTooltip}
                 {/* Multiple Bars with gradient fills */}
                 {selectedChartMetrics.map((metricId, index) => (
                   <Bar
@@ -468,9 +381,10 @@ const Charts: React.FC<ChartsProps> = ({
                   />
                 ))}
               </BarChart>
-            );
-          })()}
-        </ResponsiveContainer>
+              )}
+            </ResponsiveContainer>
+          );
+        })()}
       </div>
     </div>
   );
