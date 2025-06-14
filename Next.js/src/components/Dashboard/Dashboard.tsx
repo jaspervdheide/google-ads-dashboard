@@ -68,6 +68,7 @@ import {
 import KPICards from './KPICards';
 import Charts from './Charts';
 import CampaignTable from './CampaignTable';
+import Keywords from './Keywords';
 
 // =============================================================================
 // ICON IMPORTS
@@ -414,8 +415,8 @@ const filterActiveAccounts = async (accounts: Account[]): Promise<AccountWithCli
   return activeAccounts;
 };
 
-// Calculate today's performance - actual today's clicks
-const calculateTodayMetrics = async (): Promise<{clicks: number, spend: number}> => {
+// Calculate today's performance - actual today's clicks - MEMOIZED
+const calculateTodayMetrics = useCallback(async (): Promise<{clicks: number, spend: number}> => {
   if (selectedAccount) {
     // Fetch actual today's data for selected account
     const todayData = await fetchTodayClicks(selectedAccount);
@@ -431,7 +432,7 @@ const calculateTodayMetrics = async (): Promise<{clicks: number, spend: number}>
     return { clicks: totalTodayClicks, spend: totalTodaySpend };
   }
   return { clicks: 0, spend: 0 };
-};
+}, [selectedAccount, filteredAccounts]);
 
 // Fetch accounts on component mount
 const fetchAccounts = async () => {
@@ -671,7 +672,7 @@ useEffect(() => {
       setSelectedDateRange(defaultRange);
     }
   }
-}, [selectedDateRange]); // Removed dateRanges from deps since it's memoized
+}, [selectedDateRange, dateRanges]); // Fixed: Added dateRanges dependency
 
 // Fetch accounts on component mount
 useEffect(() => {
@@ -688,7 +689,7 @@ useEffect(() => {
   if (selectedAccount || filteredAccounts.length > 0) {
     updateTodayMetrics();
   }
-}, [selectedAccount, filteredAccounts]);
+}, [selectedAccount, filteredAccounts, calculateTodayMetrics]); // Fixed: Added calculateTodayMetrics dependency
 
 // =============================================================================
 // RENDER HELPERS
@@ -1364,6 +1365,14 @@ return (
               </div>
             </div>
           </div>
+        )}
+
+        {/* Keywords View */}
+        {currentPage === 'keywords' && (
+          <Keywords
+            selectedAccount={selectedAccount}
+            selectedDateRange={selectedDateRange}
+          />
         )}
 
         {/* Settings View */}
