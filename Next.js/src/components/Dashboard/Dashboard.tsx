@@ -256,7 +256,7 @@ export default function Dashboard() {
   const [selectedAdGroups, setSelectedAdGroups] = useState<string[]>([]);
   const [adGroupPageSize, setAdGroupPageSize] = useState<number>(25);
   const [adGroupTypeFilter, setAdGroupTypeFilter] = useState<'all' | 'traditional' | 'asset'>('all');
-  const [adGroupViewMode, setAdGroupViewMode] = useState<'table' | 'charts'>('table');
+  const [adGroupViewMode, setAdGroupViewMode] = useState<'table' | 'graphs'>('table');
 
   // Hover metrics chart state
   const [hoverChart, setHoverChart] = useState({
@@ -1365,9 +1365,9 @@ return (
                         <span>Table</span>
                       </button>
                       <button
-                        onClick={() => setAdGroupViewMode('charts')}
+                        onClick={() => setAdGroupViewMode('graphs')}
                         className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
-                          adGroupViewMode === 'charts'
+                          adGroupViewMode === 'graphs'
                             ? 'bg-white text-gray-900 shadow-sm'
                             : 'text-gray-600 hover:text-gray-900'
                         }`}
@@ -1381,64 +1381,21 @@ return (
               </div>
 
               {/* Table or Charts View */}
-              {adGroupViewMode === 'table' ? (
-                <AdGroupTable
-                  data={realAdGroupData}
-                  loading={adGroupLoading}
-                  searchTerm=""
-                  pageSize={adGroupPageSize}
-                  sortColumn={adGroupSort.field}
-                  sortDirection={adGroupSort.direction}
-                  statusFilter="all"
-                  groupTypeFilter={adGroupTypeFilter}
-                  onSort={handleAdGroupSort}
-                  onAdGroupClick={handleAdGroupClick}
-                  onMetricHover={handleMetricHover}
-                  onMetricLeave={handleMetricLeave}
-                />
-              ) : (
-                /* Premium Charts View */
-                <div className="space-y-8">
-                  {/* Sophisticated Header */}
-                  <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl p-6 border border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Ad Group Performance Analytics</h2>
-                        <p className="text-gray-600 text-sm leading-relaxed">
-                          Comprehensive insights into your ad group performance metrics and trends
-                        </p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <div className="bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
-                          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Ad Groups</span>
-                          <div className="text-lg font-bold text-gray-900">
-                            {realAdGroupData?.adGroups?.length || 0}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Charts Layout */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Placeholder for future charts */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                      <div className="text-center text-gray-500">
-                        <Target className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">Charts Coming Soon</h3>
-                        <p className="text-sm">Ad group performance charts will be available here</p>
-                      </div>
-                    </div>
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                      <div className="text-center text-gray-500">
-                        <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">Analytics Coming Soon</h3>
-                        <p className="text-sm">Advanced ad group analytics will be available here</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <AdGroupTable
+                data={realAdGroupData}
+                loading={adGroupLoading}
+                searchTerm=""
+                pageSize={adGroupPageSize}
+                sortColumn={adGroupSort.field}
+                sortDirection={adGroupSort.direction}
+                statusFilter="all"
+                groupTypeFilter={adGroupTypeFilter}
+                viewMode={adGroupViewMode}
+                onSort={handleAdGroupSort}
+                onAdGroupClick={handleAdGroupClick}
+                onMetricHover={handleMetricHover}
+                onMetricLeave={handleMetricLeave}
+              />
             </div>
           </div>
         )}

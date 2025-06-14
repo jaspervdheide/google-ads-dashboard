@@ -2,8 +2,11 @@
 
 import React, { useMemo } from 'react';
 import { Calculator, Search, Package, Zap, MoreHorizontal, Target } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { AdGroup, AdGroupData } from '../../types';
 import { formatNumber, formatPercentage, formatCurrency } from '../../utils';
+import TopAdGroupsPerformance from './TopAdGroupsPerformance';
+import AdGroupPerformanceMatrix from './AdGroupPerformanceMatrix';
 
 interface AdGroupTableProps {
   data: AdGroupData | null;
@@ -14,6 +17,7 @@ interface AdGroupTableProps {
   sortDirection: 'asc' | 'desc';
   statusFilter: 'active' | 'all';
   groupTypeFilter: 'all' | 'traditional' | 'asset';
+  viewMode: 'table' | 'graphs';
   onSort: (column: string) => void;
   onAdGroupClick: (adGroup: AdGroup) => void;
   onMetricHover?: (event: React.MouseEvent, metricType: string, metricValue: string | number, adGroupName: string, adGroupId: string) => void;
@@ -132,6 +136,181 @@ const getAdStrengthBadge = (strength: 'Poor' | 'Good' | 'Excellent') => {
   }
 };
 
+// Ad Group Type Distribution Chart Component
+const AdGroupTypeDistribution: React.FC<{ data: AdGroupData | null }> = ({ data }) => {
+  // Calculate group type distribution from real data
+  const groupTypeDistribution = useMemo(() => {
+    if (!data?.adGroups) {
+      return [
+        { 
+          name: 'Traditional Ad Groups', 
+          value: 0,
+          conversions: 0,
+          avgCPA: 0,
+          color: '#3b82f6' 
+        },
+        { 
+          name: 'Asset Groups (Performance Max)', 
+          value: 0,
+          conversions: 0,
+          avgCPA: 0,
+          color: '#10b981' 
+        }
+      ];
+    }
+
+    const traditionalGroups = data.adGroups.filter(ag => ag.groupType === 'ad_group');
+    const assetGroups = data.adGroups.filter(ag => ag.groupType === 'asset_group');
+
+    const traditionalConversions = traditionalGroups.reduce((sum, ag) => sum + ag.conversions, 0);
+    const assetConversions = assetGroups.reduce((sum, ag) => sum + ag.conversions, 0);
+    
+    const traditionalCPA = traditionalGroups.length > 0 
+      ? traditionalGroups.reduce((sum, ag) => sum + ag.cpa, 0) / traditionalGroups.length 
+      : 0;
+    const assetCPA = assetGroups.length > 0 
+      ? assetGroups.reduce((sum, ag) => sum + ag.cpa, 0) / assetGroups.length 
+      : 0;
+
+    return [
+      { 
+        name: 'Traditional Ad Groups', 
+        value: traditionalGroups.length,
+        conversions: traditionalConversions,
+        avgCPA: traditionalCPA,
+        color: '#3b82f6' 
+      },
+      { 
+        name: 'Asset Groups (Performance Max)', 
+        value: assetGroups.length,
+        conversions: assetConversions,
+        avgCPA: assetCPA,
+        color: '#10b981' 
+      }
+    ].filter(item => item.value > 0); // Only show groups that exist
+  }, [data]);
+
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
+          <p className="text-sm font-medium text-gray-900 mb-2">{data.name}</p>
+          <div className="space-y-1 text-xs">
+            <p className="text-gray-600">
+              Count: <span className="font-medium text-gray-900">{data.value} groups</span>
+            </p>
+            <p className="text-gray-600">
+              Conversions: <span className="font-medium text-gray-900">{formatNumber(data.conversions)}</span>
+            </p>
+            <p className="text-gray-600">
+              Avg CPA: <span className="font-medium text-gray-900">{formatCurrency(data.avgCPA)}</span>
+            </p>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  if (groupTypeDistribution.length === 0) {
+    return (
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="text-center py-8">
+          <Target className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No ad groups found</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Try adjusting your filters or check back later.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-semibold text-gray-900">Ad Group Type Distribution</h3>
+        <div className="flex items-center space-x-2 text-sm text-gray-600">
+          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+          <span>Live Data</span>
+        </div>
+      </div>
+      
+      {/* Chart Container */}
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={groupTypeDistribution}
+              cx="50%"
+              cy="50%"
+              innerRadius={60}
+              outerRadius={120}
+              paddingAngle={2}
+              dataKey="value"
+            >
+              {groupTypeDistribution.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip content={<CustomTooltip />} />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      
+      {/* Legend with Metrics */}
+      <div className="mt-4 space-y-2">
+        {groupTypeDistribution.map((item, index) => (
+          <div key={index} className="flex items-center justify-between text-sm hover:bg-gray-50 p-2 rounded-lg transition-colors duration-200">
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
+              <span className="text-gray-700 font-medium">{item.name}</span>
+              <span className="text-gray-500">({item.value} groups)</span>
+            </div>
+            <div className="text-right">
+              <div className="flex items-center space-x-4">
+                <div>
+                  <span className="font-medium text-gray-900">{item.conversions.toFixed(2)}</span>
+                  <span className="text-gray-500 ml-1 text-xs">conv.</span>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-900">€{item.avgCPA.toFixed(2)}</span>
+                  <span className="text-gray-500 ml-1 text-xs">CPA</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Summary Stats */}
+      <div className="mt-6 pt-4 border-t border-gray-100">
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <div className="text-lg font-semibold text-gray-900">
+              {groupTypeDistribution.reduce((sum, item) => sum + item.conversions, 0).toFixed(2)}
+            </div>
+            <div className="text-xs text-gray-600">Total Conversions</div>
+          </div>
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <div className="text-lg font-semibold text-gray-900">
+              €{groupTypeDistribution.length > 0 ? (groupTypeDistribution.reduce((sum, item) => sum + item.avgCPA, 0) / groupTypeDistribution.length).toFixed(2) : '0.00'}
+            </div>
+            <div className="text-xs text-gray-600">Average CPA</div>
+          </div>
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <div className="text-lg font-semibold text-gray-900">
+              {groupTypeDistribution.length}
+            </div>
+            <div className="text-xs text-gray-600">Group Types</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AdGroupTable: React.FC<AdGroupTableProps> = ({
   data,
   loading,
@@ -141,6 +320,7 @@ const AdGroupTable: React.FC<AdGroupTableProps> = ({
   sortDirection,
   statusFilter,
   groupTypeFilter,
+  viewMode,
   onSort,
   onAdGroupClick,
   onMetricHover,
@@ -249,6 +429,48 @@ const AdGroupTable: React.FC<AdGroupTableProps> = ({
           <Target className="h-12 w-12 mx-auto" />
         </div>
         <p className="text-gray-600">No ad groups found</p>
+      </div>
+    );
+  }
+
+  // Show charts view
+  if (viewMode === 'graphs') {
+    return (
+      /* Premium Charts View */
+      <div className="space-y-8">
+        {/* Sophisticated Header */}
+        <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Ad Group Performance Analytics</h2>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Comprehensive insights into your ad group performance metrics and trends
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Ad Groups</span>
+                <div className="text-lg font-bold text-gray-900">
+                  {data?.adGroups?.length || 0}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Charts Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Left Column */}
+          <div className="flex flex-col h-full">
+            <TopAdGroupsPerformance adGroupData={data} />
+          </div>
+          
+          {/* Right Column */}
+          <div className="flex flex-col justify-between h-full">
+            <AdGroupTypeDistribution data={data} />
+            <AdGroupPerformanceMatrix adGroupData={data} />
+          </div>
+        </div>
       </div>
     );
   }
