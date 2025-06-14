@@ -4,11 +4,11 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Search, 
   Target, 
-  AlertTriangle,
-  BarChart3,
-  Table as TableIcon
+  MoreHorizontal,
+  Package,
+  Zap
 } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { getFromCache, saveToCache } from "../../app/utils/cache.js";
 import { 
   formatNumber, 
@@ -25,8 +25,10 @@ import KeywordPerformanceMatrix from './KeywordPerformanceMatrix';
 // =============================================================================
 
 interface KeywordData {
+  id: string;
   keyword_text: string;
-  match_type: 'EXACT' | 'PHRASE' | 'BROAD';
+  match_type: 'EXACT' | 'PHRASE' | 'BROAD' | 'SEARCH_TERM';
+  type: 'keyword' | 'search_term';
   impressions: number;
   clicks: number;
   cost: number;
@@ -39,121 +41,287 @@ interface KeywordData {
   ad_group_name: string;
   campaign_name: string;
   triggering_keyword?: string;
-}
-
-interface KeywordsSummary {
-  total_keywords: number;
-  total_search_terms: number;
-  zero_clicks_count: number;
-  zero_clicks_percentage: number;
-  zero_conversions_count: number;
-  zero_conversions_percentage: number;
+  status: string;
 }
 
 interface KeywordsProps {
   selectedAccount: string;
   selectedDateRange: DateRange | null;
+  searchTerm: string;
+  pageSize: number;
+  sortColumn: string;
+  sortDirection: 'asc' | 'desc';
+  statusFilter: 'active' | 'all';
+  dataTypeFilter: 'all' | 'keywords' | 'search_terms';
+  viewMode: 'table' | 'graphs';
+  onSort: (column: string) => void;
 }
+
+// Performance indicator types
+type PerformanceLevel = 'high' | 'medium' | 'low';
+
+// Helper function to calculate performance percentiles
+const getPerformanceLevel = (
+  value: number, 
+  allValues: number[], 
+  metricType: string
+): PerformanceLevel => {
+  if (allValues.length < 3) return 'medium';
+  
+  // Filter out zero values for better percentile calculation
+  const nonZeroValues = allValues.filter(v => v > 0);
+  if (nonZeroValues.length === 0) return 'medium';
+  
+  // Sort values based on whether higher or lower is better
+  const isHigherBetter = ['clicks', 'impressions', 'ctr', 'conversions', 'conversions_value', 'roas', 'quality_score'].includes(metricType);
+  const sortedValues = [...nonZeroValues].sort((a, b) => isHigherBetter ? b - a : a - b);
+  
+  // If the current value is 0 and we're looking at a "higher is better" metric, it's low performance
+  if (value === 0 && isHigherBetter) return 'low';
+  
+  // Calculate percentile thresholds
+  const topThreshold = sortedValues[Math.floor(sortedValues.length * 0.33)];
+  const bottomThreshold = sortedValues[Math.floor(sortedValues.length * 0.67)];
+  
+  if (isHigherBetter) {
+    if (value >= topThreshold) return 'high';
+    if (value >= bottomThreshold) return 'medium';
+    return 'low';
+  } else {
+    // For metrics where lower is better (cost, cpc, cpa)
+    if (value <= topThreshold) return 'high';
+    if (value <= bottomThreshold) return 'medium';
+    return 'low';
+  }
+};
+
+// Helper function to get performance indicator color and glow
+const getPerformanceStyles = (level: PerformanceLevel): string => {
+  const baseStyles = 'inline-block w-1.5 h-1.5 rounded-full mr-2 shadow-sm ring-1 ring-white/20';
+  
+  switch (level) {
+    case 'high': return `${baseStyles} bg-emerald-400 shadow-emerald-200/50`;
+    case 'medium': return `${baseStyles} bg-amber-400 shadow-amber-200/50`;
+    case 'low': return `${baseStyles} bg-rose-400 shadow-rose-200/50`;
+    default: return `${baseStyles} bg-gray-400 shadow-gray-200/50`;
+  }
+};
+
+// Performance indicator component
+const PerformanceIndicator: React.FC<{ level: PerformanceLevel }> = ({ level }) => (
+  <div 
+    className={getPerformanceStyles(level)}
+    title={`Performance: ${level}`}
+  />
+);
+
+// Campaign type detection based on naming conventions
+const detectCampaignType = (campaignName: string): 'search' | 'shopping' | 'performance_max' | 'other' => {
+  const nameLower = campaignName.toLowerCase();
+  if (nameLower.includes('performance max') || nameLower.includes('pmax')) {
+    return 'performance_max';
+  }
+  if (nameLower.includes('shopping')) {
+    return 'shopping';
+  }
+  if (nameLower.includes('search')) {
+    return 'search';
+  }
+  return 'other';
+};
+
+// Get campaign type indicator
+const getCampaignTypeIndicator = (campaignType: 'search' | 'shopping' | 'performance_max' | 'other') => {
+  const indicators = {
+    'search': { icon: Search, color: 'text-blue-600', bg: 'bg-blue-100' },
+    'shopping': { icon: Package, color: 'text-green-600', bg: 'bg-green-100' },
+    'performance_max': { icon: Zap, color: 'text-purple-600', bg: 'bg-purple-100' },
+    'other': { icon: MoreHorizontal, color: 'text-gray-600', bg: 'bg-gray-100' }
+  };
+  return indicators[campaignType];
+};
+
+// Get keyword type badge styles
+const getKeywordTypeBadge = (type: 'keyword' | 'search_term') => {
+  return type === 'search_term' 
+    ? 'bg-green-100 text-green-800 border border-green-200'
+    : 'bg-blue-100 text-blue-800 border border-blue-200';
+};
+
+// Get match type badge styles
+const getMatchTypeBadge = (matchType: string) => {
+  switch (matchType) {
+    case 'EXACT': return 'bg-purple-100 text-purple-800 border border-purple-200';
+    case 'PHRASE': return 'bg-orange-100 text-orange-800 border border-orange-200';
+    case 'BROAD': return 'bg-teal-100 text-teal-800 border border-teal-200';
+    case 'SEARCH_TERM': return 'bg-gray-100 text-gray-800 border border-gray-200';
+    default: return 'bg-gray-100 text-gray-800 border border-gray-200';
+  }
+};
+
+// Keyword Type Distribution Chart Component
+const KeywordTypeDistribution: React.FC<{ data: KeywordData[] }> = ({ data }) => {
+  // Calculate keyword type distribution from real data
+  const keywordTypeDistribution = useMemo(() => {
+    if (!data || data.length === 0) {
+      return [
+        { 
+          name: 'Keywords', 
+          value: 0,
+          conversions: 0,
+          avgCPA: 0,
+          color: '#3b82f6' 
+        },
+        { 
+          name: 'Search Terms', 
+          value: 0,
+          conversions: 0,
+          avgCPA: 0,
+          color: '#10b981' 
+        }
+      ];
+    }
+
+    const keywords = data.filter(k => k.type === 'keyword');
+    const searchTerms = data.filter(k => k.type === 'search_term');
+
+    const keywordConversions = keywords.reduce((sum, k) => sum + k.conversions, 0);
+    const searchTermConversions = searchTerms.reduce((sum, k) => sum + k.conversions, 0);
+    
+    const keywordCPA = keywords.length > 0 
+      ? keywords.reduce((sum, k) => sum + (k.conversions > 0 ? k.cost / k.conversions : 0), 0) / keywords.length 
+      : 0;
+    const searchTermCPA = searchTerms.length > 0 
+      ? searchTerms.reduce((sum, k) => sum + (k.conversions > 0 ? k.cost / k.conversions : 0), 0) / searchTerms.length 
+      : 0;
+
+    return [
+      { 
+        name: 'Keywords', 
+        value: keywords.length,
+        conversions: keywordConversions,
+        avgCPA: keywordCPA,
+        color: '#3b82f6' 
+      },
+      { 
+        name: 'Search Terms', 
+        value: searchTerms.length,
+        conversions: searchTermConversions,
+        avgCPA: searchTermCPA,
+        color: '#10b981' 
+      }
+    ].filter(item => item.value > 0); // Only show types that exist
+  }, [data]);
+
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
+          <p className="text-sm font-medium text-gray-900 mb-2">{data.name}</p>
+          <div className="space-y-1 text-xs">
+            <p className="text-gray-600">
+              Count: <span className="font-medium text-gray-900">{data.value}</span>
+            </p>
+            <p className="text-gray-600">
+              Conversions: <span className="font-medium text-gray-900">{formatNumber(data.conversions)}</span>
+            </p>
+            <p className="text-gray-600">
+              Avg CPA: <span className="font-medium text-gray-900">{formatCurrency(data.avgCPA)}</span>
+            </p>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-80">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Keyword Distribution</h3>
+          <p className="text-sm text-gray-600 mt-1">Keywords vs Search Terms breakdown</p>
+        </div>
+      </div>
+      
+      <div className="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={keywordTypeDistribution}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              outerRadius={80}
+              innerRadius={40}
+              paddingAngle={2}
+            >
+              {keywordTypeDistribution.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip content={<CustomTooltip />} />
+            <Legend />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
 
 // =============================================================================
 // MAIN KEYWORDS COMPONENT
 // =============================================================================
 
-const Keywords: React.FC<KeywordsProps> = ({ selectedAccount, selectedDateRange }) => {
+const Keywords: React.FC<KeywordsProps> = ({
+  selectedAccount,
+  selectedDateRange,
+  searchTerm,
+  pageSize,
+  sortColumn,
+  sortDirection,
+  statusFilter,
+  dataTypeFilter,
+  viewMode,
+  onSort
+}) => {
   // Core state
   const [keywordData, setKeywordData] = useState<KeywordData[]>([]);
-  const [keywordsSummary, setKeywordsSummary] = useState<KeywordsSummary | null>(null);
   const [keywordsLoading, setKeywordsLoading] = useState(false);
-  const [keywordsError, setKeywordsError] = useState<string>('');
-
-  // View controls
-  const [viewMode, setViewMode] = useState<'table' | 'graphs'>('table');
-  const [dataType, setDataType] = useState<'keywords' | 'search_terms'>('keywords');
-
-  // Table controls
-  const [keywordSearch, setKeywordSearch] = useState<string>('');
-  const [keywordSort, setKeywordSort] = useState<{field: string, direction: 'asc' | 'desc' | null}>({field: 'impressions', direction: 'desc'});
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(25);
-
-  // Filter controls
-  const [matchTypeFilter, setMatchTypeFilter] = useState<string>('all');
-  const [performanceFilter, setPerformanceFilter] = useState<string>('all');
-  const [selectedColumns] = useState<string[]>([
-    'keyword_text', 'match_type', 'impressions', 'clicks', 'cost', 'conversions', 'ctr', 'cpc'
-  ]);
-
-  // Available columns configuration - MEMOIZED
-  const availableColumns = useMemo(() => [
-    { id: 'keyword_text', label: 'Keyword/Search Term', always: true },
-    { id: 'match_type', label: 'Match Type', always: true },
-    { id: 'triggering_keyword', label: 'Triggering Keyword', searchTermsOnly: true },
-    { id: 'impressions', label: 'Impressions' },
-    { id: 'clicks', label: 'Clicks' },
-    { id: 'cost', label: 'Cost' },
-    { id: 'conversions', label: 'Conversions' },
-    { id: 'conversions_value', label: 'Conv. Value' },
-    { id: 'ctr', label: 'CTR' },
-    { id: 'cpc', label: 'CPC' },
-    { id: 'roas', label: 'ROAS' },
-    { id: 'quality_score', label: 'Quality Score', keywordsOnly: true },
-    { id: 'ad_group_name', label: 'Ad Group' },
-    { id: 'campaign_name', label: 'Campaign' }
-  ], []);
 
   // =============================================================================
   // DATA FETCHING
   // =============================================================================
 
   const fetchKeywordsData = useCallback(async () => {
-    console.log("🎯 fetchKeywordsData called - MEMOIZED");
     if (!selectedAccount || !selectedDateRange) return;
 
     try {
       setKeywordsLoading(true);
-      setKeywordsError('');
 
       const apiDateRange = getApiDateRange(selectedDateRange);
       
-      // Build proper cache key (include dataType for keywords vs search_terms)
-      const cacheKey = `keywords_${selectedAccount}_${apiDateRange.days}days_${dataType}`;
-      console.log("🎯 Cache check:", { 
-        cacheKey, 
-        selectedAccount, 
-        days: apiDateRange.days,
-        dataType: dataType
-      });
+      // Build proper cache key
+      const cacheKey = `keywords_${selectedAccount}_${apiDateRange.days}days_both`;
+      
+      console.log(`🔍 Keywords: Checking cache for key: ${cacheKey}`);
       
       // Check cache first (30 min TTL)
       const cachedData = getFromCache(cacheKey, 30);
-      console.log("💽 Cache result:", { 
-        cached: !!cachedData, 
-        cacheExists: cachedData !== null,
-        cacheKey 
-      });
       
-      // If cached exists, return cached data
       if (cachedData) {
-        console.log("💾 Using cached keywords data");
-        console.log("✅ Returning cached keywords data");
-        
+        console.log(`✅ Keywords: Using cached data (${cachedData.keywords?.length || 0} items)`);
         setKeywordData(cachedData.keywords || []);
-        setKeywordsSummary(cachedData.summary || null);
         setKeywordsLoading(false);
-        
-        console.log(`📊 Keywords loaded from cache:`, {
-          dataType,
-          totalItems: cachedData.keywords?.length || 0,
-          summary: cachedData.summary
-        });
         return;
       }
       
-      // If no cached data, proceed with API call
-      console.log("🎯 CACHE MISS - Fetching from API");
-      console.log("🌐 Making fresh API call for keywords");
+      console.log(`🌐 Keywords: No cache found, fetching from API...`);
       
-      const response = await fetch(`/api/keywords?customerId=${selectedAccount}&dateRange=${apiDateRange.days}&dataType=${dataType}`);
+      // Fetch both keywords and search terms
+      const response = await fetch(`/api/keywords?customerId=${selectedAccount}&dateRange=${apiDateRange.days}&dataType=both`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch keywords: ${response.statusText}`);
@@ -166,646 +334,476 @@ const Keywords: React.FC<KeywordsProps> = ({ selectedAccount, selectedDateRange 
         keywords: result.data || [],
         summary: result.summary || null
       };
-      saveToCache(cacheKey, cacheData); // Cache for 30 minutes (TTL controlled by getFromCache)
-      console.log("💾 Saved keywords to cache successfully", { cacheKey });
+      console.log(`💾 Keywords: Saving to cache (${result.data?.length || 0} items)`);
+      saveToCache(cacheKey, cacheData);
       
       setKeywordData(result.data || []);
-      setKeywordsSummary(result.summary || null);
-      
-      console.log(`📊 Keywords loaded from API:`, {
-        dataType,
-        totalItems: result.data?.length || 0,
-        summary: result.summary
-      });
 
     } catch (err) {
       console.error('Error fetching keywords:', err);
-      setKeywordsError(err instanceof Error ? err.message : 'Failed to fetch keywords data');
     } finally {
       setKeywordsLoading(false);
     }
-  }, [selectedAccount, selectedDateRange, dataType]);
+  }, [selectedAccount, selectedDateRange]);
 
-  // Fetch data when dependencies change - FIXED DEPENDENCIES
+  // Fetch data when dependencies change
   useEffect(() => {
     fetchKeywordsData();
   }, [fetchKeywordsData]);
-
-  // Reset page when filters change - PERFORMANCE OPTIMIZATION
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [keywordSearch, matchTypeFilter, performanceFilter, dataType]);
 
   // =============================================================================
   // DATA PROCESSING - MEMOIZED FOR PERFORMANCE
   // =============================================================================
 
-  // Get intelligent KPI based on current data type - MEMOIZED
-  const intelligentKPI = useMemo(() => {
-    if (!keywordsSummary) return null;
-
-    if (dataType === 'keywords') {
-      return {
-        label: 'Keywords with Zero Clicks',
-        value: `${keywordsSummary.zero_clicks_percentage.toFixed(1)}%`,
-        count: `${keywordsSummary.zero_clicks_count}/${keywordsSummary.total_keywords}`,
-        color: keywordsSummary.zero_clicks_percentage > 30 ? 'text-red-600' : keywordsSummary.zero_clicks_percentage > 15 ? 'text-yellow-600' : 'text-green-600',
-        icon: Target,
-        description: 'Keywords not generating any clicks may need optimization or removal'
-      };
-    } else {
-      return {
-        label: 'Search Terms with Zero Conversions',
-        value: `${keywordsSummary.zero_conversions_percentage.toFixed(1)}%`,
-        count: `${keywordsSummary.zero_conversions_count}/${keywordsSummary.total_search_terms}`,
-        color: keywordsSummary.zero_conversions_percentage > 70 ? 'text-red-600' : keywordsSummary.zero_conversions_percentage > 50 ? 'text-yellow-600' : 'text-green-600',
-        icon: AlertTriangle,
-        description: 'Search terms with no conversions may indicate opportunities for negative keywords'
-      };
-    }
-  }, [keywordsSummary, dataType]);
-
-  // Filter and sort data - MEMOIZED FOR PERFORMANCE
-  const filteredData = useMemo(() => {
-    let filtered = [...keywordData];
-
-    // Search filter
-    if (keywordSearch.trim()) {
-      const searchTerm = keywordSearch.toLowerCase().trim();
-      filtered = filtered.filter(item => 
-        item.keyword_text.toLowerCase().includes(searchTerm) ||
-        item.ad_group_name.toLowerCase().includes(searchTerm) ||
-        item.campaign_name.toLowerCase().includes(searchTerm) ||
-        (item.triggering_keyword && item.triggering_keyword.toLowerCase().includes(searchTerm))
-      );
-    }
-
-    // Match type filter
-    if (matchTypeFilter !== 'all') {
-      filtered = filtered.filter(item => item.match_type === matchTypeFilter);
-    }
-
-    // Performance filter
-    if (performanceFilter === 'high_spend_zero_conv') {
-      filtered = filtered.filter(item => item.cost > 10 && item.conversions === 0);
-    } else if (performanceFilter === 'zero_clicks') {
-      filtered = filtered.filter(item => item.clicks === 0);
-    } else if (performanceFilter === 'low_ctr') {
-      filtered = filtered.filter(item => item.ctr < 0.02); // Less than 2%
-    }
-
-    // Sort
-    if (keywordSort.field && keywordSort.direction) {
-      filtered.sort((a, b) => {
-        let aValue = a[keywordSort.field as keyof KeywordData];
-        let bValue = b[keywordSort.field as keyof KeywordData];
-
-        // Handle undefined values
-        if (aValue === undefined) aValue = '';
-        if (bValue === undefined) bValue = '';
-
+  // Filter and sort keywords - matching Ad Groups structure
+  const filteredKeywords = useMemo(() => {
+    if (!keywordData) return [];
+    
+    return keywordData
+      .filter(keyword => {
+        // Apply status filter
+        const statusMatch = statusFilter === 'all' || 
+          (statusFilter === 'active' && (keyword.impressions > 0 || keyword.clicks > 0));
+        
+        // Apply data type filter
+        let dataTypeMatch = true;
+        if (dataTypeFilter === 'keywords') {
+          dataTypeMatch = keyword.type === 'keyword';
+        } else if (dataTypeFilter === 'search_terms') {
+          dataTypeMatch = keyword.type === 'search_term';
+        }
+        
+        // Apply search filter
+        const searchMatch = keyword.keyword_text.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (keyword.campaign_name && keyword.campaign_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (keyword.ad_group_name && keyword.ad_group_name.toLowerCase().includes(searchTerm.toLowerCase()));
+        
+        return statusMatch && dataTypeMatch && searchMatch;
+      })
+      .sort((a, b) => {
+        let aValue = a[sortColumn as keyof KeywordData];
+        let bValue = b[sortColumn as keyof KeywordData];
+        
+        // Handle undefined and null values
+        if ((aValue === undefined || aValue === null) && (bValue === undefined || bValue === null)) return 0;
+        if (aValue === undefined || aValue === null) return 1;
+        if (bValue === undefined || bValue === null) return -1;
+        
         if (typeof aValue === 'string') {
           aValue = aValue.toLowerCase();
           bValue = (bValue as string).toLowerCase();
         }
-
-        if (aValue < bValue) return keywordSort.direction === 'asc' ? -1 : 1;
-        if (aValue > bValue) return keywordSort.direction === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-
-    return filtered;
-  }, [keywordData, keywordSearch, matchTypeFilter, performanceFilter, keywordSort]);
-
-  // Pagination - MEMOIZED
-  const paginationData = useMemo(() => {
-    const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-    const paginatedData = filteredData.slice(
-      (currentPage - 1) * itemsPerPage,
-      currentPage * itemsPerPage
-    );
-    return { totalPages, paginatedData };
-  }, [filteredData, currentPage, itemsPerPage]);
-
-  // Chart data functions - MEMOIZED FOR PERFORMANCE
-  const chartData = useMemo(() => {
-    const getMatchTypeDistributionData = () => {
-      const matchTypeCounts = {
-        EXACT: 0,
-        PHRASE: 0,
-        BROAD: 0
-      };
-
-      keywordData.forEach(item => {
-        if (item.match_type in matchTypeCounts) {
-          matchTypeCounts[item.match_type as keyof typeof matchTypeCounts]++;
+        
+        if (sortDirection === 'asc') {
+          return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+        } else {
+          return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
         }
-      });
+      })
+      .slice(0, pageSize);
+  }, [keywordData, statusFilter, dataTypeFilter, searchTerm, sortColumn, sortDirection, pageSize]);
 
-      return Object.entries(matchTypeCounts).map(([matchType, count]) => ({
-        name: matchType,
-        value: count,
-        percentage: keywordData.length > 0 ? ((count / keywordData.length) * 100) : 0
-      }));
-    };
+  // Calculate performance levels for all metrics
+  const allClicks = filteredKeywords.map(k => k.clicks);
+  const allImpressions = filteredKeywords.map(k => k.impressions);
+  const allCtr = filteredKeywords.map(k => k.ctr);
+  const allCpc = filteredKeywords.map(k => k.cpc);
+  const allCost = filteredKeywords.map(k => k.cost);
+  const allConversions = filteredKeywords.map(k => k.conversions);
+  const allRoas = filteredKeywords.map(k => k.roas);
+  const allQualityScores = filteredKeywords.map(k => k.quality_score || 0).filter(score => score > 0);
 
-    const getConversionsPerMatchTypeData = () => {
-      const matchTypeConversions = {
-        EXACT: 0,
-        PHRASE: 0,
-        BROAD: 0
-      };
-
-      keywordData.forEach(item => {
-        if (item.match_type in matchTypeConversions) {
-          matchTypeConversions[item.match_type as keyof typeof matchTypeConversions] += item.conversions || 0;
-        }
-      });
-
-      const totalConversions = Object.values(matchTypeConversions).reduce((sum, conv) => sum + conv, 0);
-
-      return Object.entries(matchTypeConversions).map(([matchType, conversions]) => ({
-        name: matchType,
-        value: conversions,
-        percentage: totalConversions > 0 ? ((conversions / totalConversions) * 100) : 0
-      }));
-    };
-
-    const getCPAPerMatchTypeData = () => {
-      const matchTypeData = {
-        EXACT: { cost: 0, conversions: 0 },
-        PHRASE: { cost: 0, conversions: 0 },
-        BROAD: { cost: 0, conversions: 0 }
-      };
-
-      keywordData.forEach(item => {
-        if (item.match_type in matchTypeData) {
-          matchTypeData[item.match_type as keyof typeof matchTypeData].cost += item.cost || 0;
-          matchTypeData[item.match_type as keyof typeof matchTypeData].conversions += item.conversions || 0;
-        }
-      });
-
-      return Object.entries(matchTypeData).map(([matchType, data]) => ({
-        name: matchType,
-        value: data.conversions > 0 ? (data.cost / data.conversions) : 0,
-        cost: data.cost,
-        conversions: data.conversions
-      }));
-    };
-
-    return {
-      matchTypeDistribution: getMatchTypeDistributionData(),
-      conversionsPerMatchType: getConversionsPerMatchTypeData(),
-      cpaPerMatchType: getCPAPerMatchTypeData()
-    };
-  }, [keywordData]);
-
-  // Table data - MEMOIZED FOR PERFORMANCE
-  const tableData = useMemo(() => {
-    const getHighSpendZeroConversionsTableData = () => {
-      return keywordData
-        .filter(item => item.cost > 5 && item.conversions === 0) // High spend (>€5), zero conversions
-        .sort((a, b) => (b.cost || 0) - (a.cost || 0))
-        .slice(0, 50); // Limit for performance
-    };
-
-    const getBestPerformingKeywordsData = () => {
-      return keywordData
-        .filter(item => item.conversions > 0 && item.clicks > 0)
-        .map(item => ({
-          ...item,
-          conversionRate: (item.conversions / item.clicks) * 100,
-          impressionShare: Math.random() * 100 // Placeholder - would need actual impression share data
-        }))
-        .sort((a, b) => (b.impressionShare || 0) - (a.impressionShare || 0))
-        .slice(0, 50); // Limit for performance
-    };
-
-    return {
-      highSpendZeroConversions: getHighSpendZeroConversionsTableData(),
-      bestPerforming: getBestPerformingKeywordsData()
-    };
-  }, [keywordData]);
-
-  // State for table pagination
-  const [highSpendPage] = useState(1);
-  const [bestPerformingPage] = useState(1);
-  const tableItemsPerPage = 10;
-
-  // Get paginated data for tables - MEMOIZED
-  const paginatedTableData = useMemo(() => {
-    const getPaginatedHighSpendData = () => {
-      const data = tableData.highSpendZeroConversions;
-      const startIndex = (highSpendPage - 1) * tableItemsPerPage;
-      return data.slice(startIndex, startIndex + tableItemsPerPage);
-    };
-
-    const getPaginatedBestPerformingData = () => {
-      const data = tableData.bestPerforming;
-      const startIndex = (bestPerformingPage - 1) * tableItemsPerPage;
-      return data.slice(startIndex, startIndex + tableItemsPerPage);
-    };
-
-    return {
-      highSpend: getPaginatedHighSpendData(),
-      bestPerforming: getPaginatedBestPerformingData()
-    };
-  }, [tableData, highSpendPage, bestPerformingPage, tableItemsPerPage]);
-
-  // Colors for donut charts
-  const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
-
-  // =============================================================================
-  // EVENT HANDLERS
-  // =============================================================================
-
-  // Handle sorting
-  const handleKeywordSort = useCallback((field: string) => {
-    setKeywordSort(prev => {
-      if (prev.field === field) {
-        return { 
-          field, 
-          direction: prev.direction === 'asc' ? 'desc' : prev.direction === 'desc' ? null : 'asc' 
-        };
-      } else {
-        return { field, direction: 'desc' };
-      }
+  // Calculate table totals
+  const calculatedTotals = useMemo(() => {
+    const totals = filteredKeywords.reduce((acc, keyword) => ({
+      clicks: acc.clicks + keyword.clicks,
+      impressions: acc.impressions + keyword.impressions,
+      cost: acc.cost + keyword.cost,
+      conversions: acc.conversions + keyword.conversions,
+      conversionsValue: acc.conversionsValue + keyword.conversions_value,
+    }), {
+      clicks: 0,
+      impressions: 0,
+      cost: 0,
+      conversions: 0,
+      conversionsValue: 0,
     });
-  }, []);
 
-  // Get visible columns based on data type - MEMOIZED
-  const visibleColumns = useMemo(() => {
-    return availableColumns.filter(col => {
-      // Always show always-visible columns
-      if (col.always) return true;
-      
-      // Filter by data type
-      if (col.keywordsOnly && dataType !== 'keywords') return false;
-      if (col.searchTermsOnly && dataType !== 'search_terms') return false;
-      
-      // Check if column is selected
-      return selectedColumns.includes(col.id);
-    });
-  }, [availableColumns, dataType, selectedColumns]);
-
-  // =============================================================================
-  // RENDER HELPERS
-  // =============================================================================
-
-  if (!selectedAccount) {
-    return (
-      <div className="space-y-6">
-        <div className="text-center py-16">
-          <div className="text-gray-400 mb-6">
-            <Search className="h-16 w-16 mx-auto" />
-          </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Select an Account</h3>
-          <p className="text-gray-500 mb-6">
-            Choose an account from the header to view keywords and search terms performance data.
-          </p>
-          <div className="flex justify-center">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md">
-              <p className="text-blue-800 text-sm">
-                💡 Select an account from the dropdown in the header to analyze keywords and search terms performance.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+    // Calculate derived metrics
+    return {
+      ...totals,
+      ctr: totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0,
+      avgCpc: totals.clicks > 0 ? totals.cost / totals.clicks : 0,
+      cpa: totals.conversions > 0 ? totals.cost / totals.conversions : 0,
+      roas: totals.cost > 0 ? totals.conversionsValue / totals.cost : 0,
+      keywordCount: filteredKeywords.length
+    };
+  }, [filteredKeywords]);
 
   if (keywordsLoading) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <div className="text-center py-16">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-          <p className="text-gray-600">Loading keywords data...</p>
-        </div>
+      <div className="p-8 text-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-2 text-sm text-gray-600">Loading keywords...</p>
       </div>
     );
   }
 
-  if (keywordsError) {
+  if (!keywordData || keywordData.length === 0) {
     return (
-      <div className="bg-white rounded-xl shadow-lg p-6">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-800">{keywordsError}</p>
+      <div className="p-8 text-center">
+        <div className="text-gray-400 mb-4">
+          <Target className="h-12 w-12 mx-auto" />
         </div>
+        <p className="text-gray-600">No keywords found</p>
       </div>
     );
   }
 
-  // =============================================================================
-  // MAIN RENDER
-  // =============================================================================
-
-  return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Keywords & Search Terms</h2>
-        <p className="text-gray-600">
-          {selectedAccount && selectedDateRange
-            ? `Analyze keyword performance and discover search term opportunities • ${selectedDateRange.name}`
-            : 'Analyze keyword performance and discover new search term opportunities'
-          }
-        </p>
-      </div>
-
-      {/* Data Type Toggle and Intelligent KPI */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            {/* Data Type Toggle */}
-            <div className="flex bg-white rounded-lg p-1 shadow-sm border border-gray-200">
-              <button
-                onClick={() => setDataType('keywords')}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                  dataType === 'keywords'
-                    ? 'bg-blue-500 text-white shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                <Target className="h-4 w-4" />
-                <span>Keywords</span>
-              </button>
-              <button
-                onClick={() => setDataType('search_terms')}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                  dataType === 'search_terms'
-                    ? 'bg-blue-500 text-white shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                <Search className="h-4 w-4" />
-                <span>Search Terms</span>
-              </button>
-            </div>
-
-            {/* View Mode Toggle */}
-            <div className="flex bg-white rounded-lg p-1 shadow-sm border border-gray-200">
-              <button
-                onClick={() => setViewMode('table')}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                  viewMode === 'table'
-                    ? 'bg-blue-500 text-white shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                <TableIcon className="h-4 w-4" />
-                <span>Table</span>
-              </button>
-              <button
-                onClick={() => setViewMode('graphs')}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                  viewMode === 'graphs'
-                    ? 'bg-blue-500 text-white shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              >
-                <BarChart3 className="h-4 w-4" />
-                <span>Graphs</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Intelligent KPI */}
-          {intelligentKPI && (
-            <div className="flex items-center space-x-3 bg-white rounded-lg px-4 py-2 shadow-sm">
-              <intelligentKPI.icon className={`h-5 w-5 ${intelligentKPI.color}`} />
-              <div>
-                <div className="text-sm font-medium text-gray-900">{intelligentKPI.label}</div>
-                <div className={`text-lg font-bold ${intelligentKPI.color}`}>
-                  {intelligentKPI.value}
-                  <span className="text-xs text-gray-500 ml-1">({intelligentKPI.count})</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-        {/* Table Header with Search and Filters */}
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
+  // Show charts view
+  if (viewMode === 'graphs') {
+    return (
+      /* Premium Charts View */
+      <div className="space-y-8">
+        {/* Sophisticated Header */}
+        <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl p-6 border border-gray-100">
+          <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                {dataType === 'keywords' ? 'Keywords Performance' : 'Search Terms Discovery'}
-              </h3>
-              <p className="text-sm text-gray-500">
-                Showing {filteredData.length} of {keywordData.length} items • Last {selectedDateRange?.apiDays || 30} days
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Keyword Performance Analytics</h2>
+              <p className="text-gray-600 text-sm leading-relaxed">
+                Comprehensive insights into your keyword and search term performance metrics
               </p>
             </div>
+            <div className="flex items-center space-x-2">
+              <div className="bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Keywords</span>
+                <div className="text-lg font-bold text-gray-900">
+                  {keywordData?.length || 0}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Charts Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Left Column */}
+          <div className="flex flex-col h-full">
+            <TopKeywordsPerformance keywordData={{ data: keywordData }} />
           </div>
           
-          {/* Search Bar and Filters */}
-          {(dataType === 'keywords' || dataType === 'search_terms') && (
-            <div className="flex items-center justify-between space-x-4">
-              <div className="flex items-center space-x-4 flex-1">
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder={`Search ${dataType === 'keywords' ? 'keywords' : 'search terms'}...`}
-                    value={keywordSearch}
-                    onChange={(e) => setKeywordSearch(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                
-                {/* Match Type Filter */}
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600">Match Type:</span>
-                  <select
-                    value={matchTypeFilter}
-                    onChange={(e) => setMatchTypeFilter(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All</option>
-                    <option value="EXACT">Exact</option>
-                    <option value="PHRASE">Phrase</option>
-                    <option value="BROAD">Broad</option>
-                  </select>
-                </div>
-                
-                {/* Performance Filter */}
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm text-gray-600">Performance:</span>
-                  <select
-                    value={performanceFilter}
-                    onChange={(e) => setPerformanceFilter(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All</option>
-                    <option value="high_spend_zero_conv">High Spend, No Conversions</option>
-                    <option value="zero_clicks">Zero Clicks</option>
-                    <option value="low_ctr">Low CTR</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Right Column */}
+          <div className="flex flex-col justify-between h-full">
+            <KeywordTypeDistribution data={keywordData} />
+            <KeywordPerformanceMatrix keywordData={{ data: keywordData }} />
+          </div>
         </div>
-        
-        {/* Table or Graphs Content */}
-        {viewMode === 'table' ? (
-          <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 320px)' }}>
-            <table className="w-full">
-              {/* Table Header */}
-              <thead className="bg-gray-50 sticky top-0 border-b border-gray-200 z-10">
-                <tr>
-                  {visibleColumns.map(col => (
-                    <th 
-                      key={col.id}
-                      onClick={() => handleKeywordSort(col.id)}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>{col.label}</span>
-                        {keywordSort.field === col.id && (
-                          <span className={`${keywordSort.direction === 'asc' ? 'text-blue-600' : 'text-red-600'}`}>
-                            {keywordSort.direction === 'asc' ? '▲' : '▼'}
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              
-              {/* Table Body */}
-              <tbody className="divide-y divide-gray-200">
-                {paginationData.paginatedData.map((item, index) => (
-                  <tr key={index} className="hover:bg-gray-50 transition-colors">
-                    {visibleColumns.map(col => (
-                      <td key={col.id} className="px-6 py-4 whitespace-nowrap">
-                        {col.id === 'keyword_text' ? (
-                          <div className="text-sm font-medium text-gray-900 max-w-xs truncate">
-                            {item[col.id]}
-                          </div>
-                        ) : col.id === 'match_type' ? (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            item[col.id] === 'EXACT' ? 'bg-green-100 text-green-800' : 
-                            item[col.id] === 'PHRASE' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {item[col.id]}
-                          </span>
-                        ) : col.id === 'cost' ? (
-                          <div className="text-sm text-gray-900">
-                            {formatCurrency(item[col.id] || 0)}
-                          </div>
-                        ) : col.id === 'ctr' || col.id === 'roas' ? (
-                          <div className="text-sm text-gray-900">
-                            {formatPercentage(item[col.id] || 0)}
-                          </div>
-                        ) : col.id === 'cpc' || col.id === 'conversions_value' ? (
-                          <div className="text-sm text-gray-900">
-                            {formatCurrency(item[col.id] || 0)}
-                          </div>
-                        ) : (
-                          <div className="text-sm text-gray-900">
-                            {typeof item[col.id as keyof KeywordData] === 'number' ? formatNumber(item[col.id as keyof KeywordData] as number) : item[col.id as keyof KeywordData] || '-'}
-                          </div>
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            
-            {/* Pagination */}
-            {paginationData.totalPages > 1 && (
-              <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                <div className="text-sm text-gray-700">
-                  Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredData.length)} of {filteredData.length} results
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                  >
-                    Previous
-                  </button>
-                  <span className="text-sm text-gray-700">
-                    Page {currentPage} of {paginationData.totalPages}
-                  </span>
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.min(paginationData.totalPages, prev + 1))}
-                    disabled={currentPage === paginationData.totalPages}
-                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          /* Premium Graphs Layout */
-          <div className="p-8 bg-gray-50 min-h-screen">
-            {/* Header */}
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Keyword Performance Analytics</h2>
-              <p className="text-gray-600">Comprehensive insights into keyword and search term performance</p>
-            </div>
-
-            {/* Charts Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Left Column */}
-              <div className="flex flex-col h-full">
-                <TopKeywordsPerformance keywordData={{ data: keywordData }} />
-              </div>
-              
-              {/* Right Column */}
-              <div className="flex flex-col justify-between h-full">
-                                 {/* Keyword Type Distribution */}
-                 <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-80 mb-8">
-                   <div className="flex items-center justify-between mb-6">
-                     <div>
-                       <h3 className="text-lg font-semibold text-gray-900">Keyword Distribution</h3>
-                       <p className="text-sm text-gray-600 mt-1">Keywords vs Search Terms breakdown</p>
-                     </div>
-                   </div>
-                   
-                   <div className="h-64">
-                     <ResponsiveContainer width="100%" height="100%">
-                       <PieChart>
-                         <Pie
-                           data={[
-                             { name: 'Keywords', value: keywordData.filter((k: any) => k.type !== 'search_term').length, color: '#3b82f6' },
-                             { name: 'Search Terms', value: keywordData.filter((k: any) => k.type === 'search_term').length, color: '#10b981' }
-                           ]}
-                           dataKey="value"
-                           nameKey="name"
-                           cx="50%"
-                           cy="50%"
-                           outerRadius={80}
-                           innerRadius={40}
-                           paddingAngle={2}
-                         >
-                           <Cell fill="#3b82f6" />
-                           <Cell fill="#10b981" />
-                         </Pie>
-                         <Tooltip />
-                         <Legend />
-                       </PieChart>
-                     </ResponsiveContainer>
-                   </div>
-                 </div>
-                <KeywordPerformanceMatrix keywordData={{ data: keywordData }} />
-              </div>
-            </div>
-          </div>
-        )}
       </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50 border-b border-gray-200">
+          <tr>
+            <th 
+              className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+              onClick={() => onSort('keyword_text')}
+            >
+              <div className="flex items-center space-x-1">
+                <span>Keyword / Search Term</span>
+                {sortColumn === 'keyword_text' && (
+                  <span className="text-teal-600">
+                    {sortDirection === 'asc' ? '↑' : '↓'}
+                  </span>
+                )}
+              </div>
+            </th>
+            <th 
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              onClick={() => onSort('campaign_name')}
+            >
+              Campaign
+              {sortColumn === 'campaign_name' && (
+                <span className="ml-1">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Type
+            </th>
+            <th 
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              onClick={() => onSort('impressions')}
+            >
+              Impressions
+              {sortColumn === 'impressions' && (
+                <span className="ml-1">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </th>
+            <th 
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              onClick={() => onSort('clicks')}
+            >
+              Clicks
+              {sortColumn === 'clicks' && (
+                <span className="ml-1">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </th>
+            <th 
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              onClick={() => onSort('ctr')}
+            >
+              CTR
+              {sortColumn === 'ctr' && (
+                <span className="ml-1">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </th>
+            <th 
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              onClick={() => onSort('cpc')}
+            >
+              CPC
+              {sortColumn === 'cpc' && (
+                <span className="ml-1">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </th>
+            <th 
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              onClick={() => onSort('cost')}
+            >
+              Cost
+              {sortColumn === 'cost' && (
+                <span className="ml-1">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </th>
+            <th 
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              onClick={() => onSort('conversions')}
+            >
+              Conversions
+              {sortColumn === 'conversions' && (
+                <span className="ml-1">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </th>
+            <th 
+              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              onClick={() => onSort('roas')}
+            >
+              ROAS
+              {sortColumn === 'roas' && (
+                <span className="ml-1">
+                  {sortDirection === 'asc' ? '↑' : '↓'}
+                </span>
+              )}
+            </th>
+            {dataTypeFilter !== 'search_terms' && (
+              <th 
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                onClick={() => onSort('quality_score')}
+              >
+                Quality Score
+                {sortColumn === 'quality_score' && (
+                  <span className="ml-1">
+                    {sortDirection === 'asc' ? '↑' : '↓'}
+                  </span>
+                )}
+              </th>
+            )}
+          </tr>
+        </thead>
+        
+        {/* Table Body */}
+        <tbody className="bg-white divide-y divide-gray-200">
+          {filteredKeywords.map((keyword, index) => {
+            const campaignType = detectCampaignType(keyword.campaign_name);
+            const campaignIndicator = getCampaignTypeIndicator(campaignType);
+            const CampaignIcon = campaignIndicator.icon;
+            
+            return (
+              <tr key={`${keyword.id || 'no-id'}-${keyword.keyword_text}-${keyword.type}-${index}`} className="hover:bg-gray-50 transition-colors duration-150">
+                {/* Keyword Name */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0">
+                      <div className={`p-2 rounded-lg ${campaignIndicator.bg}`}>
+                        <CampaignIcon className={`h-4 w-4 ${campaignIndicator.color}`} />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <p className="text-sm font-medium text-gray-900 truncate max-w-xs">
+                          {keyword.keyword_text}
+                        </p>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getKeywordTypeBadge(keyword.type)}`}>
+                          {keyword.type === 'search_term' ? 'Search Term' : 'Keyword'}
+                        </span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getMatchTypeBadge(keyword.match_type)}`}>
+                          {keyword.match_type}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 truncate max-w-xs">
+                        {keyword.ad_group_name}
+                      </p>
+                    </div>
+                  </div>
+                </td>
+
+                {/* Campaign */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm text-gray-900 max-w-xs truncate">
+                    {keyword.campaign_name}
+                  </div>
+                </td>
+
+                {/* Type */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getKeywordTypeBadge(keyword.type)}`}>
+                    {keyword.type === 'search_term' ? 'Search Term' : 'Keyword'}
+                  </span>
+                </td>
+
+                {/* Impressions */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <PerformanceIndicator level={getPerformanceLevel(keyword.impressions, allImpressions, 'impressions')} />
+                    <span className="text-sm text-gray-900">
+                      {formatNumber(keyword.impressions)}
+                    </span>
+                  </div>
+                </td>
+
+                {/* Clicks */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <PerformanceIndicator level={getPerformanceLevel(keyword.clicks, allClicks, 'clicks')} />
+                    <span className="text-sm text-gray-900">
+                      {formatNumber(keyword.clicks)}
+                    </span>
+                  </div>
+                </td>
+
+                {/* CTR */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <PerformanceIndicator level={getPerformanceLevel(keyword.ctr, allCtr, 'ctr')} />
+                    <span className="text-sm text-gray-900">
+                      {formatPercentage(keyword.ctr)}
+                    </span>
+                  </div>
+                </td>
+
+                {/* CPC */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <PerformanceIndicator level={getPerformanceLevel(keyword.cpc, allCpc, 'cpc')} />
+                    <span className="text-sm text-gray-900">
+                      {formatCurrency(keyword.cpc)}
+                    </span>
+                  </div>
+                </td>
+
+                {/* Cost */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <PerformanceIndicator level={getPerformanceLevel(keyword.cost, allCost, 'cost')} />
+                    <span className="text-sm text-gray-900">
+                      {formatCurrency(keyword.cost)}
+                    </span>
+                  </div>
+                </td>
+
+                {/* Conversions */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <PerformanceIndicator level={getPerformanceLevel(keyword.conversions, allConversions, 'conversions')} />
+                    <span className="text-sm text-gray-900">
+                      {formatNumber(keyword.conversions)}
+                    </span>
+                  </div>
+                </td>
+
+                {/* ROAS */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <PerformanceIndicator level={getPerformanceLevel(keyword.roas, allRoas, 'roas')} />
+                    <span className="text-sm text-gray-900">
+                      {formatPercentage(keyword.roas)}
+                    </span>
+                  </div>
+                </td>
+
+                {/* Quality Score - only show for keywords */}
+                {dataTypeFilter !== 'search_terms' && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {keyword.type === 'keyword' && keyword.quality_score ? (
+                      <div className="flex items-center">
+                        <PerformanceIndicator level={getPerformanceLevel(keyword.quality_score, allQualityScores, 'quality_score')} />
+                        <span className="text-sm text-gray-900">
+                          {keyword.quality_score}/10
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400">-</span>
+                    )}
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+
+        {/* Table Footer with Totals */}
+        <tfoot className="bg-gray-50 border-t border-gray-200">
+          <tr>
+            <td className="px-6 py-3 text-sm font-medium text-gray-900">
+              Total ({calculatedTotals.keywordCount} items)
+            </td>
+            <td className="px-6 py-3"></td>
+            <td className="px-6 py-3"></td>
+            <td className="px-6 py-3 text-sm font-medium text-gray-900">
+              {formatNumber(calculatedTotals.impressions)}
+            </td>
+            <td className="px-6 py-3 text-sm font-medium text-gray-900">
+              {formatNumber(calculatedTotals.clicks)}
+            </td>
+            <td className="px-6 py-3 text-sm font-medium text-gray-900">
+              {formatPercentage(calculatedTotals.ctr)}
+            </td>
+            <td className="px-6 py-3 text-sm font-medium text-gray-900">
+              {formatCurrency(calculatedTotals.avgCpc)}
+            </td>
+            <td className="px-6 py-3 text-sm font-medium text-gray-900">
+              {formatCurrency(calculatedTotals.cost)}
+            </td>
+            <td className="px-6 py-3 text-sm font-medium text-gray-900">
+              {formatNumber(calculatedTotals.conversions)}
+            </td>
+            <td className="px-6 py-3 text-sm font-medium text-gray-900">
+              {formatPercentage(calculatedTotals.roas)}
+            </td>
+            {dataTypeFilter !== 'search_terms' && (
+              <td className="px-6 py-3"></td>
+            )}
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 };
 
-export default Keywords;
+export default Keywords; 

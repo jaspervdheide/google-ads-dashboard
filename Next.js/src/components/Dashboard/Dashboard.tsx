@@ -70,7 +70,7 @@ import KPICards from './KPICards';
 import Charts from './Charts';
 import CampaignTable from './CampaignTable';
 import AdGroupTable from './AdGroupTable';
-import Keywords from './Keywords';
+import KeywordsWrapper from './KeywordsWrapper';
 
 // =============================================================================
 // ICON IMPORTS
@@ -1477,12 +1477,12 @@ return (
         )}
 
         {/* Keywords View */}
-        {currentPage === 'keywords' && (
-          <Keywords
+        <div className={currentPage === 'keywords' ? 'block' : 'hidden'}>
+          <KeywordsWrapper
             selectedAccount={selectedAccount}
             selectedDateRange={selectedDateRange}
           />
-        )}
+        </div>
 
         {/* Settings View */}
         {currentPage === 'settings' && (

@@ -94,7 +94,7 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
       cost: item.metrics?.cost_micros ? Number(item.metrics.cost_micros) / 1000000 : 0,
       conversions: Number(item.metrics?.conversions) || 0,
       conversions_value: item.metrics?.conversions_value ? Number(item.metrics.conversions_value) : 0,
-      ctr: item.metrics?.ctr ? Number(item.metrics.ctr) : 0,
+      ctr: item.metrics?.ctr ? Number(item.metrics.ctr) * 100 : 0,
       average_cpc: item.metrics?.average_cpc ? Number(item.metrics.average_cpc) / 1000000 : 0,
       // Calculate CPC and ROAS safely
       cpc: item.metrics?.clicks > 0 && item.metrics?.cost_micros ? 
