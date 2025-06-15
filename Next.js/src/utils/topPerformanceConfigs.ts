@@ -1,4 +1,4 @@
-import { Target, Users, Search } from 'lucide-react';
+import { Target, Users, Search, Zap } from 'lucide-react';
 
 // Configuration for Top Campaigns Performance
 export const topCampaignsConfig = {
@@ -11,16 +11,23 @@ export const topCampaignsConfig = {
     return data.campaigns
       .sort((a: any, b: any) => (b.conversions || 0) - (a.conversions || 0))
       .slice(0, 5)
-      .map((campaign: any) => ({
-        id: campaign.id || campaign.campaign_id || '',
-        name: campaign.name || campaign.campaign_name || 'Unnamed Campaign',
-        conversions: campaign.conversions || 0,
-        cpa: campaign.cost_per_conversion || campaign.cpa || 0,
-        poas: Math.round((campaign.conversions_value || 0) / (campaign.cost_micros / 1000000 || 1) * 100) || 0,
-        spend: Math.round((campaign.cost_micros || 0) / 1000000) || 0,
-        trend: Math.random() > 0.5 ? 'up' : 'down', // Mock trend data
-        trendValue: Math.round(Math.random() * 20 + 5)
-      }));
+      .map((campaign: any) => {
+        // Campaigns API returns conversionsValue and cost (already converted from micros)
+        const conversionsValue = campaign.conversionsValue || 0;
+        const cost = campaign.cost || 0;
+        const poas = cost > 0 ? Math.round((conversionsValue / cost) * 100) : 0;
+        
+        return {
+          id: campaign.id || campaign.campaign_id || '',
+          name: campaign.name || campaign.campaign_name || 'Unnamed Campaign',
+          conversions: campaign.conversions || 0,
+          cpa: campaign.cpa || 0,
+          poas: poas,
+          spend: Math.round(cost),
+          trend: Math.random() > 0.5 ? 'up' : 'down', // Mock trend data
+          trendValue: Math.round(Math.random() * 20 + 5)
+        };
+      });
   },
   getTypeInfo: () => ({
     type: 'Campaign',
@@ -53,23 +60,35 @@ export const topAdGroupsConfig = {
     return data.adGroups
       .sort((a: any, b: any) => (b.conversions || 0) - (a.conversions || 0))
       .slice(0, 5)
-      .map((adGroup: any) => ({
-        id: adGroup.id || adGroup.ad_group_id || '',
-        name: adGroup.name || adGroup.ad_group_name || 'Unnamed Ad Group',
-        conversions: adGroup.conversions || 0,
-        cpa: adGroup.cost_per_conversion || adGroup.cpa || 0,
-        poas: Math.round((adGroup.conversions_value || 0) / (adGroup.cost_micros / 1000000 || 1) * 100) || 0,
-        spend: Math.round((adGroup.cost_micros || 0) / 1000000) || 0,
-        trend: Math.random() > 0.5 ? 'up' : 'down', // Mock trend data
-        trendValue: Math.round(Math.random() * 20 + 5),
-        campaign_name: adGroup.campaign_name || 'Unknown Campaign'
-      }));
+      .map((adGroup: any) => {
+        // Ad Groups API returns cost and conversionsValue (already converted from micros)
+        const conversionsValue = adGroup.conversionsValue || 0;
+        const cost = adGroup.cost || 0;
+        const poas = cost > 0 ? Math.round((conversionsValue / cost) * 100) : 0;
+        
+        return {
+          id: adGroup.id || adGroup.ad_group_id || '',
+          name: adGroup.name || adGroup.ad_group_name || 'Unnamed Ad Group',
+          conversions: adGroup.conversions || 0,
+          cpa: adGroup.cpa || 0,
+          poas: poas,
+          spend: Math.round(cost),
+          trend: Math.random() > 0.5 ? 'up' : 'down', // Mock trend data
+          trendValue: Math.round(Math.random() * 20 + 5),
+          campaign_name: adGroup.campaignName || adGroup.campaign_name || 'Unknown Campaign',
+          groupType: adGroup.groupType || 'ad_group' // Include groupType for distinction
+        };
+      });
   },
-  getTypeInfo: () => ({
-    type: 'Ad Group',
-    icon: Users,
-    colorClass: 'bg-purple-100 text-purple-600'
-  }),
+  getTypeInfo: (item: any) => {
+    // Distinguish between Ad Groups and Asset Groups based on groupType
+    const isAssetGroup = item.groupType === 'asset_group';
+    return {
+      type: isAssetGroup ? 'Asset Group' : 'Ad Group',
+      icon: isAssetGroup ? Zap : Users,
+      colorClass: isAssetGroup ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+    };
+  },
   getExtraInfo: (item: any) => {
     const status = item.status || 'ENABLED';
     return {
@@ -105,17 +124,25 @@ export const topKeywordsConfig = {
       .filter((keyword: any) => keyword.type === 'keyword') // Filter out search terms
       .sort((a: any, b: any) => (b.conversions || 0) - (a.conversions || 0))
       .slice(0, 5)
-      .map((keyword: any) => ({
-        id: keyword.id || keyword.keyword_id || keyword.text || '',
-        name: keyword.text || keyword.keyword_text || 'Unknown Keyword',
-        conversions: keyword.conversions || 0,
-        cpa: keyword.cost_per_conversion || keyword.cpa || 0,
-        poas: Math.round((keyword.conversions_value || 0) / (keyword.cost_micros / 1000000 || 1) * 100) || 0,
-        spend: Math.round((keyword.cost_micros || 0) / 1000000) || 0,
-        trend: Math.random() > 0.5 ? 'up' : 'down', // Mock trend data
-        trendValue: Math.round(Math.random() * 20 + 5),
-        matchType: keyword.matchType || keyword.match_type || 'Unknown'
-      }));
+      .map((keyword: any) => {
+        // Keywords API returns conversions_value and cost (already converted from micros)
+        const conversionsValue = keyword.conversions_value || 0;
+        const cost = keyword.cost || 0;
+        const poas = cost > 0 ? Math.round((conversionsValue / cost) * 100) : 0;
+        
+        return {
+          id: keyword.id || keyword.keyword_id || keyword.text || '',
+          name: keyword.text || keyword.keyword_text || 'Unknown Keyword',
+          conversions: keyword.conversions || 0,
+          cpa: keyword.cost_per_conversion || keyword.cpa || 0,
+          poas: poas,
+          spend: Math.round(cost),
+          trend: Math.random() > 0.5 ? 'up' : 'down', // Mock trend data
+          trendValue: Math.round(Math.random() * 20 + 5),
+          matchType: keyword.matchType || keyword.match_type || 'Unknown',
+          campaign_name: keyword.campaign_name || keyword.campaignName || 'Unknown Campaign'
+        };
+      });
   },
   getTypeInfo: () => ({
     type: 'Keyword',
@@ -136,8 +163,6 @@ export const topKeywordsConfig = {
     };
   },
   getSubtitle: (item: any) => {
-    const impressions = item.impressions || 0;
-    const clicks = item.clicks || 0;
-    return `${impressions.toLocaleString()} impressions • ${clicks.toLocaleString()} clicks`;
+    return `Campaign: ${item.campaign_name || 'Unknown'}`;
   }
 }; 

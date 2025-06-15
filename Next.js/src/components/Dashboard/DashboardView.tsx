@@ -1,5 +1,5 @@
-import React from 'react';
-import { Table, BarChart3 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Table, BarChart3, Shield } from 'lucide-react';
 import KPICards from './KPICards';
 import Charts from './Charts';
 import CampaignTable from './CampaignTable';
@@ -7,6 +7,7 @@ import DashboardHeader from './DashboardHeader';
 import ConversionsByTypeChart from './ConversionsByTypeChart';
 import TopCampaignsPerformance from './TopCampaignsPerformance';
 import GenericPerformanceMatrix from './GenericPerformanceMatrix';
+import SearchImpressionShareWidget from './SearchImpressionShareWidget';
 import { campaignMatrixConfig } from '../../utils/matrixConfigs';
 
 interface DashboardViewProps {
@@ -70,6 +71,23 @@ export default function DashboardView({
   onMetricHover,
   onMetricLeave
 }: DashboardViewProps) {
+  const [currentChartPage, setCurrentChartPage] = useState(1);
+
+  const chartPages = [
+    {
+      id: 1,
+      title: 'Performance',
+      description: 'Campaign performance and conversion analysis',
+      icon: BarChart3
+    },
+    {
+      id: 2,
+      title: 'Competitive',
+      description: 'Search impression share and visibility analysis',
+      icon: Shield
+    }
+  ];
+
   return (
     <div className="space-y-6">
       <DashboardHeader
@@ -178,22 +196,37 @@ export default function DashboardView({
             <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl p-6 border border-gray-100">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Campaign Performance Analytics</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Campaign Analytics</h2>
                   <p className="text-gray-600 text-sm leading-relaxed">
-                    Comprehensive insights into your campaign performance metrics and trends
+                    {chartPages.find(p => p.id === currentChartPage)?.description}
                   </p>
                 </div>
+                
+                {/* Chart Page Navigation - Moved to align with toggles above */}
                 <div className="flex items-center space-x-2">
-                  <div className="bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
-                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Campaigns</span>
-                    <div className="text-lg font-bold text-gray-900">
-                      {campaignData?.campaigns?.length || 0}
-                    </div>
-                  </div>
+                  {chartPages.map(page => {
+                    const IconComponent = page.icon;
+                    return (
+                      <button
+                        key={page.id}
+                        onClick={() => setCurrentChartPage(page.id)}
+                        className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                          currentChartPage === page.id
+                            ? 'bg-teal-600 text-white shadow-sm'
+                            : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                        }`}
+                      >
+                        <IconComponent className="h-4 w-4" />
+                        <span>{page.title}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
 
+            {/* Chart Content */}
+            {currentChartPage === 1 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="flex flex-col h-full">
                 <TopCampaignsPerformance campaignData={campaignData} />
@@ -207,6 +240,29 @@ export default function DashboardView({
                 />
               </div>
             </div>
+            )}
+
+            {currentChartPage === 2 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="flex flex-col h-full">
+                  <SearchImpressionShareWidget 
+                    customerId={selectedAccount}
+                    dateRange={selectedDateRange?.days?.toString() || '30'}
+                    className="h-full"
+                  />
+                </div>
+                
+                <div className="flex flex-col space-y-8 h-full">
+                  {/* Placeholder for future competitive analysis widget */}
+                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-full flex items-center justify-center">
+                    <div className="text-center text-gray-500">
+                      <p className="text-lg font-medium mb-2">Additional Competitive Analysis</p>
+                      <p className="text-sm">Future widget will be placed here</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

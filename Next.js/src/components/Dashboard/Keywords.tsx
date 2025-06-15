@@ -237,36 +237,99 @@ const KeywordTypeDistribution: React.FC<{ data: KeywordData[] }> = ({ data }) =>
     return null;
   };
 
+  if (keywordTypeDistribution.length === 0) {
+    return (
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="text-center py-8">
+          <Target className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No keywords found</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Try adjusting your filters or check back later.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-80">
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">Keyword Distribution</h3>
-          <p className="text-sm text-gray-600 mt-1">Keywords vs Search Terms breakdown</p>
+        <h3 className="text-lg font-semibold text-gray-900">Keyword Type Distribution</h3>
+        <div className="flex items-center space-x-2 text-sm text-gray-600">
+          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+          <span>Live Data</span>
         </div>
       </div>
       
-      <div className="h-64">
+      {/* Chart Container */}
+      <div className="h-80">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={keywordTypeDistribution}
-              dataKey="value"
-              nameKey="name"
               cx="50%"
               cy="50%"
-              outerRadius={80}
-              innerRadius={40}
+              innerRadius={60}
+              outerRadius={120}
               paddingAngle={2}
+              dataKey="value"
             >
               {keywordTypeDistribution.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={entry.color} />
               ))}
             </Pie>
             <Tooltip content={<CustomTooltip />} />
-            <Legend />
           </PieChart>
         </ResponsiveContainer>
+      </div>
+      
+      {/* Legend with Metrics */}
+      <div className="mt-4 space-y-2">
+        {keywordTypeDistribution.map((item, index) => (
+          <div key={index} className="flex items-center justify-between text-sm hover:bg-gray-50 p-2 rounded-lg transition-colors duration-200">
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
+              <span className="text-gray-700 font-medium">{item.name}</span>
+              <span className="text-gray-500">({item.value} items)</span>
+            </div>
+            <div className="text-right">
+              <div className="flex items-center space-x-4">
+                <div>
+                  <span className="font-medium text-gray-900">{item.conversions.toFixed(2)}</span>
+                  <span className="text-gray-500 ml-1 text-xs">conv.</span>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-900">€{item.avgCPA.toFixed(2)}</span>
+                  <span className="text-gray-500 ml-1 text-xs">CPA</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Summary Stats */}
+      <div className="mt-6 pt-4 border-t border-gray-100">
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <div className="text-lg font-semibold text-gray-900">
+              {keywordTypeDistribution.reduce((sum, item) => sum + item.conversions, 0).toFixed(2)}
+            </div>
+            <div className="text-xs text-gray-600">Total Conversions</div>
+          </div>
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <div className="text-lg font-semibold text-gray-900">
+              €{keywordTypeDistribution.length > 0 ? (keywordTypeDistribution.reduce((sum, item) => sum + item.avgCPA, 0) / keywordTypeDistribution.length).toFixed(2) : '0.00'}
+            </div>
+            <div className="text-xs text-gray-600">Average CPA</div>
+          </div>
+          <div className="p-3 bg-gray-50 rounded-lg">
+            <div className="text-lg font-semibold text-gray-900">
+              {keywordTypeDistribution.length}
+            </div>
+            <div className="text-xs text-gray-600">Keyword Types</div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -486,6 +549,17 @@ const Keywords: React.FC<KeywordsProps> = ({
 
   // Show charts view
   if (viewMode === 'graphs') {
+    // Create filtered data object that respects the dataTypeFilter
+    const filteredGraphData = keywordData ? keywordData.filter(keyword => {
+      // Apply the same data type filtering logic as the table
+      if (dataTypeFilter === 'keywords') {
+        return keyword.type === 'keyword';
+      } else if (dataTypeFilter === 'search_terms') {
+        return keyword.type === 'search_term';
+      }
+      return true; // 'all' shows everything
+    }) : [];
+
     return (
       /* Premium Charts View */
       <div className="space-y-8">
@@ -496,13 +570,21 @@ const Keywords: React.FC<KeywordsProps> = ({
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Keyword Performance Analytics</h2>
               <p className="text-gray-600 text-sm leading-relaxed">
                 Comprehensive insights into your keyword and search term performance metrics
+                {dataTypeFilter !== 'all' && (
+                  <span className="text-blue-600 font-medium ml-2">
+                    • Filtered: {dataTypeFilter === 'keywords' ? 'Keywords Only' : 'Search Terms Only'}
+                  </span>
+                )}
               </p>
             </div>
             <div className="flex items-center space-x-2">
               <div className="bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Keywords</span>
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                  {dataTypeFilter === 'all' ? 'Total Items' : 
+                   dataTypeFilter === 'keywords' ? 'Keywords' : 'Search Terms'}
+                </span>
                 <div className="text-lg font-bold text-gray-900">
-                  {keywordData?.length || 0}
+                  {filteredGraphData?.length || 0}
                 </div>
               </div>
             </div>
@@ -513,14 +595,14 @@ const Keywords: React.FC<KeywordsProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Left Column */}
           <div className="flex flex-col h-full">
-            <TopKeywordsPerformance keywordData={{ data: keywordData }} />
+            <TopKeywordsPerformance keywordData={{ data: filteredGraphData }} />
           </div>
           
           {/* Right Column */}
           <div className="flex flex-col justify-between h-full">
-            <KeywordTypeDistribution data={keywordData} />
+            <KeywordTypeDistribution data={filteredGraphData} />
             <GenericPerformanceMatrix 
-              data={{ data: keywordData }} 
+              data={{ data: filteredGraphData }} 
               config={keywordMatrixConfig} 
             />
           </div>

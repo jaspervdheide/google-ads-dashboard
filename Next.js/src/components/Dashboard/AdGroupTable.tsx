@@ -436,6 +436,20 @@ const AdGroupTable: React.FC<AdGroupTableProps> = ({
 
   // Show charts view
   if (viewMode === 'graphs') {
+    // Create filtered data object that respects the groupTypeFilter
+    const filteredGraphData = data ? {
+      ...data,
+      adGroups: data.adGroups?.filter(adGroup => {
+        // Apply the same group type filtering logic as the table
+        if (groupTypeFilter === 'traditional') {
+          return adGroup.groupType === 'ad_group';
+        } else if (groupTypeFilter === 'asset') {
+          return adGroup.groupType === 'asset_group';
+        }
+        return true; // 'all' shows everything
+      }) || []
+    } : null;
+
     return (
       /* Premium Charts View */
       <div className="space-y-8">
@@ -446,13 +460,21 @@ const AdGroupTable: React.FC<AdGroupTableProps> = ({
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Ad Group Performance Analytics</h2>
               <p className="text-gray-600 text-sm leading-relaxed">
                 Comprehensive insights into your ad group performance metrics and trends
+                {groupTypeFilter !== 'all' && (
+                  <span className="text-blue-600 font-medium ml-2">
+                    • Filtered: {groupTypeFilter === 'traditional' ? 'Ad Groups Only' : 'Asset Groups Only'}
+                  </span>
+                )}
               </p>
             </div>
             <div className="flex items-center space-x-2">
               <div className="bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Ad Groups</span>
+                <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                  {groupTypeFilter === 'all' ? 'Total Ad Groups' : 
+                   groupTypeFilter === 'traditional' ? 'Ad Groups' : 'Asset Groups'}
+                </span>
                 <div className="text-lg font-bold text-gray-900">
-                  {data?.adGroups?.length || 0}
+                  {filteredGraphData?.adGroups?.length || 0}
                 </div>
               </div>
             </div>
@@ -463,16 +485,16 @@ const AdGroupTable: React.FC<AdGroupTableProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Left Column */}
           <div className="flex flex-col h-full">
-            <TopAdGroupsPerformance adGroupData={data} />
+            <TopAdGroupsPerformance adGroupData={filteredGraphData} />
           </div>
           
           {/* Right Column */}
           <div className="flex flex-col justify-between h-full">
-            <AdGroupTypeDistribution data={data} />
-                            <GenericPerformanceMatrix 
-                  data={data} 
-                  config={adGroupMatrixConfig} 
-                />
+            <AdGroupTypeDistribution data={filteredGraphData} />
+            <GenericPerformanceMatrix 
+              data={filteredGraphData} 
+              config={adGroupMatrixConfig} 
+            />
           </div>
         </div>
       </div>

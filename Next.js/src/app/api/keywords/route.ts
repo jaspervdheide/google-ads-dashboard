@@ -60,6 +60,7 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
       cost: item.metrics?.cost_micros ? Number(item.metrics.cost_micros) / 1000000 : 0,
       conversions: Number(item.metrics?.conversions) || 0,
       conversions_value: item.metrics?.conversions_value ? Number(item.metrics.conversions_value) : 0,
+      cost_per_conversion: item.metrics?.cost_per_conversion ? Number(item.metrics.cost_per_conversion) / 1000000 : 0,
       ctr: item.metrics?.ctr ? Number(item.metrics.ctr) * 100 : 0,
       average_cpc: item.metrics?.average_cpc ? Number(item.metrics.average_cpc) / 1000000 : 0,
       // Calculate CPC and ROAS safely
@@ -118,6 +119,7 @@ export async function GET(request: NextRequest) {
         metrics.cost_micros,
         metrics.conversions,
         metrics.conversions_value,
+        metrics.cost_per_conversion,
         metrics.ctr,
         metrics.average_cpc
       FROM keyword_view 
@@ -148,6 +150,7 @@ export async function GET(request: NextRequest) {
         metrics.cost_micros,
         metrics.conversions,
         metrics.conversions_value,
+        metrics.cost_per_conversion,
         metrics.ctr,
         metrics.average_cpc
       FROM search_term_view 
