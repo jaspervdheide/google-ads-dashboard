@@ -39,10 +39,15 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
 }) => {
   const [viewMode, setViewMode] = useState('overview');
   const [currentPage, setCurrentPage] = useState(1);
-  const campaignsPerPage = 6;
+  const campaignsPerPage = 3;
 
   // Use real API data
   const { data: campaignData, loading, error } = useSearchImpressionShareData(customerId, dateRange);
+
+  // Debug logging
+  console.log('SearchImpressionShareWidget - Raw campaignData:', campaignData);
+  console.log('SearchImpressionShareWidget - Loading:', loading);
+  console.log('SearchImpressionShareWidget - Error:', error);
 
   // Transform campaign data to impression share format - filter for ENABLED campaigns with impression share > 0
   const data = campaignData
@@ -53,16 +58,18 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
     )
     .map(campaign => ({
       campaign: campaign.name.replace('Search - ', ''),
-      search_impression_share: campaign.impressionShare!.search_impression_share * 100, // Convert to percentage
-      search_budget_lost_impression_share: campaign.impressionShare!.search_budget_lost_impression_share * 100,
-      search_rank_lost_impression_share: campaign.impressionShare!.search_rank_lost_impression_share * 100,
-      search_exact_match_impression_share: campaign.impressionShare!.search_impression_share * 100,
-      search_top_impression_share: campaign.impressionShare!.search_top_impression_share * 100,
-      search_absolute_top_impression_share: campaign.impressionShare!.search_absolute_top_impression_share * 100,
-      total_lost: (campaign.impressionShare!.search_budget_lost_impression_share + campaign.impressionShare!.search_rank_lost_impression_share) * 100,
+      search_impression_share: campaign.impressionShare!.search_impression_share, // Already converted to percentage in API
+      search_budget_lost_impression_share: campaign.impressionShare!.search_budget_lost_impression_share,
+      search_rank_lost_impression_share: campaign.impressionShare!.search_rank_lost_impression_share,
+      search_exact_match_impression_share: campaign.impressionShare!.search_impression_share,
+      search_top_impression_share: campaign.impressionShare!.search_top_impression_share,
+      search_absolute_top_impression_share: campaign.impressionShare!.search_absolute_top_impression_share,
+      total_lost: campaign.impressionShare!.search_budget_lost_impression_share + campaign.impressionShare!.search_rank_lost_impression_share,
       trend: campaign.impressionShare!.trend,
       trend_value: campaign.impressionShare!.trend_value
     }));
+
+  console.log('SearchImpressionShareWidget - Filtered data:', data);
 
   // Pagination logic
   const totalPages = Math.ceil(data.length / campaignsPerPage);
@@ -70,7 +77,7 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
   const endIndex = startIndex + campaignsPerPage;
   const paginatedData = data.slice(startIndex, endIndex);
 
-  // Calculate summary metrics using the converted percentages
+  // Calculate summary metrics using the already converted percentages
   const avgImpressionShare = data.length > 0 ? data.reduce((sum, item) => sum + item.search_impression_share, 0) / data.length : 0;
   const avgBudgetLost = data.length > 0 ? data.reduce((sum, item) => sum + item.search_budget_lost_impression_share, 0) / data.length : 0;
   const avgRankLost = data.length > 0 ? data.reduce((sum, item) => sum + item.search_rank_lost_impression_share, 0) / data.length : 0;
@@ -513,20 +520,16 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
     { key: 'trends', label: 'Trends', icon: TrendingUp }
   ];
 
+  // Handle loading and error states
   if (loading) {
     return (
-      <div className={`bg-white rounded-xl p-6 shadow-sm border border-gray-100 ${className}`}>
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Search Impression Share</h3>
-            <p className="text-sm text-gray-600 mt-1">Campaign visibility and lost opportunity analysis</p>
-          </div>
+      <div className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${className}`}>
+        <div className="flex items-center space-x-2 mb-4">
+          <Search className="h-5 w-5 text-teal-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Search Impression Share</h3>
         </div>
-        <div className="flex-1 flex items-center justify-center py-12">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mx-auto"></div>
-            <p className="text-gray-500 mt-2">Loading impression share data...</p>
-          </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-500">Loading impression share data...</div>
         </div>
       </div>
     );
@@ -534,35 +537,32 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
 
   if (error) {
     return (
-      <div className={`bg-white rounded-xl p-6 shadow-sm border border-gray-100 ${className}`}>
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Search Impression Share</h3>
-            <p className="text-sm text-gray-600 mt-1">Campaign visibility and lost opportunity analysis</p>
-          </div>
+      <div className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${className}`}>
+        <div className="flex items-center space-x-2 mb-4">
+          <Search className="h-5 w-5 text-red-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Search Impression Share</h3>
         </div>
-        <div className="flex-1 flex items-center justify-center py-12">
-          <div className="text-center">
-            <p className="text-red-500">Error loading impression share data: {error}</p>
-          </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-red-500">Error loading data: {error}</div>
         </div>
       </div>
     );
   }
 
-  if (!data || data.length === 0) {
+  if (data.length === 0) {
     return (
-      <div className={`bg-white rounded-xl p-6 shadow-sm border border-gray-100 ${className}`}>
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Search Impression Share</h3>
-            <p className="text-sm text-gray-600 mt-1">Campaign visibility and lost opportunity analysis</p>
-          </div>
+      <div className={`bg-white rounded-lg shadow-sm border border-gray-200 p-6 ${className}`}>
+        <div className="flex items-center space-x-2 mb-4">
+          <Search className="h-5 w-5 text-gray-600" />
+          <h3 className="text-lg font-semibold text-gray-900">Search Impression Share</h3>
         </div>
-        <div className="flex-1 flex items-center justify-center py-12">
+        <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <p className="text-gray-500">No impression share data available</p>
-            <p className="text-sm text-gray-400 mt-1">Impression share metrics will appear once campaigns have sufficient data</p>
+            <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+            <div className="text-gray-500">No impression share data available</div>
+            <div className="text-sm text-gray-400 mt-2">
+              Make sure campaigns are enabled and have impression share data
+            </div>
           </div>
         </div>
       </div>

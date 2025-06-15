@@ -87,7 +87,7 @@ export async function GET(request: Request) {
         const campaignData: any = {
           id: campaignId,
           name: row.campaign.name,
-          status: row.campaign.status,
+          status: row.campaign.status === 2 ? 'ENABLED' : 'PAUSED', // Convert status number to string
           impressions: row.metrics.impressions || 0,
           clicks: row.metrics.clicks || 0,
           costMicros: row.metrics.cost_micros || 0,
