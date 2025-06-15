@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleAdsApi } from 'google-ads-api';
-
-// Initialize Google Ads API client
-const client = new GoogleAdsApi({
-  client_id: process.env.CLIENT_ID!,
-  client_secret: process.env.CLIENT_SECRET!,
-  developer_token: process.env.DEVELOPER_TOKEN!,
-});
+import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
+import { getFormattedDateRange, formatDateForGoogleAds } from '@/utils/dateUtils';
+import { calculateAllMetrics } from '@/utils/metricsCalculator';
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,20 +18,11 @@ export async function GET(request: NextRequest) {
 
     console.log(`Fetching historical data for customer ${customerId} with ${dateRange} days range...`);
 
-    // Calculate date range
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - parseInt(dateRange));
+    // Calculate date range using utility
+    const { startDate, endDate, startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
 
-    const formatDate = (date: Date): string => {
-      return date.toISOString().split('T')[0].replace(/-/g, '');
-    };
-
-    const customer = client.Customer({
-      customer_id: customerId,
-      refresh_token: process.env.REFRESH_TOKEN!,
-      login_customer_id: process.env.MCC_CUSTOMER_ID!,
-    });
+    // Create Google Ads connection using utility
+    const { customer } = createGoogleAdsConnection(customerId);
 
     // Query for daily historical data
     const query = `
@@ -51,7 +37,7 @@ export async function GET(request: NextRequest) {
         metrics.conversions_value
       FROM campaign
       WHERE campaign.status = 'ENABLED'
-        AND segments.date BETWEEN '${formatDate(startDate)}' AND '${formatDate(endDate)}'
+        AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
       ORDER BY segments.date ASC
     `;
 
@@ -116,20 +102,24 @@ export async function GET(request: NextRequest) {
       dailyData[formattedDate].conversionsValue += row.metrics?.conversions_value || 0;
     });
 
-    // Calculate derived metrics for each day
+    // Calculate derived metrics for each day using utility
     const historicalData = Object.values(dailyData).map((day: any) => {
-      day.cost = day.costMicros / 1000000; // Convert micros to actual currency
-      day.ctr = day.impressions > 0 ? (day.clicks / day.impressions) * 100 : 0;
-      day.avgCpc = day.clicks > 0 ? day.cost / day.clicks : 0;
-      day.conversionRate = day.clicks > 0 ? (day.conversions / day.clicks) * 100 : 0;
-      day.cpa = day.conversions > 0 ? day.cost / day.conversions : 0;
-      day.roas = day.cost > 0 ? day.conversionsValue / day.cost : 0;
-      day.poas = day.cost > 0 ? (day.conversionsValue / day.cost) * 100 : 0; // POAS as percentage
+      const cost = day.costMicros / 1000000; // Convert micros to actual currency
       
-      // Remove costMicros as it's not needed in the response
-      delete day.costMicros;
+      // Use metrics calculator utility
+      const calculatedMetrics = calculateAllMetrics({
+        impressions: day.impressions,
+        clicks: day.clicks,
+        cost: cost,
+        conversions: day.conversions,
+        conversionsValue: day.conversionsValue
+      });
       
-      return day;
+      return {
+        date: day.date,
+        dateFormatted: day.dateFormatted,
+        ...calculatedMetrics
+      };
     });
 
     // Sort by date

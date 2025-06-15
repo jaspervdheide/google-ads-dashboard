@@ -1,4 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createGoogleAdsConnection, createCustomer, createGoogleAdsClient } from '@/utils/googleAdsClient';
+import { getFormattedDateRange } from '@/utils/dateUtils';
+import { handleValidationError, handleApiError, createSuccessResponse } from '@/utils/errorHandler';
+import { logger } from '@/utils/logger';
+
+// Country mapping from the accounts API
+const COUNTRY_ACCOUNTS = {
+  "NL": "5756290882",
+  "BE": "5735473691", 
+  "DE": "1946606314",
+  "DK": "8921136631",
+  "ES": "4748902087",
+  "FI": "8470338623",
+  "FR (Ravann)": "2846016798",
+  "FR (Tapis)": "7539242704",
+  "IT": "8472162607",
+  "NO": "3581636329",
+  "PL": "8467590750",
+  "SE": "8463558543",
+};
 
 interface Account {
   id: string;
@@ -73,53 +93,150 @@ interface AnomalyData {
   };
 }
 
-// Helper function to calculate statistical anomalies
-function detectStatisticalAnomalies(
-  current: number,
-  historical: number[],
-  metric: string,
-  accountId: string,
-  accountName: string,
-  countryCode: string
-): Anomaly[] {
-  const anomalies: Anomaly[] = [];
-  
-  if (historical.length < 7) return anomalies; // Need at least 7 days of data
-  
-  const mean = historical.reduce((sum, val) => sum + val, 0) / historical.length;
-  const variance = historical.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / historical.length;
-  const stdDev = Math.sqrt(variance);
-  
-  // Z-score calculation
-  const zScore = stdDev > 0 ? Math.abs(current - mean) / stdDev : 0;
-  
-  // Detect anomalies based on z-score thresholds
-  if (zScore > 3) { // 3 standard deviations
-    const deviation = ((current - mean) / mean) * 100;
-    const severity: 'high' | 'medium' | 'low' = zScore > 4 ? 'high' : zScore > 3.5 ? 'medium' : 'low';
+// Helper function to fetch accounts directly (no HTTP call)
+async function fetchAccountsDirect(): Promise<Account[]> {
+  try {
+    logger.apiStart('Accounts', { operation: 'fetch_mcc_accounts' });
     
-    const direction = deviation > 0 ? 'higher' : 'lower';
-    const timeDescription = 'compared to the previous 30-day period';
+    const client = createGoogleAdsClient();
+    const mccCustomer = createCustomer(client, process.env.MCC_CUSTOMER_ID!);
+
+    const query = `
+      SELECT 
+        customer_client.client_customer,
+        customer_client.descriptive_name,
+        customer_client.currency_code,
+        customer_client.time_zone
+      FROM customer_client
+      WHERE customer_client.level = 1
+    `;
+
+    logger.queryStart('MCC Accounts', process.env.MCC_CUSTOMER_ID);
+    const results = await mccCustomer.query(query);
+    logger.queryComplete('MCC Accounts', results.length, process.env.MCC_CUSTOMER_ID);
     
-    anomalies.push({
-      id: `stat_${accountId}_${metric}_${Date.now()}`,
-      accountId,
-      accountName,
-      countryCode,
-      severity,
-      type: 'statistical',
-      category: 'Performance Deviation',
-      title: `Unusual ${metric} detected`,
-      description: `${metric} is significantly ${direction} than expected (${Math.abs(deviation).toFixed(1)}% deviation) ${timeDescription}`,
-      metric,
-      currentValue: current,
-      expectedValue: mean,
-      deviation: Math.abs(deviation),
-      detectedAt: new Date().toISOString()
+    const accounts = results.map((row: any) => {
+      const fullCustomerId = row.customer_client.client_customer;
+      const customerId = fullCustomerId.replace('customers/', '');
+      
+      const countryCode = Object.keys(COUNTRY_ACCOUNTS).find(
+        key => COUNTRY_ACCOUNTS[key as keyof typeof COUNTRY_ACCOUNTS] === customerId
+      ) || 'Unknown';
+      
+      return {
+        id: customerId,
+        name: row.customer_client.descriptive_name,
+        currency: row.customer_client.currency_code,
+        timeZone: row.customer_client.time_zone,
+        countryCode
+      };
     });
+
+    logger.apiComplete('Accounts', accounts.length);
+    return accounts;
+  } catch (error) {
+    console.error('Error fetching accounts directly:', error);
+    return [];
   }
-  
-  return anomalies;
+}
+
+// Helper function to fetch campaign data directly (no HTTP call)
+async function fetchCampaignsDirect(customerId: string, dateRange: number): Promise<CampaignData | null> {
+  try {
+    const client = createGoogleAdsClient();
+    const customer = createCustomer(client, customerId);
+    
+    const { startDateStr, endDateStr } = getFormattedDateRange(dateRange);
+    
+    const query = `
+      SELECT
+        campaign.id,
+        campaign.name,
+        campaign.status,
+        metrics.impressions,
+        metrics.clicks,
+        metrics.cost_micros,
+        metrics.ctr,
+        metrics.average_cpc,
+        metrics.conversions,
+        metrics.conversions_value
+      FROM campaign
+      WHERE campaign.status = 'ENABLED'
+        AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
+      ORDER BY metrics.impressions DESC
+    `;
+
+    const results = await customer.query(query);
+    
+    const campaigns = results.map((row: any) => ({
+      id: row.campaign.id.toString(),
+      name: row.campaign.name,
+      status: row.campaign.status,
+      impressions: parseInt(row.metrics.impressions) || 0,
+      clicks: parseInt(row.metrics.clicks) || 0,
+      cost: (parseInt(row.metrics.cost_micros) || 0) / 1000000,
+      ctr: parseFloat(row.metrics.ctr) || 0,
+      avgCpc: (parseInt(row.metrics.average_cpc) || 0) / 1000000,
+      conversions: parseFloat(row.metrics.conversions) || 0,
+      conversionsValue: parseFloat(row.metrics.conversions_value) || 0,
+      conversionRate: 0, // Will be calculated
+      cpa: 0, // Will be calculated
+      roas: 0 // Will be calculated
+    }));
+
+    // Calculate totals and derived metrics
+    const totals = campaigns.reduce((acc, campaign) => ({
+      impressions: acc.impressions + campaign.impressions,
+      clicks: acc.clicks + campaign.clicks,
+      cost: acc.cost + campaign.cost,
+      conversions: acc.conversions + campaign.conversions,
+      conversionsValue: acc.conversionsValue + campaign.conversionsValue,
+      ctr: 0, // Will be calculated
+      avgCpc: 0, // Will be calculated
+      conversionRate: 0, // Will be calculated
+      cpa: 0, // Will be calculated
+      roas: 0 // Will be calculated
+    }), {
+      impressions: 0,
+      clicks: 0,
+      cost: 0,
+      conversions: 0,
+      conversionsValue: 0,
+      ctr: 0,
+      avgCpc: 0,
+      conversionRate: 0,
+      cpa: 0,
+      roas: 0
+    });
+
+    // Calculate derived metrics
+    totals.ctr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
+    totals.avgCpc = totals.clicks > 0 ? totals.cost / totals.clicks : 0;
+    totals.conversionRate = totals.clicks > 0 ? (totals.conversions / totals.clicks) * 100 : 0;
+    totals.cpa = totals.conversions > 0 ? totals.cost / totals.conversions : 0;
+    totals.roas = totals.cost > 0 ? totals.conversionsValue / totals.cost : 0;
+
+    // Update campaign-level derived metrics
+    campaigns.forEach(campaign => {
+      campaign.conversionRate = campaign.clicks > 0 ? (campaign.conversions / campaign.clicks) * 100 : 0;
+      campaign.cpa = campaign.conversions > 0 ? campaign.cost / campaign.conversions : 0;
+      campaign.roas = campaign.cost > 0 ? campaign.conversionsValue / campaign.cost : 0;
+    });
+
+    return {
+      campaigns,
+      totals,
+      dateRange: {
+        days: dateRange,
+        startDate: startDateStr,
+        endDate: endDateStr
+      },
+      customerId
+    };
+  } catch (error) {
+    console.error(`Error fetching campaigns for ${customerId}:`, error);
+    return null;
+  }
 }
 
 // Helper function to detect business rule anomalies
@@ -185,41 +302,7 @@ function detectBusinessRuleAnomalies(
     });
   }
   
-  // 4. High spend with zero clicks
-  if (totals.cost > 500 && totals.clicks === 0) {
-    anomalies.push({
-      id: `business_${accountId}_spend_no_clicks_${Date.now()}`,
-      accountId,
-      accountName,
-      countryCode,
-      severity: 'high',
-      type: 'business',
-      category: 'Budget Efficiency',
-      title: 'High spend with no clicks',
-      description: `Account spent €${totals.cost.toFixed(2)} in the last 30 days but received no clicks`,
-      currentValue: totals.cost,
-      detectedAt: new Date().toISOString()
-    });
-  }
-  
-  // 5. Campaign status anomalies
-  const pausedCampaigns = campaigns.filter(c => c.status === 'PAUSED');
-  if (pausedCampaigns.length > activeCampaigns.length && activeCampaigns.length > 0) {
-    anomalies.push({
-      id: `business_${accountId}_paused_campaigns_${Date.now()}`,
-      accountId,
-      accountName,
-      countryCode,
-      severity: 'low',
-      type: 'business',
-      category: 'Campaign Management',
-      title: 'More campaigns paused than active',
-      description: `Account has ${pausedCampaigns.length} campaigns paused while only ${activeCampaigns.length} are active`,
-      detectedAt: new Date().toISOString()
-    });
-  }
-  
-  // 6. Low conversion rate (< 1%)
+  // 4. Low conversion rate (< 1%)
   if (totals.conversionRate < 1.0 && totals.clicks > 1000) {
     anomalies.push({
       id: `business_${accountId}_low_conversion_rate_${Date.now()}`,
@@ -236,7 +319,7 @@ function detectBusinessRuleAnomalies(
     });
   }
   
-  // 7. High CPA (> €100)
+  // 5. High CPA (> €100)
   if (totals.cpa > 100 && totals.conversions > 0) {
     anomalies.push({
       id: `business_${accountId}_high_cpa_${Date.now()}`,
@@ -253,7 +336,7 @@ function detectBusinessRuleAnomalies(
     });
   }
   
-  // 8. Low ROAS (< 2.0)
+  // 6. Low ROAS (< 2.0)
   if (totals.roas < 2.0 && totals.conversionsValue > 0 && totals.cost > 500) {
     anomalies.push({
       id: `business_${accountId}_low_roas_${Date.now()}`,
@@ -270,104 +353,32 @@ function detectBusinessRuleAnomalies(
     });
   }
   
-  // 9. Zero conversions with significant spend (> €1000 for 30-day period)
-  if (totals.conversions === 0 && totals.cost > 1000) {
-    anomalies.push({
-      id: `business_${accountId}_no_conversions_high_spend_${Date.now()}`,
-      accountId,
-      accountName,
-      countryCode,
-      severity: 'high',
-      type: 'business',
-      category: 'Conversion Performance',
-      title: 'No conversions despite high spend',
-      description: `Account spent €${totals.cost.toFixed(2)} in the last 30 days but received no conversions`,
-      currentValue: totals.cost,
-      detectedAt: new Date().toISOString()
-    });
-  }
-  
-  // 10. Conversions without conversion value (tracking issue)
-  if (totals.conversions > 0 && totals.conversionsValue === 0) {
-    anomalies.push({
-      id: `business_${accountId}_conversions_no_value_${Date.now()}`,
-      accountId,
-      accountName,
-      countryCode,
-      severity: 'medium',
-      type: 'business',
-      category: 'Conversion Tracking',
-      title: 'Conversions without conversion value',
-      description: `Account has ${totals.conversions} conversion(s) but no conversion value tracked, which prevents ROAS calculation`,
-      currentValue: totals.conversions,
-      detectedAt: new Date().toISOString()
-    });
-  }
-  
   return anomalies;
 }
 
 export async function GET(request: NextRequest) {
+  console.log("🔍 Anomalies API: Starting anomaly detection...");
   try {
-    // Calculate date ranges for comparison
-    const today = new Date();
+    logger.apiStart('Anomalies', { operation: 'detect_anomalies' });
     
-    // Current period: 30 days with 2-day offset (days -32 to -2)
-    const currentPeriodEnd = new Date(today);
-    currentPeriodEnd.setDate(today.getDate() - 2); // 2-day offset
-    const currentPeriodStart = new Date(currentPeriodEnd);
-    currentPeriodStart.setDate(currentPeriodEnd.getDate() - 29); // 30 days
-    
-    // Historical period: 30 days before current period (days -62 to -32)
-    const historicalPeriodEnd = new Date(currentPeriodStart);
-    historicalPeriodEnd.setDate(currentPeriodStart.getDate() - 1); // Day before current period starts
-    const historicalPeriodStart = new Date(historicalPeriodEnd);
-    historicalPeriodStart.setDate(historicalPeriodEnd.getDate() - 29); // 30 days
-    
-    console.log(`Anomaly Detection Time Periods:
-    Current Period: ${currentPeriodStart.toISOString().split('T')[0]} to ${currentPeriodEnd.toISOString().split('T')[0]}
-    Historical Period: ${historicalPeriodStart.toISOString().split('T')[0]} to ${historicalPeriodEnd.toISOString().split('T')[0]}`);
-    
-    // Fetch all accounts
-    const accountsResponse = await fetch('http://localhost:3000/api/accounts');
-    if (!accountsResponse.ok) {
-      throw new Error('Failed to fetch accounts');
-    }
-    const accountsResult = await accountsResponse.json();
-    
-    if (!accountsResult.success || !accountsResult.data) {
-      throw new Error('Invalid accounts response format');
+    // Fetch all accounts directly (no HTTP call)
+    const accounts = await fetchAccountsDirect();
+    if (accounts.length === 0) {
+      throw new Error('No accounts found');
     }
     
-    const accounts: Account[] = accountsResult.data;
+    console.log(`🔍 Anomalies API: Processing ${accounts.length} accounts...`);
     const allAnomalies: Anomaly[] = [];
     
     // Process each account
     for (const account of accounts) {
       try {
-        // Fetch current period data (30 days with 2-day offset)
-        const currentResponse = await fetch(`http://localhost:3000/api/campaigns?customerId=${account.id}&dateRange=30`);
-        if (!currentResponse.ok) continue;
-        
-        const currentResult = await currentResponse.json();
-        if (!currentResult.success || !currentResult.data) continue;
-        
-        const currentData: CampaignData = currentResult.data;
+        // Fetch current period data directly (30 days)
+        const currentData = await fetchCampaignsDirect(account.id, 30);
+        if (!currentData) continue;
         
         // Skip accounts with no data
         if (!currentData.campaigns || currentData.campaigns.length === 0) continue;
-        
-        // Get account-level totals for current period
-        const currentAccountMetrics = {
-          clicks: currentData.totals.clicks,
-          impressions: currentData.totals.impressions,
-          cost: currentData.totals.cost,
-          conversions: currentData.totals.conversions,
-          conversionsValue: currentData.totals.conversionsValue,
-          ctr: currentData.totals.ctr,
-          cpa: currentData.totals.cpa,
-          roas: currentData.totals.roas
-        };
         
         // Detect business rule anomalies on current period account totals
         const businessAnomalies = detectBusinessRuleAnomalies(
@@ -377,97 +388,6 @@ export async function GET(request: NextRequest) {
           account.countryCode
         );
         allAnomalies.push(...businessAnomalies);
-        
-        // Fetch historical period data for comparison (60 days to get both periods)
-        try {
-          const historicalResponse = await fetch(`http://localhost:3000/api/campaigns?customerId=${account.id}&dateRange=60`);
-          if (historicalResponse.ok) {
-            const historicalResult = await historicalResponse.json();
-            if (historicalResult.success && historicalResult.data) {
-              const historicalData: CampaignData = historicalResult.data;
-              
-              // Calculate historical period metrics (60-day total minus current 30-day = previous 30-day period)
-              const historicalAccountMetrics = {
-                clicks: Math.max(0, historicalData.totals.clicks - currentAccountMetrics.clicks),
-                impressions: Math.max(0, historicalData.totals.impressions - currentAccountMetrics.impressions),
-                cost: Math.max(0, historicalData.totals.cost - currentAccountMetrics.cost),
-                conversions: Math.max(0, historicalData.totals.conversions - currentAccountMetrics.conversions),
-                conversionsValue: Math.max(0, historicalData.totals.conversionsValue - currentAccountMetrics.conversionsValue),
-                ctr: historicalData.totals.ctr, // Use historical CTR as baseline
-                cpa: historicalData.totals.cpa, // Use historical CPA as baseline
-                roas: historicalData.totals.roas // Use historical ROAS as baseline
-              };
-              
-              // Calculate percentage changes for each metric
-              const detectAccountLevelAnomaly = (
-                currentValue: number,
-                historicalValue: number,
-                metricName: string,
-                metricDisplayName: string
-              ) => {
-                if (historicalValue === 0) return; // Skip if no historical data
-                
-                const percentageChange = ((currentValue - historicalValue) / historicalValue) * 100;
-                const absoluteChange = Math.abs(percentageChange);
-                
-                // Define thresholds for account-level anomalies
-                let severity: 'high' | 'medium' | 'low' | null = null;
-                
-                if (absoluteChange >= 50) {
-                  severity = 'high';
-                } else if (absoluteChange >= 30) {
-                  severity = 'medium';
-                } else if (absoluteChange >= 20) {
-                  severity = 'low';
-                }
-                
-                if (severity) {
-                  const direction = percentageChange > 0 ? 'increased' : 'decreased';
-                  const category = metricName.includes('cost') || metricName.includes('cpa') ? 'Cost Efficiency' :
-                                 metricName.includes('conversion') || metricName.includes('roas') ? 'Conversion Performance' :
-                                 'Traffic Performance';
-                  
-                  allAnomalies.push({
-                    id: `account_${account.id}_${metricName}_${Date.now()}`,
-                    accountId: account.id,
-                    accountName: account.name,
-                    countryCode: account.countryCode,
-                    severity,
-                    type: 'statistical',
-                    category,
-                    title: `Account ${metricDisplayName} ${direction} significantly`,
-                    description: `${metricDisplayName} ${direction} by ${absoluteChange.toFixed(1)}% compared to the previous 30-day period (from ${historicalValue.toLocaleString()} to ${currentValue.toLocaleString()})`,
-                    metric: metricDisplayName,
-                    currentValue: currentValue,
-                    expectedValue: historicalValue,
-                    deviation: absoluteChange,
-                    detectedAt: new Date().toISOString()
-                  });
-                }
-              };
-              
-              // Check each account-level metric for anomalies
-              detectAccountLevelAnomaly(currentAccountMetrics.clicks, historicalAccountMetrics.clicks, 'clicks', 'Clicks');
-              detectAccountLevelAnomaly(currentAccountMetrics.impressions, historicalAccountMetrics.impressions, 'impressions', 'Impressions');
-              detectAccountLevelAnomaly(currentAccountMetrics.cost, historicalAccountMetrics.cost, 'cost', 'Cost');
-              detectAccountLevelAnomaly(currentAccountMetrics.conversions, historicalAccountMetrics.conversions, 'conversions', 'Conversions');
-              detectAccountLevelAnomaly(currentAccountMetrics.conversionsValue, historicalAccountMetrics.conversionsValue, 'conversions_value', 'Conversion Value');
-              
-              // For rates, compare directly (not as totals)
-              if (historicalAccountMetrics.ctr > 0) {
-                detectAccountLevelAnomaly(currentAccountMetrics.ctr, historicalAccountMetrics.ctr, 'ctr', 'CTR');
-              }
-              if (historicalAccountMetrics.cpa > 0) {
-                detectAccountLevelAnomaly(currentAccountMetrics.cpa, historicalAccountMetrics.cpa, 'cpa', 'CPA');
-              }
-              if (historicalAccountMetrics.roas > 0) {
-                detectAccountLevelAnomaly(currentAccountMetrics.roas, historicalAccountMetrics.roas, 'roas', 'ROAS');
-              }
-            }
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch historical data for account ${account.id}:`, error);
-        }
         
       } catch (error) {
         console.warn(`Failed to process account ${account.id}:`, error);
@@ -495,13 +415,17 @@ export async function GET(request: NextRequest) {
       summary
     };
     
-    return NextResponse.json(response);
+    console.log(`🔍 Anomalies API: Completed. Found ${allAnomalies.length} anomalies (${summary.high} high, ${summary.medium} medium, ${summary.low} low)`);
+    logger.apiComplete('Anomalies', allAnomalies.length);
+    
+    return createSuccessResponse(response, `✅ Detected ${allAnomalies.length} anomalies across ${accounts.length} accounts`);
     
   } catch (error) {
-    console.error('Error detecting anomalies:', error);
-    return NextResponse.json(
-      { error: 'Failed to detect anomalies' },
-      { status: 500 }
-    );
+    console.error('❌ Anomaly Detection Error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      error
+    });
+    return handleApiError(error, 'Anomaly Detection');
   }
 }

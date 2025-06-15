@@ -45,7 +45,14 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
       try {
         // Use existing historical-data endpoint with the selected customer
         const selectedCustomerId = localStorage.getItem('selectedAccount') || '1946606314';
+        
+        // Check if the endpoint exists by making a safe request
         const response = await fetch(`/api/historical-data?customerId=${selectedCustomerId}&dateRange=30`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const result = await response.json();
         
         if (result.success && result.data?.dailyBreakdown) {

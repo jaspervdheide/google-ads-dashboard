@@ -6,7 +6,8 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { AdGroup, AdGroupData } from '../../types';
 import { formatNumber, formatPercentage, formatCurrency } from '../../utils';
 import TopAdGroupsPerformance from './TopAdGroupsPerformance';
-import AdGroupPerformanceMatrix from './AdGroupPerformanceMatrix';
+import GenericPerformanceMatrix from './GenericPerformanceMatrix';
+import { adGroupMatrixConfig } from '../../utils/matrixConfigs';
 
 interface AdGroupTableProps {
   data: AdGroupData | null;
@@ -468,7 +469,10 @@ const AdGroupTable: React.FC<AdGroupTableProps> = ({
           {/* Right Column */}
           <div className="flex flex-col justify-between h-full">
             <AdGroupTypeDistribution data={data} />
-            <AdGroupPerformanceMatrix adGroupData={data} />
+                            <GenericPerformanceMatrix 
+                  data={data} 
+                  config={adGroupMatrixConfig} 
+                />
           </div>
         </div>
       </div>

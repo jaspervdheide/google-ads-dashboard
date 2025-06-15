@@ -1,25 +1,16 @@
 import { NextResponse } from 'next/server';
-import { GoogleAdsApi } from 'google-ads-api';
+import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
+import { handleApiError, createSuccessResponse } from '@/utils/errorHandler';
+import { logger } from '@/utils/logger';
 
 export async function GET() {
   try {
-    console.log('Initializing Google Ads API client...');
+    const customerId = '5756290882'; // NL account
+    logger.apiStart('Google Ads Connection', { customerId });
     
-    // Initialize Google Ads client with environment variables
-    const client = new GoogleAdsApi({
-      client_id: process.env.CLIENT_ID!,
-      client_secret: process.env.CLIENT_SECRET!,
-      developer_token: process.env.DEVELOPER_TOKEN!,
-    });
-
-    console.log('Creating customer instance for NL account...');
-    
-    // Get customer for NL account
-    const customer = client.Customer({
-      customer_id: '5756290882', // NL account
-      refresh_token: process.env.REFRESH_TOKEN!,
-      login_customer_id: process.env.MCC_CUSTOMER_ID!, // Add MCC customer ID for permission
-    });
+    // Initialize Google Ads client and customer using utility
+    const { client, customer } = createGoogleAdsConnection(customerId);
+    logger.googleAdsConnection(customerId, 'NL - Just Carpets');
 
     // Simple GAQL query to test connection
     const query = `
@@ -32,69 +23,32 @@ export async function GET() {
       LIMIT 1
     `;
 
-    console.log('Executing GAQL query:', query);
+    logger.googleAdsQuery(query, customerId);
     const results = await customer.query(query);
-    console.log('Query results:', results);
+    logger.queryComplete('Customer Info', results.length, customerId);
     
     // Extract customer data
     const customerData = results[0]?.customer;
     
     if (customerData) {
-      console.log('Successfully retrieved customer data:', customerData);
-      return NextResponse.json({
-        success: true,
-        message: "✅ Google Ads API connection successful!",
-        data: {
-          customerId: customerData.id,
-          name: customerData.descriptive_name,
-          currency: customerData.currency_code,
-          timeZone: customerData.time_zone,
-          country: "NL",
-          timestamp: new Date().toISOString()
-        }
-      });
+      logger.apiComplete('Google Ads Connection', 1);
+      
+      const responseData = {
+        customerId: customerData.id,
+        name: customerData.descriptive_name,
+        currency: customerData.currency_code,
+        timeZone: customerData.time_zone,
+        country: "NL",
+        timestamp: new Date().toISOString()
+      };
+
+      return createSuccessResponse(responseData, "✅ Google Ads API connection successful!");
     } else {
-      console.log('No customer data in results');
-      return NextResponse.json({
-        success: false,
-        message: "❌ No customer data returned",
-        error: "Query returned empty results"
-      }, { status: 404 });
+      logger.warn('No customer data in results', { customerId });
+      return handleApiError(new Error("Query returned empty results"), 'Google Ads Connection');
     }
 
   } catch (error) {
-    console.error('Google Ads API Error (full):', error);
-    console.error('Error name:', error?.constructor?.name);
-    console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-    
-    // Better error serialization
-    let errorMessage = 'Unknown error';
-    let errorDetails = {};
-    
-    if (error instanceof Error) {
-      errorMessage = error.message;
-      errorDetails = {
-        name: error.name,
-        stack: error.stack?.split('\n').slice(0, 5).join('\n') // First 5 lines of stack
-      };
-    } else if (typeof error === 'object' && error !== null) {
-      errorMessage = JSON.stringify(error, null, 2);
-      errorDetails = error;
-    } else {
-      errorMessage = String(error);
-    }
-    
-    return NextResponse.json({
-      success: false,
-      message: "❌ Google Ads API connection failed",
-      error: errorMessage,
-      errorType: error?.constructor?.name || typeof error,
-      errorDetails,
-      details: {
-        timestamp: new Date().toISOString(),
-        customerId: '5756290882'
-      }
-    }, { status: 500 });
+    return handleApiError(error, 'Google Ads Connection');
   }
 } 

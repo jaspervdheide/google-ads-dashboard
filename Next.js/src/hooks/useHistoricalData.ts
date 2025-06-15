@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getFromCache, saveToCache } from '../app/utils/cache';
+import { getFromCache, saveToCache } from '../utils/cacheManager';
 import { DateRange, formatDateForAPI, getApiDateRange } from '../utils/dateHelpers';
 
 

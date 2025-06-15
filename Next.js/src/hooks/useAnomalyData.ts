@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getFromCache, saveToCache } from '../app/utils/cache';
+import { getFromCache, saveToCache } from '../utils/cacheManager';
 
 // Required interfaces
 export interface Anomaly {
@@ -58,9 +58,17 @@ const useAnomalyData = (forceRefresh = false) => {
       const response = await fetch('/api/anomalies');
       const result = await response.json();
       
-      if (response.ok && result.anomalies) {
-        setData(result);
-        saveToCache(cacheKey, result);
+      console.log("🔍 Anomalies API Response:", {
+        success: result.success,
+        hasData: !!result.data,
+        dataKeys: result.data ? Object.keys(result.data) : null,
+        anomaliesCount: result.data?.anomalies?.length || 0
+      });
+      
+      if (response.ok && result.success && result.data) {
+        // The API now returns { success: true, data: { anomalies: [...], summary: {...} } }
+        setData(result.data);
+        saveToCache(cacheKey, result.data);
         console.log("💾 Saved anomalies to cache");
       } else {
         console.error('Failed to fetch anomalies:', result.error || 'Unknown error');

@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleAdsApi } from 'google-ads-api';
-
-// Initialize Google Ads API client
-const client = new GoogleAdsApi({
-  client_id: process.env.CLIENT_ID!,
-  client_secret: process.env.CLIENT_SECRET!,
-  developer_token: process.env.DEVELOPER_TOKEN!,
-});
+import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
+import { calculateComparisonPeriods } from '@/utils/dateUtils';
+import { calculateAllMetrics, calculatePercentageChange } from '@/utils/metricsCalculator';
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,29 +20,14 @@ export async function GET(request: NextRequest) {
 
     const days = parseInt(dateRange);
     
-    // Calculate current period
-    const currentEndDate = new Date();
-    const currentStartDate = new Date();
-    currentStartDate.setDate(currentEndDate.getDate() - days);
-    
-    // Calculate previous period (same duration)
-    const previousEndDate = new Date(currentStartDate);
-    previousEndDate.setDate(previousEndDate.getDate() - 1); // End one day before current period
-    const previousStartDate = new Date(previousEndDate);
-    previousStartDate.setDate(previousStartDate.getDate() - days + 1);
+    // Calculate comparison periods using utility
+    const { currentPeriod, previousPeriod } = calculateComparisonPeriods(days);
 
-    const formatDate = (date: Date): string => {
-      return date.toISOString().split('T')[0].replace(/-/g, '');
-    };
-
-    const customer = client.Customer({
-      customer_id: customerId,
-      refresh_token: process.env.REFRESH_TOKEN!,
-      login_customer_id: process.env.MCC_CUSTOMER_ID!,
-    });
+    // Create Google Ads connection using utility
+    const { customer } = createGoogleAdsConnection(customerId);
 
     // Function to fetch data for a date range
-    const fetchPeriodData = async (startDate: Date, endDate: Date) => {
+    const fetchPeriodData = async (startDateStr: string, endDateStr: string) => {
       const query = `
         SELECT
           metrics.impressions,
@@ -57,10 +37,10 @@ export async function GET(request: NextRequest) {
           metrics.conversions_value
         FROM campaign
         WHERE campaign.status = 'ENABLED'
-          AND segments.date BETWEEN '${formatDate(startDate)}' AND '${formatDate(endDate)}'
+          AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
       `;
 
-      console.log(`📊 Fetching data from ${formatDate(startDate)} to ${formatDate(endDate)}`);
+      console.log(`📊 Fetching data from ${startDateStr} to ${endDateStr}`);
       const response = await customer.query(query);
 
       // Aggregate all metrics for the period
@@ -80,48 +60,31 @@ export async function GET(request: NextRequest) {
         totals.conversionsValue += row.metrics?.conversions_value || 0;
       });
 
-      // Calculate derived metrics
-      const derivedTotals = {
-        ...totals,
-        ctr: totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0,
-        avgCpc: totals.clicks > 0 ? totals.cost / totals.clicks : 0,
-        conversionRate: totals.clicks > 0 ? (totals.conversions / totals.clicks) * 100 : 0,
-        cpa: totals.conversions > 0 ? totals.cost / totals.conversions : 0,
-        roas: totals.cost > 0 ? totals.conversionsValue / totals.cost : 0,
-        poas: totals.cost > 0 ? (totals.conversionsValue / totals.cost) * 100 : 0
-      };
-
-      return derivedTotals;
+      // Calculate derived metrics using utility
+      return calculateAllMetrics(totals);
     };
 
-    // Fetch data for both periods
-    const [currentPeriod, previousPeriod] = await Promise.all([
-      fetchPeriodData(currentStartDate, currentEndDate),
-      fetchPeriodData(previousStartDate, previousEndDate)
+    // Fetch data for both periods using utility date strings
+    const [currentPeriodData, previousPeriodData] = await Promise.all([
+      fetchPeriodData(currentPeriod.startDateStr, currentPeriod.endDateStr),
+      fetchPeriodData(previousPeriod.startDateStr, previousPeriod.endDateStr)
     ]);
 
-    console.log('📊 Current Period Totals:', currentPeriod);
-    console.log('📊 Previous Period Totals:', previousPeriod);
+    console.log('📊 Current Period Totals:', currentPeriodData);
+    console.log('📊 Previous Period Totals:', previousPeriodData);
 
-    // Calculate percentage changes for each KPI
-    const calculatePercentageChange = (current: number, previous: number): number => {
-      if (previous === 0) {
-        return current > 0 ? 100 : 0; // If previous was 0 and current > 0, show 100% increase
-      }
-      return ((current - previous) / previous) * 100;
-    };
-
+    // Calculate percentage changes for each KPI using utility
     const kpiChanges = {
-      clicks: calculatePercentageChange(currentPeriod.clicks, previousPeriod.clicks),
-      impressions: calculatePercentageChange(currentPeriod.impressions, previousPeriod.impressions),
-      ctr: calculatePercentageChange(currentPeriod.ctr, previousPeriod.ctr),
-      avgCpc: calculatePercentageChange(currentPeriod.avgCpc, previousPeriod.avgCpc),
-      cost: calculatePercentageChange(currentPeriod.cost, previousPeriod.cost),
-      conversions: calculatePercentageChange(currentPeriod.conversions, previousPeriod.conversions),
-      conversionsValue: calculatePercentageChange(currentPeriod.conversionsValue, previousPeriod.conversionsValue),
-      conversionRate: calculatePercentageChange(currentPeriod.conversionRate, previousPeriod.conversionRate),
-      cpa: calculatePercentageChange(currentPeriod.cpa, previousPeriod.cpa),
-      poas: calculatePercentageChange(currentPeriod.poas, previousPeriod.poas)
+      clicks: calculatePercentageChange(currentPeriodData.clicks, previousPeriodData.clicks),
+      impressions: calculatePercentageChange(currentPeriodData.impressions, previousPeriodData.impressions),
+      ctr: calculatePercentageChange(currentPeriodData.ctr, previousPeriodData.ctr),
+      avgCpc: calculatePercentageChange(currentPeriodData.avgCpc, previousPeriodData.avgCpc),
+      cost: calculatePercentageChange(currentPeriodData.cost, previousPeriodData.cost),
+      conversions: calculatePercentageChange(currentPeriodData.conversions, previousPeriodData.conversions),
+      conversionsValue: calculatePercentageChange(currentPeriodData.conversionsValue, previousPeriodData.conversionsValue),
+      conversionRate: calculatePercentageChange(currentPeriodData.conversionRate, previousPeriodData.conversionRate),
+      cpa: calculatePercentageChange(currentPeriodData.cpa, previousPeriodData.cpa),
+      poas: calculatePercentageChange(currentPeriodData.poas || 0, previousPeriodData.poas || 0)
     };
 
     console.log('📊 KPI Percentage Changes:', kpiChanges);
@@ -131,14 +94,14 @@ export async function GET(request: NextRequest) {
       data: {
         changes: kpiChanges,
         currentPeriod: {
-          startDate: formatDate(currentStartDate),
-          endDate: formatDate(currentEndDate),
-          totals: currentPeriod
+          startDate: currentPeriod.startDateStr,
+          endDate: currentPeriod.endDateStr,
+          totals: currentPeriodData
         },
         previousPeriod: {
-          startDate: formatDate(previousStartDate),
-          endDate: formatDate(previousEndDate),
-          totals: previousPeriod
+          startDate: previousPeriod.startDateStr,
+          endDate: previousPeriod.endDateStr,
+          totals: previousPeriodData
         }
       }
     });

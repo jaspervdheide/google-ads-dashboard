@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { GoogleAdsApi } from 'google-ads-api';
+import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
+import { getFormattedDateRange } from '@/utils/dateUtils';
 
 export async function GET(request: Request) {
   try {
@@ -16,34 +17,11 @@ export async function GET(request: Request) {
 
     console.log(`Fetching campaign performance for customer ${customerId} with ${dateRange} days range...`);
     
-    // Calculate date range
-    const endDate = new Date();
-    const startDate = new Date();
+    // Calculate date range using utility
+    const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
     
-    if (parseInt(dateRange) === 1) {
-      // For today only, use the same date for start and end
-      startDate.setTime(endDate.getTime());
-    } else {
-      // For multiple days, subtract the range
-      startDate.setDate(endDate.getDate() - parseInt(dateRange));
-    }
-    
-    const startDateStr = startDate.toISOString().split('T')[0].replace(/-/g, '');
-    const endDateStr = endDate.toISOString().split('T')[0].replace(/-/g, '');
-    
-    // Initialize Google Ads client
-    const client = new GoogleAdsApi({
-      client_id: process.env.CLIENT_ID!,
-      client_secret: process.env.CLIENT_SECRET!,
-      developer_token: process.env.DEVELOPER_TOKEN!,
-    });
-
-    // Get customer instance
-    const customer = client.Customer({
-      customer_id: customerId,
-      refresh_token: process.env.REFRESH_TOKEN!,
-      login_customer_id: process.env.MCC_CUSTOMER_ID!,
-    });
+    // Initialize Google Ads client and customer using utility
+    const { customer } = createGoogleAdsConnection(customerId);
 
     // Query to get campaign performance data
     const query = `

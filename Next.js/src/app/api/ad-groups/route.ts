@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
-import { GoogleAdsApi } from 'google-ads-api';
+import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
+import { getFormattedDateRange } from '@/utils/dateUtils';
+import { handleValidationError, handleApiError, createSuccessResponse } from '@/utils/errorHandler';
+import { calculateAllMetrics } from '@/utils/metricsCalculator';
 
 export async function GET(request: Request) {
   try {
@@ -9,39 +12,16 @@ export async function GET(request: Request) {
     const groupType = searchParams.get('groupType') || 'all'; // 'all', 'traditional', 'asset'
     
     if (!customerId) {
-      return NextResponse.json({
-        success: false,
-        message: "❌ Customer ID is required"
-      }, { status: 400 });
+      return handleValidationError('Customer ID is required');
     }
 
     console.log(`Fetching ad groups and asset groups for customer ${customerId} with ${dateRange} days range, type: ${groupType}...`);
     
-    // Calculate date range
-    const endDate = new Date();
-    const startDate = new Date();
+    // Calculate date range using utility
+    const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
     
-    if (parseInt(dateRange) === 1) {
-      startDate.setTime(endDate.getTime());
-    } else {
-      startDate.setDate(endDate.getDate() - parseInt(dateRange));
-    }
-    
-    const startDateStr = startDate.toISOString().split('T')[0].replace(/-/g, '');
-    const endDateStr = endDate.toISOString().split('T')[0].replace(/-/g, '');
-    
-    // Initialize Google Ads client
-    const client = new GoogleAdsApi({
-      client_id: process.env.CLIENT_ID!,
-      client_secret: process.env.CLIENT_SECRET!,
-      developer_token: process.env.DEVELOPER_TOKEN!,
-    });
-
-    const customer = client.Customer({
-      customer_id: customerId,
-      refresh_token: process.env.REFRESH_TOKEN!,
-      login_customer_id: process.env.MCC_CUSTOMER_ID!,
-    });
+    // Initialize Google Ads client and customer using utility
+    const { customer } = createGoogleAdsConnection(customerId);
 
     let allGroups: any[] = [];
 
@@ -307,34 +287,26 @@ export async function GET(request: Request) {
 
     console.log(`Successfully retrieved ${processedGroups.length} total groups (${traditionalCount} traditional, ${assetCount} asset groups)`);
     
-    return NextResponse.json({
-      success: true,
-      message: `✅ Retrieved ${processedGroups.length} groups for ${dateRange} days`,
-      data: {
-        groups: processedGroups,
-        totals,
-        statistics: {
-          total: processedGroups.length,
-          traditional: traditionalCount,
-          asset: assetCount
-        },
-        dateRange: {
-          days: parseInt(dateRange),
-          startDate: startDateStr,
-          endDate: endDateStr
-        },
-        customerId,
-        groupType
-      }
-    });
+    const responseData = {
+      groups: processedGroups,
+      totals,
+      statistics: {
+        total: processedGroups.length,
+        traditional: traditionalCount,
+        asset: assetCount
+      },
+      dateRange: {
+        days: parseInt(dateRange),
+        startDate: startDateStr,
+        endDate: endDateStr
+      },
+      customerId,
+      groupType
+    };
+
+    return createSuccessResponse(responseData, `✅ Retrieved ${processedGroups.length} groups (${traditionalCount} traditional, ${assetCount} asset) for ${dateRange} days`);
 
   } catch (error) {
-    console.error('Error fetching ad groups and asset groups:', error);
-    
-    return NextResponse.json({
-      success: false,
-      message: "❌ Failed to fetch ad groups and asset groups",
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    return handleApiError(error, 'Ad Groups Data');
   }
 } 

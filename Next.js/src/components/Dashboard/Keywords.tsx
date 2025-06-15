@@ -9,16 +9,17 @@ import {
   Zap
 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
-import { getFromCache, saveToCache } from "../../app/utils/cache.js";
+import { getFromCache, saveToCache } from "../../utils/cacheManager";
 import { 
   formatNumber, 
   formatCurrency, 
   formatPercentage,
-  DateRange, 
   getApiDateRange
 } from '../../utils';
+import { DateRange } from '../../types/common';
 import TopKeywordsPerformance from './TopKeywordsPerformance';
-import KeywordPerformanceMatrix from './KeywordPerformanceMatrix';
+import GenericPerformanceMatrix from './GenericPerformanceMatrix';
+import { keywordMatrixConfig } from '../../utils/matrixConfigs';
 
 // =============================================================================
 // TYPE DEFINITIONS
@@ -312,8 +313,9 @@ const Keywords: React.FC<KeywordsProps> = ({
       const cachedData = getFromCache(cacheKey, 30);
       
       if (cachedData) {
-        console.log(`✅ Keywords: Using cached data (${cachedData.keywords?.length || 0} items)`);
-        setKeywordData(cachedData.keywords || []);
+        const cachedKeywords = Array.isArray(cachedData.keywords) ? cachedData.keywords : [];
+        console.log(`✅ Keywords: Using cached data (${cachedKeywords.length} items)`);
+        setKeywordData(cachedKeywords);
         setKeywordsLoading(false);
         return;
       }
@@ -329,15 +331,34 @@ const Keywords: React.FC<KeywordsProps> = ({
 
       const result = await response.json();
       
+      // Handle different API response formats
+      let keywordsArray = [];
+      if (result.success && result.data) {
+        // If API returns { success: true, data: { keywords: [...] } }
+        if (result.data.keywords && Array.isArray(result.data.keywords)) {
+          keywordsArray = result.data.keywords;
+        }
+        // If API returns { success: true, data: [...] }
+        else if (Array.isArray(result.data)) {
+          keywordsArray = result.data;
+        }
+      }
+      // If API returns direct array
+      else if (Array.isArray(result)) {
+        keywordsArray = result;
+      }
+      
+      console.log(`📊 Keywords: Processed ${keywordsArray.length} keywords from API`);
+      
       // Save to cache after successful API response
       const cacheData = {
-        keywords: result.data || [],
+        keywords: keywordsArray,
         summary: result.summary || null
       };
-      console.log(`💾 Keywords: Saving to cache (${result.data?.length || 0} items)`);
+      console.log(`💾 Keywords: Saving to cache (${keywordsArray.length} items)`);
       saveToCache(cacheKey, cacheData);
       
-      setKeywordData(result.data || []);
+      setKeywordData(keywordsArray);
 
     } catch (err) {
       console.error('Error fetching keywords:', err);
@@ -357,7 +378,10 @@ const Keywords: React.FC<KeywordsProps> = ({
 
   // Filter and sort keywords - matching Ad Groups structure
   const filteredKeywords = useMemo(() => {
-    if (!keywordData) return [];
+    if (!keywordData || !Array.isArray(keywordData)) {
+      console.warn('Keywords: keywordData is not an array:', keywordData);
+      return [];
+    }
     
     return keywordData
       .filter(keyword => {
@@ -495,7 +519,10 @@ const Keywords: React.FC<KeywordsProps> = ({
           {/* Right Column */}
           <div className="flex flex-col justify-between h-full">
             <KeywordTypeDistribution data={keywordData} />
-            <KeywordPerformanceMatrix keywordData={{ data: keywordData }} />
+            <GenericPerformanceMatrix 
+              data={{ data: keywordData }} 
+              config={keywordMatrixConfig} 
+            />
           </div>
         </div>
       </div>
@@ -806,4 +833,4 @@ const Keywords: React.FC<KeywordsProps> = ({
   );
 };
 
-export default Keywords; 
+export default Keywords;

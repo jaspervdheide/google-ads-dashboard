@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Target, BarChart3, Table as TableIcon } from 'lucide-react';
-import { DateRange } from '../../utils';
+import { Target, BarChart3, Table as TableIcon } from 'lucide-react';
 import Keywords from './Keywords';
+import { DateRange } from '../../types/common';
 
 interface KeywordsWrapperProps {
   selectedAccount: string;
@@ -11,29 +11,24 @@ interface KeywordsWrapperProps {
 }
 
 const KeywordsWrapper: React.FC<KeywordsWrapperProps> = ({ 
-  selectedAccount, 
-  selectedDateRange 
+  selectedAccount,
+  selectedDateRange
 }) => {
-  // View controls - matching Ad Groups exactly
-  const [viewMode, setViewMode] = useState<'table' | 'graphs'>('table');
-  const [dataTypeFilter, setDataTypeFilter] = useState<'all' | 'keywords' | 'search_terms'>('all');
-
-  // Table controls
+  // Local state for keywords page
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortColumn, setSortColumn] = useState<string>('impressions');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [pageSize] = useState(50);
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all'>('active');
+  const [dataTypeFilter, setDataTypeFilter] = useState<'all' | 'keywords' | 'search_terms'>('all');
+  const [viewMode, setViewMode] = useState<'table' | 'graphs'>('table');
+  const pageSize = 50;
 
-  // Fixed filter values (no UI controls)
-  const searchTerm = '';
-  const statusFilter = 'active';
-
-  // Handle sorting
   const handleSort = (column: string) => {
     if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
       setSortColumn(column);
-      setSortDirection('desc');
+      setSortDirection('asc');
     }
   };
 
@@ -44,91 +39,113 @@ const KeywordsWrapper: React.FC<KeywordsWrapperProps> = ({
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Keywords & Search Terms</h1>
-            <p className="text-gray-600 mt-1">Analyze keyword performance and search term insights</p>
+            <p className="text-gray-600 mt-1">Analyze keyword performance and search insights</p>
           </div>
           
-          {/* View Mode Toggle */}
+          {/* Filter Controls */}
           <div className="flex items-center space-x-4">
-            {/* Data Type Toggle */}
-            <div className="flex items-center bg-gray-100 rounded-lg p-1">
+            {/* Data Type Filter */}
+            <div className="flex bg-gray-100 rounded-lg p-1">
               <button
                 onClick={() => setDataTypeFilter('all')}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
                   dataTypeFilter === 'all'
-                    ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                    ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <span>All</span>
+                All
               </button>
               <button
                 onClick={() => setDataTypeFilter('keywords')}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
                   dataTypeFilter === 'keywords'
-                    ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                    ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <Target className="h-4 w-4" />
-                <span>Keywords</span>
+                Keywords
               </button>
               <button
                 onClick={() => setDataTypeFilter('search_terms')}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
                   dataTypeFilter === 'search_terms'
-                    ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                    ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <Search className="h-4 w-4" />
-                <span>Search Terms</span>
+                Search Terms
               </button>
             </div>
 
-            {/* Table/Graphs Toggle */}
-            <div className="flex items-center bg-gray-100 rounded-lg p-1">
+            {/* Status Filter */}
+            <div className="flex bg-gray-100 rounded-lg p-1">
               <button
-                onClick={() => setViewMode('table')}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  viewMode === 'table'
-                    ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                onClick={() => setStatusFilter('active')}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                  statusFilter === 'active'
+                    ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <TableIcon className="h-4 w-4" />
+                Active
+              </button>
+              <button
+                onClick={() => setStatusFilter('all')}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                  statusFilter === 'all'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                All
+              </button>
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('table')}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
+                  viewMode === 'table'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <TableIcon className="w-4 h-4" />
                 <span>Table</span>
               </button>
               <button
                 onClick={() => setViewMode('graphs')}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-sm font-medium transition-all duration-200 ${
                   viewMode === 'graphs'
-                    ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                    ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <BarChart3 className="h-4 w-4" />
+                <BarChart3 className="w-4 h-4" />
                 <span>Graphs</span>
               </button>
             </div>
           </div>
         </div>
-
-
       </div>
 
       {/* Keywords Component */}
-      <Keywords
-        selectedAccount={selectedAccount}
-        selectedDateRange={selectedDateRange}
-        searchTerm={searchTerm}
-        pageSize={pageSize}
-        sortColumn={sortColumn}
-        sortDirection={sortDirection}
-        statusFilter={statusFilter}
-        dataTypeFilter={dataTypeFilter}
-        viewMode={viewMode}
-        onSort={handleSort}
-      />
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <Keywords
+          selectedAccount={selectedAccount}
+          selectedDateRange={selectedDateRange}
+          searchTerm={searchTerm}
+          pageSize={pageSize}
+          sortColumn={sortColumn}
+          sortDirection={sortDirection}
+          statusFilter={statusFilter}
+          dataTypeFilter={dataTypeFilter}
+          viewMode={viewMode}
+          onSort={handleSort}
+        />
+      </div>
     </div>
   );
 };

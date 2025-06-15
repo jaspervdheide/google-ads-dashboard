@@ -1,47 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleAdsApi, enums } from 'google-ads-api';
+import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
+import { getFormattedDateRange } from '@/utils/dateUtils';
+import { handleValidationError, handleApiError, createSuccessResponse } from '@/utils/errorHandler';
+import { CampaignTypeDetector, MatchTypeUtilities } from '@/utils/queryBuilder';
+import { logger } from '@/utils/logger';
 
-// Initialize Google Ads API client
-const client = new GoogleAdsApi({
-  client_id: process.env.CLIENT_ID!,
-  client_secret: process.env.CLIENT_SECRET!,
-  developer_token: process.env.DEVELOPER_TOKEN!,
-});
+// Using centralized campaign type detection utility
 
-// Campaign type detection from naming convention
-const detectCampaignTypeFromName = (campaignName: string) => {
-  const name = campaignName.toLowerCase();
-  
-  if (name.includes('search') || name.includes('src')) return 'SEARCH';
-  if (name.includes('display') || name.includes('dsp')) return 'DISPLAY';
-  if (name.includes('pmax') || name.includes('performance max') || name.includes('pm')) return 'PERFORMANCE_MAX';
-  if (name.includes('shopping') || name.includes('shop')) return 'SHOPPING';
-  if (name.includes('video') || name.includes('yt')) return 'VIDEO';
-  
-  return 'SEARCH'; // Fallback
-};
-
-// Convert numeric match type enum to string enum
-const convertNumericMatchType = (rawMatchType: any): string | null => {
-  // Handle both string and numeric inputs
-  const numericValue = typeof rawMatchType === 'string' ? parseInt(rawMatchType) : rawMatchType;
-  
-  switch (numericValue) {
-    case 2:
-      return 'EXACT';
-    case 3:
-      return 'PHRASE';
-    case 4:
-      return 'BROAD';
-    default:
-      // If it's already a string enum, return as is
-      if (typeof rawMatchType === 'string' && ['EXACT', 'PHRASE', 'BROAD'].includes(rawMatchType)) {
-        return rawMatchType;
-      }
-      console.log(`[Keywords API] Unknown match type value: ${rawMatchType} (type: ${typeof rawMatchType})`);
-      return null;
-  }
-};
+// Using centralized match type utilities
 
 // Data normalization function
 const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
@@ -54,7 +20,7 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
       console.log(`[Keywords API] Keyword "${item.ad_group_criterion?.keyword?.text}" - Raw match type: "${rawMatchType}" (${typeof rawMatchType})`);
       
       // Convert numeric enum to string enum for keywords
-      matchType = convertNumericMatchType(rawMatchType) || 'BROAD';
+      matchType = MatchTypeUtilities.getMatchTypeString(rawMatchType) || 'BROAD';
     } else if (type === 'search_term') {
       // Search terms have match types from segments.keyword.info.match_type
       const rawMatchType = item.segments?.keyword?.info?.match_type;
@@ -63,7 +29,7 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
       if (rawMatchType) {
         console.log(`[Keywords API] Search term "${item.search_term_view?.search_term}" - Raw match type: "${rawMatchType}" (${typeof rawMatchType}) from keyword: "${keywordText}"`);
         // Convert numeric enum to string enum for search terms
-        matchType = convertNumericMatchType(rawMatchType) || 'SEARCH_TERM';
+        matchType = MatchTypeUtilities.getMatchTypeString(rawMatchType) || 'SEARCH_TERM';
       } else {
         matchType = 'SEARCH_TERM'; // Keep as search term if no match type found
       }
@@ -85,10 +51,10 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
       campaign_id: item.campaign?.id,
       campaign_name: item.campaign?.name,
       campaign_type: item.campaign?.advertising_channel_type,
-      detected_campaign_type: detectCampaignTypeFromName(item.campaign?.name || ''),
+      detected_campaign_type: CampaignTypeDetector.detectCampaignType(item.campaign?.name || ''),
       // Triggering keyword information (for search terms)
       triggering_keyword: type === 'search_term' ? item.segments?.keyword?.info?.text : null,
-      triggering_keyword_match_type: type === 'search_term' ? convertNumericMatchType(item.segments?.keyword?.info?.match_type) : null,
+      triggering_keyword_match_type: type === 'search_term' ? MatchTypeUtilities.getMatchTypeString(item.segments?.keyword?.info?.match_type) : null,
       impressions: Number(item.metrics?.impressions) || 0,
       clicks: Number(item.metrics?.clicks) || 0,
       cost: item.metrics?.cost_micros ? Number(item.metrics.cost_micros) / 1000000 : 0,
@@ -117,32 +83,19 @@ export async function GET(request: NextRequest) {
   console.log(`[Keywords API] Request received - customerId: ${customerId}, dateRange: ${dateRange}, dataType: ${dataType}`);
 
   if (!customerId) {
-    console.error('[Keywords API] Customer ID is required');
-    return NextResponse.json({ error: 'Customer ID is required' }, { status: 400 });
+    return handleValidationError('Customer ID is required');
   }
 
   try {
     console.log(`[Keywords API] Fetching ${dataType} for customer ${customerId} with ${dateRange} days range...`);
 
-    const customer = client.Customer({
-      customer_id: customerId,
-      refresh_token: process.env.REFRESH_TOKEN!,
-      login_customer_id: process.env.MCC_CUSTOMER_ID!,
-    });
+    // Create Google Ads connection using utility
+    const { customer } = createGoogleAdsConnection(customerId);
 
-    // Calculate date range
-    const endDate = new Date();
-    const startDate = new Date(endDate);
-    startDate.setDate(startDate.getDate() - dateRange);
+    // Calculate date range using utility
+    const { startDateStr, endDateStr } = getFormattedDateRange(dateRange);
 
-    const formatDate = (date: Date) => {
-      return date.toISOString().split('T')[0].replace(/-/g, '');
-    };
-
-    const startDateStr = formatDate(startDate);
-    const endDateStr = formatDate(endDate);
-
-    console.log(`[Keywords API] Date range: ${startDateStr} to ${endDateStr}`);
+    logger.apiStart('Keywords', { customerId, dateRange, dataType, startDate: startDateStr, endDate: endDateStr });
 
     // Add date range filter to queries
     const dateFilter = `AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
@@ -213,33 +166,35 @@ export async function GET(request: NextRequest) {
     let normalizedSearchTerms: any[] = [];
 
     if (dataType === 'keywords' || dataType === 'both') {
-      console.log('[Keywords API] Executing keywords query...');
+      logger.queryStart('Keywords', customerId);
       try {
         keywordsResponse = await customer.query(keywordsQuery);
-        console.log(`[Keywords API] Retrieved ${keywordsResponse.length} keywords`);
+        logger.queryComplete('Keywords', keywordsResponse.length, customerId);
         normalizedKeywords = normalizeKeywordData(keywordsResponse, 'keyword');
       } catch (keywordError) {
-        console.error('[Keywords API] Error fetching keywords:', keywordError);
+        logger.error('Error fetching keywords', keywordError, { customerId });
       }
     }
 
     if (dataType === 'search_terms' || dataType === 'both') {
-      console.log('[Keywords API] Executing search terms query...');
+      logger.queryStart('Search Terms', customerId);
       try {
         searchTermsResponse = await customer.query(searchTermsQuery);
-        console.log(`[Keywords API] Retrieved ${searchTermsResponse.length} search terms`);
+        logger.queryComplete('Search Terms', searchTermsResponse.length, customerId);
         normalizedSearchTerms = normalizeKeywordData(searchTermsResponse, 'search_term');
       } catch (searchTermsError) {
-        console.error('[Keywords API] Error fetching search terms:', searchTermsError);
+        logger.error('Error fetching search terms', searchTermsError, { customerId });
       }
     }
     
     // Log sample of keywords with match types for debugging
     if (normalizedKeywords.length > 0) {
-      console.log('[Keywords API] Sample keywords with match types:');
-      normalizedKeywords.slice(0, 5).forEach((keyword, index) => {
-        console.log(`  ${index + 1}. "${keyword.keyword_text}" - Match type: "${keyword.match_type}" (${keyword.type})`);
-      });
+      const sampleKeywords = normalizedKeywords.slice(0, 5).map(k => ({
+        text: k.keyword_text,
+        matchType: k.match_type,
+        type: k.type
+      }));
+      logger.sampleData('keywords with match types', sampleKeywords);
     }
     
     // Determine what data to return based on dataType
@@ -346,8 +301,8 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    const response = {
-      data: combinedData,
+    const responseData = {
+      keywords: combinedData,
       summary: summary,
       date_range: {
         start_date: startDateStr,
@@ -356,24 +311,10 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    console.log(`[Keywords API] Successfully processed ${combinedData.length} total items`);
-    return NextResponse.json(response);
+    logger.apiComplete('Keywords', combinedData.length);
+    return createSuccessResponse(responseData, `✅ Retrieved ${combinedData.length} items (${normalizedKeywords.length} keywords, ${normalizedSearchTerms.length} search terms)`);
 
   } catch (error) {
-    console.error('[Keywords API] Error fetching keywords and search terms:', error);
-    
-    // Provide more specific error information
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch keywords and search terms data';
-    const errorDetails = error instanceof Error && error.stack ? error.stack : 'No additional details';
-    
-    console.error('[Keywords API] Error details:', errorDetails);
-    
-    return NextResponse.json(
-      { 
-        error: errorMessage,
-        details: process.env.NODE_ENV === 'development' ? errorDetails : undefined
-      },
-      { status: 500 }
-    );
+    return handleApiError(error, 'Keywords Data');
   }
 } 

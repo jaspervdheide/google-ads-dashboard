@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AdGroupData, DateRange } from '../types';
-import { getFromCache, saveToCache } from '../app/utils/cache.js';
+import { getFromCache, saveToCache } from '../utils/cacheManager';
 
 interface UseAdGroupDataResult {
   data: AdGroupData | null;

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Target, Award, ShoppingBag, TrendingUp, TrendingDown, Info, Filter } from 'lucide-react';
+import { Target, Award, ShoppingBag, Search, Hash, Info, Filter } from 'lucide-react';
 
-interface CampaignMatrixData {
+// Generic data interface that covers all matrix types
+interface GenericMatrixData {
   id: string;
   name: string;
   conversions: number;
@@ -12,206 +13,55 @@ interface CampaignMatrixData {
   quadrant: string;
   cpa: number;
   clicks: number;
+  campaignName?: string; // For AdGroup and Keyword matrices
+  matchType?: string; // For Keyword matrix only
 }
 
-interface CampaignPerformanceMatrixProps {
-  campaignData: any;
-  onCampaignClick?: (campaign: CampaignMatrixData) => void;
+// Configuration interface for different matrix types
+export interface MatrixConfig {
+  title: string;
+  description: string;
+  filterTypes: string[];
+  getTypeColor: (type: string) => string;
+  getTypeIcon: (type: string) => React.ComponentType<any>;
+  processData: (rawData: any) => GenericMatrixData[];
 }
 
-const CampaignPerformanceMatrix: React.FC<CampaignPerformanceMatrixProps> = ({ campaignData, onCampaignClick }) => {
-  const [selectedTypes, setSelectedTypes] = useState(['Search', 'Performance Max', 'Shopping']);
+interface GenericPerformanceMatrixProps {
+  data: any;
+  config: MatrixConfig;
+  onItemClick?: (item: GenericMatrixData) => void;
+}
+
+const GenericPerformanceMatrix: React.FC<GenericPerformanceMatrixProps> = ({ 
+  data, 
+  config, 
+  onItemClick 
+}) => {
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(config.filterTypes);
   const [showQuadrantInfo, setShowQuadrantInfo] = useState(false);
 
-  // Process real campaign data or use sample data
-  const getPerformanceScatterData = (): CampaignMatrixData[] => {
-    if (!campaignData?.campaigns || campaignData.campaigns.length === 0) {
-      // Sample data when no real data is available
-      return [
-        { 
-          id: '1',
-          name: 'Search - Branding', 
-          conversions: 180, 
-          poas: 425, 
-          spend: 15000, 
-          type: 'Search', 
-          quadrant: 'Star',
-          cpa: 28.5,
-          clicks: 2450
-        },
-        { 
-          id: '2',
-          name: 'Search - Generic High Intent', 
-          conversions: 220, 
-          poas: 380, 
-          spend: 22000, 
-          type: 'Search', 
-          quadrant: 'Star',
-          cpa: 31.2,
-          clicks: 3100
-        },
-        { 
-          id: '3',
-          name: 'Performance Max - Basic', 
-          conversions: 95, 
-          poas: 520, 
-          spend: 8500, 
-          type: 'Performance Max', 
-          quadrant: 'Question Mark',
-          cpa: 24.8,
-          clicks: 1850
-        },
-        { 
-          id: '4',
-          name: 'Shopping - Premium', 
-          conversions: 65, 
-          poas: 180, 
-          spend: 18000, 
-          type: 'Shopping', 
-          quadrant: 'Dog',
-          cpa: 58.2,
-          clicks: 1200
-        },
-        { 
-          id: '5',
-          name: 'Search - Brands', 
-          conversions: 340, 
-          poas: 290, 
-          spend: 35000, 
-          type: 'Search', 
-          quadrant: 'Cash Cow',
-          cpa: 35.8,
-          clicks: 4200
-        },
-        { 
-          id: '6',
-          name: 'Performance Max - Luxury', 
-          conversions: 125, 
-          poas: 445, 
-          spend: 12000, 
-          type: 'Performance Max', 
-          quadrant: 'Star',
-          cpa: 26.9,
-          clicks: 2100
-        },
-        { 
-          id: '7',
-          name: 'Shopping - Basic', 
-          conversions: 85, 
-          poas: 245, 
-          spend: 14000, 
-          type: 'Shopping', 
-          quadrant: 'Dog',
-          cpa: 42.5,
-          clicks: 1650
-        },
-        { 
-          id: '8',
-          name: 'Search - Generic Efficiency', 
-          conversions: 160, 
-          poas: 195, 
-          spend: 28000, 
-          type: 'Search', 
-          quadrant: 'Cash Cow',
-          cpa: 48.2,
-          clicks: 2900
-        },
-        { 
-          id: '9',
-          name: 'Performance Max - Premium', 
-          conversions: 75, 
-          poas: 385, 
-          spend: 9500, 
-          type: 'Performance Max', 
-          quadrant: 'Question Mark',
-          cpa: 29.8,
-          clicks: 1500
-        },
-        { 
-          id: '10',
-          name: 'Shopping - Mid-tier', 
-          conversions: 110, 
-          poas: 165, 
-          spend: 16500, 
-          type: 'Shopping', 
-          quadrant: 'Dog',
-          cpa: 52.1,
-          clicks: 1980
-        }
-      ];
-    }
-
-    // Process real campaign data
-    return campaignData.campaigns
-      .filter((campaign: any) => campaign.conversions > 0 && campaign.cost > 0)
-      .slice(0, 10) // Limit to top 10 for better visualization
-      .map((campaign: any, index: number) => {
-        // Determine campaign type based on name
-        const name = campaign.name.toLowerCase();
-        let campaignType = 'Other';
-        if (name.includes('performance max') || name.includes('pmax')) {
-          campaignType = 'Performance Max';
-        } else if (name.includes('shopping') || name.includes('shop')) {
-          campaignType = 'Shopping';
-        } else if (name.includes('search') || name.includes('src')) {
-          campaignType = 'Search';
-        }
-
-        // Calculate POAS (assuming conversions_value exists)
-        const poas = campaign.conversions_value && campaign.cost > 0 
-          ? (campaign.conversions_value / campaign.cost) * 100 
-          : Math.random() * 300 + 200; // Fallback random value
-
-        const cpa = campaign.cpa || (campaign.cost / campaign.conversions);
-
-        return {
-          id: campaign.id || `campaign-${index}`,
-          name: campaign.name,
-          conversions: campaign.conversions,
-          poas: Math.round(poas),
-          spend: campaign.cost,
-          type: campaignType,
-          quadrant: 'Star', // Will be calculated below
-          cpa: cpa,
-          clicks: campaign.clicks
-        };
-      });
-  };
-
-  const performanceScatterData = getPerformanceScatterData();
+  // Process data using the provided config function
+  const performanceScatterData = config.processData(data);
 
   // Calculate averages for reference lines and quadrants
-  const avgConversions = performanceScatterData.reduce((sum, d) => sum + d.conversions, 0) / performanceScatterData.length;
-  const avgPOAS = performanceScatterData.reduce((sum, d) => sum + d.poas, 0) / performanceScatterData.length;
+  const avgConversions = performanceScatterData.length > 0 
+    ? performanceScatterData.reduce((sum, d) => sum + d.conversions, 0) / performanceScatterData.length 
+    : 0;
+  const avgPOAS = performanceScatterData.length > 0 
+    ? performanceScatterData.reduce((sum, d) => sum + d.poas, 0) / performanceScatterData.length 
+    : 0;
 
   // Assign quadrants based on averages
-  const dataWithQuadrants = performanceScatterData.map(campaign => ({
-    ...campaign,
-    quadrant: campaign.conversions >= avgConversions && campaign.poas >= avgPOAS ? 'Star' :
-              campaign.conversions < avgConversions && campaign.poas >= avgPOAS ? 'Question Mark' :
-              campaign.conversions >= avgConversions && campaign.poas < avgPOAS ? 'Cash Cow' : 'Dog'
+  const dataWithQuadrants = performanceScatterData.map(item => ({
+    ...item,
+    quadrant: item.conversions >= avgConversions && item.poas >= avgPOAS ? 'Star' :
+              item.conversions < avgConversions && item.poas >= avgPOAS ? 'Question Mark' :
+              item.conversions >= avgConversions && item.poas < avgPOAS ? 'Cash Cow' : 'Dog'
   }));
 
   // Filter data based on selected types
   const filteredData = dataWithQuadrants.filter(d => selectedTypes.includes(d.type));
-
-  const getCampaignTypeColor = (type: string) => {
-    switch (type) {
-      case 'Search': return '#3b82f6';
-      case 'Performance Max': return '#10b981';
-      case 'Shopping': return '#8b5cf6';
-      default: return '#6b7280';
-    }
-  };
-
-  const getCampaignTypeIcon = (type: string) => {
-    switch (type) {
-      case 'Search': return Target;
-      case 'Performance Max': return Award;
-      case 'Shopping': return ShoppingBag;
-      default: return Target;
-    }
-  };
 
   const getQuadrantInfo = (quadrant: string) => {
     const quadrantData: Record<string, {
@@ -253,21 +103,27 @@ const CampaignPerformanceMatrix: React.FC<CampaignPerformanceMatrixProps> = ({ c
     return quadrantData[quadrant];
   };
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
-      const IconComponent = getCampaignTypeIcon(data.type);
+      const IconComponent = config.getTypeIcon(data.type);
       const quadrantInfo = getQuadrantInfo(data.quadrant);
       
       return (
         <div className="bg-white p-4 rounded-lg shadow-lg border border-gray-200 max-w-72">
           <div className="flex items-start space-x-2 mb-3">
-            <div className="p-1 rounded" style={{ backgroundColor: getCampaignTypeColor(data.type) + '20' }}>
-              <IconComponent className="h-4 w-4" style={{ color: getCampaignTypeColor(data.type) }} />
+            <div className="p-1 rounded" style={{ backgroundColor: config.getTypeColor(data.type) + '20' }}>
+              <IconComponent className="h-4 w-4" style={{ color: config.getTypeColor(data.type) }} />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900 leading-tight">{data.name}</p>
               <p className="text-xs text-gray-600 mt-1">{data.type}</p>
+              {data.campaignName && (
+                <p className="text-xs text-gray-500 mt-1">{data.campaignName}</p>
+              )}
+              {data.matchType && (
+                <p className="text-xs text-gray-500">{data.matchType} Match</p>
+              )}
             </div>
           </div>
           
@@ -300,7 +156,7 @@ const CampaignPerformanceMatrix: React.FC<CampaignPerformanceMatrixProps> = ({ c
     return null;
   };
 
-  const toggleCampaignType = (type: string) => {
+  const toggleType = (type: string) => {
     setSelectedTypes(prev => 
       prev.includes(type) 
         ? prev.filter(t => t !== type)
@@ -314,7 +170,7 @@ const CampaignPerformanceMatrix: React.FC<CampaignPerformanceMatrixProps> = ({ c
       <div className="flex items-start justify-between mb-6">
         <div className="flex-1">
           <div className="flex items-center space-x-2 mb-2">
-            <h3 className="text-lg font-semibold text-gray-900">Campaign Performance Matrix</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{config.title}</h3>
             <button
               onClick={() => setShowQuadrantInfo(!showQuadrantInfo)}
               className="p-1 text-gray-400 hover:text-gray-600 transition-colors duration-200"
@@ -322,27 +178,27 @@ const CampaignPerformanceMatrix: React.FC<CampaignPerformanceMatrixProps> = ({ c
               <Info className="h-4 w-4" />
             </button>
           </div>
-          <p className="text-sm text-gray-600">Conversions vs POAS analysis with strategic quadrants</p>
+          <p className="text-sm text-gray-600">{config.description}</p>
         </div>
         
-        {/* Campaign Type Filters */}
+        {/* Type Filters */}
         <div className="flex items-center space-x-3">
           <Filter className="h-4 w-4 text-gray-400" />
           <div className="flex items-center space-x-2">
-            {['Search', 'Performance Max', 'Shopping'].map((type) => {
-              const IconComponent = getCampaignTypeIcon(type);
+            {config.filterTypes.map((type) => {
+              const IconComponent = config.getTypeIcon(type);
               const isSelected = selectedTypes.includes(type);
               return (
                 <button
                   key={type}
-                  onClick={() => toggleCampaignType(type)}
+                  onClick={() => toggleType(type)}
                   className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
                     isSelected
                       ? 'text-white shadow-sm'
                       : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
                   }`}
                   style={{ 
-                    backgroundColor: isSelected ? getCampaignTypeColor(type) : undefined 
+                    backgroundColor: isSelected ? config.getTypeColor(type) : undefined 
                   }}
                 >
                   <IconComponent className="h-3 w-3" />
@@ -414,34 +270,19 @@ const CampaignPerformanceMatrix: React.FC<CampaignPerformanceMatrixProps> = ({ c
             
             <Tooltip content={<CustomTooltip />} />
             
-            {/* Separate Scatter for each campaign type */}
-            {selectedTypes.includes('Search') && (
-              <Scatter 
-                data={filteredData.filter(d => d.type === 'Search')} 
-                fill={getCampaignTypeColor('Search')}
-                r={7}
-                stroke="#ffffff"
-                strokeWidth={2}
-              />
-            )}
-            {selectedTypes.includes('Performance Max') && (
-              <Scatter 
-                data={filteredData.filter(d => d.type === 'Performance Max')} 
-                fill={getCampaignTypeColor('Performance Max')}
-                r={7}
-                stroke="#ffffff"
-                strokeWidth={2}
-              />
-            )}
-            {selectedTypes.includes('Shopping') && (
-              <Scatter 
-                data={filteredData.filter(d => d.type === 'Shopping')} 
-                fill={getCampaignTypeColor('Shopping')}
-                r={7}
-                stroke="#ffffff"
-                strokeWidth={2}
-              />
-            )}
+            {/* Separate Scatter for each type */}
+            {config.filterTypes.map(type => (
+              selectedTypes.includes(type) && (
+                <Scatter 
+                  key={type}
+                  data={filteredData.filter(d => d.type === type)} 
+                  fill={config.getTypeColor(type)}
+                  r={7}
+                  stroke="#ffffff"
+                  strokeWidth={2}
+                />
+              )
+            ))}
           </ScatterChart>
         </ResponsiveContainer>
         
@@ -463,4 +304,4 @@ const CampaignPerformanceMatrix: React.FC<CampaignPerformanceMatrixProps> = ({ c
   );
 };
 
-export default CampaignPerformanceMatrix; 
+export default GenericPerformanceMatrix; 

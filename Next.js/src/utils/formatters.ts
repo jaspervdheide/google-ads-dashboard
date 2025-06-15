@@ -25,15 +25,6 @@ export const formatLargeNumber = (num: number): string => {
   return formatNumber(num);
 };
 
-// Calculate POAS (Profit on Ad Spend)
-export const calculatePOAS = (conversionsValue: number, cost: number): number => {
-  if (cost === 0) return 0;
-  // POAS should be calculated as profit margin, assuming 50% profit margin for example
-  // For now, let's show ROAS as percentage until we have actual profit data
-  const roasPercentage = (conversionsValue / cost) * 100;
-  return roasPercentage > 0 ? roasPercentage : 0;
-};
-
 // Format KPI values
 export const formatKPIValue = (kpiId: string, value: number): string => {
   // Debug: Log the values being formatted

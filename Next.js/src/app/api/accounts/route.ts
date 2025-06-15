@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { GoogleAdsApi } from 'google-ads-api';
+import { createCustomer, createGoogleAdsClient } from '@/utils/googleAdsClient';
+import { handleApiError, createSuccessResponse } from '@/utils/errorHandler';
+import { logger } from '@/utils/logger';
 
 // Country mapping from the Streamlit implementation
 const COUNTRY_ACCOUNTS = {
@@ -15,26 +17,17 @@ const COUNTRY_ACCOUNTS = {
   "NO": "3581636329",
   "PL": "8467590750",
   "SE": "8463558543",
-  "EU": "6542318847",
-  "UK": "8163355443"
 };
 
 export async function GET() {
   try {
-    console.log('Fetching MCC accounts...');
+    logger.apiStart('Accounts', { operation: 'fetch_mcc_accounts' });
     
-    // Initialize Google Ads client
-    const client = new GoogleAdsApi({
-      client_id: process.env.CLIENT_ID!,
-      client_secret: process.env.CLIENT_SECRET!,
-      developer_token: process.env.DEVELOPER_TOKEN!,
-    });
+    // Initialize Google Ads client using utility
+    const client = createGoogleAdsClient();
 
-    // Get MCC customer
-    const mccCustomer = client.Customer({
-      customer_id: process.env.MCC_CUSTOMER_ID!,
-      refresh_token: process.env.REFRESH_TOKEN!,
-    });
+    // Get MCC customer using utility
+    const mccCustomer = createCustomer(client, process.env.MCC_CUSTOMER_ID!);
 
     // Query to get all client accounts under MCC
     const query = `
@@ -47,8 +40,9 @@ export async function GET() {
       WHERE customer_client.level = 1
     `;
 
-    console.log('Executing MCC accounts query...');
+    logger.queryStart('MCC Accounts', process.env.MCC_CUSTOMER_ID);
     const results = await mccCustomer.query(query);
+    logger.queryComplete('MCC Accounts', results.length, process.env.MCC_CUSTOMER_ID);
     
     // Map results to include country codes
     const accounts = results.map((row: any) => {
@@ -69,21 +63,11 @@ export async function GET() {
       };
     });
 
-    console.log(`Successfully retrieved ${accounts.length} accounts`);
+    logger.apiComplete('Accounts', accounts.length);
     
-    return NextResponse.json({
-      success: true,
-      message: `✅ Retrieved ${accounts.length} accounts`,
-      data: accounts
-    });
+    return createSuccessResponse(accounts, `✅ Retrieved ${accounts.length} MCC accounts`);
 
   } catch (error) {
-    console.error('Error fetching MCC accounts:', error);
-    
-    return NextResponse.json({
-      success: false,
-      message: "❌ Failed to fetch MCC accounts",
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    return handleApiError(error, 'MCC Accounts');
   }
 } 

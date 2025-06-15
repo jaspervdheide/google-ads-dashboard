@@ -179,6 +179,66 @@ export const CommonTooltip = ({ formatMetricName, formatKPIValue, selectedChartM
 );
 ```
 
+## 🚫 Dashboard.tsx Anti-Patterns
+
+### NEVER add code directly to Dashboard.tsx for:
+- New UI components or sections
+- Reusable logic or utilities  
+- State management patterns
+- Event handlers that could be shared
+- Data transformation functions
+- Complex JSX patterns
+
+### ALWAYS extract to separate files:
+- **Components**: Any JSX pattern longer than 10 lines
+- **Hooks**: Any stateful logic that could be reused
+- **Utils**: Any function that doesn't directly manage component state
+- **Types**: Any interface or type definition
+- **Constants**: Any configuration objects or repeated values
+
+### File Creation Rules:
+1. **Component Rule**: If it's a distinct UI element, it gets its own `.tsx` file
+2. **Hook Rule**: If it manages state or effects, extract to `hooks/use*.ts`
+3. **Utility Rule**: If it's a pure function, extract to `utils/*.ts`
+4. **50-Line Rule**: If Dashboard.tsx grows beyond 200 lines, immediately extract components
+5. **Duplication Rule**: If any pattern appears twice, extract it
+
+### Required Actions:
+- Before adding ANY code to Dashboard.tsx, ask: "Should this be a separate file?"
+- When creating new functionality, ALWAYS start by creating the component/hook file first
+- Dashboard.tsx should ONLY import and orchestrate, never implement
+- Maximum Dashboard.tsx size: 200 lines including imports and types
+
+### Examples:
+
+❌ WRONG - Adding directly to Dashboard.tsx:
+```jsx
+// Don't add this inside Dashboard.tsx
+{campaignViewMode === 'charts' && (
+  <div className="space-y-8">
+    <div className="bg-gradient-to-r from-gray-50 to-white rounded-xl p-6">
+      // 50+ lines of chart JSX
+    </div>
+  </div>
+)}
+✅ CORRECT - Extract to component:
+jsx// Create components/CampaignChartsView.tsx first
+import CampaignChartsView from './components/CampaignChartsView';
+
+// Then use in Dashboard.tsx
+{campaignViewMode === 'charts' && (
+  <CampaignChartsView campaignData={campaignData} />
+)}
+❌ WRONG - Adding handler to Dashboard.tsx:
+jsx// Don't add complex handlers to Dashboard.tsx
+const handleComplexDataProcessing = (data) => {
+  // 20+ lines of processing logic
+};
+✅ CORRECT - Extract to hook or utility:
+jsx// Create hooks/useDataProcessing.ts or utils/dataProcessing.ts
+import { useDataProcessing } from './hooks/useDataProcessing';
+const { processData } = useDataProcessing();
+
 #### DRY Anti-Patterns to Avoid:
 
 - **Over-abstraction**: Don't extract code that's only used twice if it's likely to diverge
