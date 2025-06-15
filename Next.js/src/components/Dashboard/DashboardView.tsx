@@ -8,6 +8,7 @@ import ConversionsByTypeChart from './ConversionsByTypeChart';
 import TopCampaignsPerformance from './TopCampaignsPerformance';
 import GenericPerformanceMatrix from './GenericPerformanceMatrix';
 import SearchImpressionShareWidget from './SearchImpressionShareWidget';
+import KeywordCpcConversionChart from './KeywordCpcConversionChart';
 import { campaignMatrixConfig } from '../../utils/matrixConfigs';
 
 interface DashboardViewProps {
@@ -253,13 +254,11 @@ export default function DashboardView({
                 </div>
                 
                 <div className="flex flex-col space-y-8 h-full">
-                  {/* Placeholder for future competitive analysis widget */}
-                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-full flex items-center justify-center">
-                    <div className="text-center text-gray-500">
-                      <p className="text-lg font-medium mb-2">Additional Competitive Analysis</p>
-                      <p className="text-sm">Future widget will be placed here</p>
-                    </div>
-                  </div>
+                  <KeywordCpcConversionChart 
+                    customerId={selectedAccount}
+                    dateRange={selectedDateRange?.days?.toString() || '30'}
+                    className="h-full"
+                  />
                 </div>
               </div>
             )}

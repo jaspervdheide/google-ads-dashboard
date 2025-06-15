@@ -38,27 +38,39 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
   className = ""
 }) => {
   const [viewMode, setViewMode] = useState('overview');
+  const [currentPage, setCurrentPage] = useState(1);
+  const campaignsPerPage = 6;
 
   // Use real API data
   const { data: campaignData, loading, error } = useSearchImpressionShareData(customerId, dateRange);
 
-  // Transform campaign data to impression share format
+  // Transform campaign data to impression share format - filter for ENABLED campaigns with impression share > 0
   const data = campaignData
-    .filter(campaign => campaign.impressionShare)
+    .filter(campaign => 
+      campaign.impressionShare && 
+      campaign.impressionShare.search_impression_share > 0 && 
+      campaign.status === 'ENABLED'
+    )
     .map(campaign => ({
       campaign: campaign.name.replace('Search - ', ''),
-      search_impression_share: campaign.impressionShare!.search_impression_share,
-      search_budget_lost_impression_share: campaign.impressionShare!.search_budget_lost_impression_share,
-      search_rank_lost_impression_share: campaign.impressionShare!.search_rank_lost_impression_share,
-      search_exact_match_impression_share: campaign.impressionShare!.search_impression_share,
-      search_top_impression_share: campaign.impressionShare!.search_top_impression_share,
-      search_absolute_top_impression_share: campaign.impressionShare!.search_absolute_top_impression_share,
-      total_lost: campaign.impressionShare!.search_budget_lost_impression_share + campaign.impressionShare!.search_rank_lost_impression_share,
+      search_impression_share: campaign.impressionShare!.search_impression_share * 100, // Convert to percentage
+      search_budget_lost_impression_share: campaign.impressionShare!.search_budget_lost_impression_share * 100,
+      search_rank_lost_impression_share: campaign.impressionShare!.search_rank_lost_impression_share * 100,
+      search_exact_match_impression_share: campaign.impressionShare!.search_impression_share * 100,
+      search_top_impression_share: campaign.impressionShare!.search_top_impression_share * 100,
+      search_absolute_top_impression_share: campaign.impressionShare!.search_absolute_top_impression_share * 100,
+      total_lost: (campaign.impressionShare!.search_budget_lost_impression_share + campaign.impressionShare!.search_rank_lost_impression_share) * 100,
       trend: campaign.impressionShare!.trend,
       trend_value: campaign.impressionShare!.trend_value
     }));
 
-  // Calculate summary metrics
+  // Pagination logic
+  const totalPages = Math.ceil(data.length / campaignsPerPage);
+  const startIndex = (currentPage - 1) * campaignsPerPage;
+  const endIndex = startIndex + campaignsPerPage;
+  const paginatedData = data.slice(startIndex, endIndex);
+
+  // Calculate summary metrics using the converted percentages
   const avgImpressionShare = data.length > 0 ? data.reduce((sum, item) => sum + item.search_impression_share, 0) / data.length : 0;
   const avgBudgetLost = data.length > 0 ? data.reduce((sum, item) => sum + item.search_budget_lost_impression_share, 0) / data.length : 0;
   const avgRankLost = data.length > 0 ? data.reduce((sum, item) => sum + item.search_rank_lost_impression_share, 0) / data.length : 0;
@@ -140,12 +152,17 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
 
       {/* Enhanced Chart Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Main Bar Chart */}
+        {/* Main Bar Chart - Use paginated data */}
         <div>
-          <h4 className="text-sm font-medium text-gray-900 mb-3">Impression Share by Campaign</h4>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-900">Impression Share by Campaign</h4>
+            <div className="text-xs text-gray-500">
+              Showing {startIndex + 1}-{Math.min(endIndex, data.length)} of {data.length} active campaigns
+            </div>
+          </div>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} margin={{ top: 20, right: 30, bottom: 10, left: 20 }}>
+              <BarChart data={paginatedData} margin={{ top: 20, right: 30, bottom: 10, left: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeWidth={0.75} />
                 <XAxis 
                   dataKey="campaign" 
@@ -170,7 +187,7 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                   }}
                   formatter={(value, name, props) => [
-                    `${value}%`, 
+                    `${typeof value === 'number' ? value.toFixed(1) : value}%`, 
                     'Impression Share'
                   ]}
                   labelFormatter={(label) => `Campaign: ${label.replace('Search - ', '')}`}
@@ -184,6 +201,31 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
               </BarChart>
             </ResponsiveContainer>
           </div>
+          
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-xs text-gray-500">
+                Page {currentPage} of {totalPages}
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-xs border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-xs border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Enhanced Metrics Panel */}
@@ -191,15 +233,16 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
           <h4 className="text-sm font-medium text-gray-900 mb-3">Campaign Performance Details</h4>
           
           <div className="space-y-3 mb-4">
-            {data
+            {paginatedData
               .sort((a, b) => b.search_impression_share - a.search_impression_share)
               .map((campaign, index) => {
+                const globalIndex = startIndex + index;
                 const status = getPerformanceStatus(campaign.search_impression_share);
                 return (
                   <div key={campaign.campaign} className="p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center space-x-2">
-                        <span className="text-xs font-medium text-gray-500">#{index + 1}</span>
+                        <span className="text-xs font-medium text-gray-500">#{globalIndex + 1}</span>
                         <span className="text-sm font-medium text-gray-900 truncate">
                           {campaign.campaign}
                         </span>
@@ -262,8 +305,14 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
   // Detailed breakdown view
   const DetailedView = () => (
     <div className="space-y-4">
-      <h4 className="text-sm font-medium text-gray-900 mb-3">Campaign Performance Breakdown</h4>
-      {data.map((campaign, index) => {
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-medium text-gray-900">Campaign Performance Breakdown</h4>
+        <div className="text-xs text-gray-500">
+          Showing {startIndex + 1}-{Math.min(endIndex, data.length)} of {data.length} active campaigns
+        </div>
+      </div>
+      {paginatedData.map((campaign, index) => {
+        const globalIndex = startIndex + index;
         const status = getPerformanceStatus(campaign.search_impression_share);
         
         return (
@@ -274,7 +323,7 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
             {/* Campaign Header */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-3">
-                <span className="text-sm font-medium text-gray-500">#{index + 1}</span>
+                <span className="text-sm font-medium text-gray-500">#{globalIndex + 1}</span>
                 <span className="text-sm font-medium text-gray-900">{campaign.campaign}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full ${status.bgColor} ${status.textColor}`}>
                   {status.status}
@@ -351,6 +400,31 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
           </div>
         );
       })}
+      
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-6">
+          <div className="text-xs text-gray-500">
+            Page {currentPage} of {totalPages}
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 text-xs border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1 text-xs border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 

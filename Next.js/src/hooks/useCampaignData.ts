@@ -226,4 +226,45 @@ export const useSearchImpressionShareData = (customerId: string, dateRange?: str
     dateRange,
     includeImpressionShare: true
   });
+};
+
+// New hook for keyword data
+export const useKeywordData = (customerId: string, dateRange?: string, dataType: 'keywords' | 'search_terms' | 'both' = 'both') => {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!customerId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams({
+        customerId,
+        dateRange: dateRange || '30',
+        dataType
+      });
+
+      const response = await fetch(`/api/keywords?${params}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setData(result.data);
+      } else {
+        setError(result.error || result.message);
+      }
+    } catch (err) {
+      setError('Error fetching keyword data');
+    } finally {
+      setLoading(false);
+    }
+  }, [customerId, dateRange, dataType]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return { data, loading, error, refetch: fetchData };
 }; 
