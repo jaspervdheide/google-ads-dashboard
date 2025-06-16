@@ -106,32 +106,39 @@ const CampaignTable: React.FC<CampaignTableProps> = ({
 }) => {
   if (loading) {
     return (
-      <div className="p-8 text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-        <p className="mt-2 text-sm text-gray-600">Loading campaigns...</p>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   if (!data?.campaigns || data.campaigns.length === 0) {
     return (
-      <div className="p-8 text-center">
-        <p className="text-gray-600">No campaigns found</p>
+      <div className="text-center py-8 text-gray-500">
+        No campaigns found
       </div>
     );
   }
 
-  // Filter and sort campaigns
+  // Calculate table totals using the same logic as the main dashboard
+  const calculatedTotals = useMemo(() => {
+    if (!data?.campaigns) return null;
+    
+    // Create a mock campaignSort object since we need it for calculateTableTotals
+    const campaignSort = { field: sortColumn, direction: sortDirection };
+    
+    return calculateTableTotals(data, statusFilter, new Set(), searchTerm, campaignSort);
+  }, [data?.campaigns, statusFilter, searchTerm, sortColumn, sortDirection]);
+
+  // Use calculated totals instead of prop totals
+  const displayTotals = calculatedTotals || totals;
+
+  // Filter campaigns based on status and search term
   const filteredCampaigns = data.campaigns
     .filter(campaign => {
-      // Apply status filter
-      const statusMatch = statusFilter === 'all' || 
-        (statusFilter === 'active' && (campaign.impressions > 0 || campaign.clicks > 0));
-      
-      // Apply search filter
-      const searchMatch = campaign.name.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      return statusMatch && searchMatch;
+      const matchesStatus = statusFilter === 'all' || campaign.status.toLowerCase() === 'enabled';
+      const matchesSearch = !searchTerm || campaign.name.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesStatus && matchesSearch;
     })
     .sort((a, b) => {
       let aValue = a[sortColumn as keyof Campaign];
@@ -141,6 +148,11 @@ const CampaignTable: React.FC<CampaignTableProps> = ({
         aValue = aValue.toLowerCase();
         bValue = (bValue as string).toLowerCase();
       }
+      
+      // Handle undefined/null values
+      if (aValue == null && bValue == null) return 0;
+      if (aValue == null) return sortDirection === 'asc' ? 1 : -1;
+      if (bValue == null) return sortDirection === 'asc' ? -1 : 1;
       
       if (sortDirection === 'asc') {
         return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
@@ -160,19 +172,6 @@ const CampaignTable: React.FC<CampaignTableProps> = ({
   const allCpa = filteredCampaigns.map(c => c.cpa);
   const allConversionsValue = filteredCampaigns.map(c => c.conversionsValue);
   const allRoas = filteredCampaigns.map(c => c.roas);
-
-  // Calculate table totals using the same logic as the main dashboard
-  const calculatedTotals = useMemo(() => {
-    if (!data?.campaigns) return null;
-    
-    // Create a mock campaignSort object since we need it for calculateTableTotals
-    const campaignSort = { field: sortColumn, direction: sortDirection };
-    
-    return calculateTableTotals(data, statusFilter, new Set(), searchTerm, campaignSort);
-  }, [data?.campaigns, statusFilter, searchTerm, sortColumn, sortDirection]);
-
-  // Use calculated totals instead of prop totals
-  const displayTotals = calculatedTotals || totals;
 
   return (
     <div className="overflow-x-auto">

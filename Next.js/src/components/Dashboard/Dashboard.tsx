@@ -76,7 +76,7 @@ export default function Dashboard() {
   const { 
     data: anomalyData, 
     loading: anomalyLoading
-  } = useAnomalyData(false);
+  } = useAnomalyData(accountState.selectedAccount, '30', false);
 
   const { 
     data: realAdGroupData, 
@@ -86,7 +86,7 @@ export default function Dashboard() {
   const { 
     data: keywordData, 
     loading: keywordLoading
-  } = useKeywordData(accountState.selectedAccount, dateState.selectedDateRange, false);
+  } = useKeywordData(accountState.selectedAccount, '30', false);
 
   // Computed values
   const displayedCampaigns = useMemo(() => {
