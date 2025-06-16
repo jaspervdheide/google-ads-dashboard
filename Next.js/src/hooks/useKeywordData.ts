@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getFromCache, saveToCache } from '../utils/cacheManager';
-import { getApiDateRange } from '../utils';
-import { DateRange } from '../types/common';
 
 interface KeywordData {
   keywords: Array<{
@@ -29,7 +27,7 @@ interface KeywordData {
 
 export function useKeywordData(
   accountId: string,
-  dateRange: DateRange,
+  dateRange: string = '30',
   forceRefresh: boolean = false,
   dataType: 'keywords' | 'search_terms' | 'both' = 'both'
 ) {
@@ -41,32 +39,33 @@ export function useKeywordData(
     if (!accountId || !dateRange) return;
 
     try {
-      setLoading(true);
       setError('');
 
-      const apiDateRange = getApiDateRange(dateRange);
+      // Build cache key using simple dateRange string (same pattern as other hooks)
+      const days = parseInt(dateRange) || 30;
       
       // Build cache key
-      const cacheKey = `keywords_${accountId}_${apiDateRange.days}days_${dataType}`;
-      console.log('🎯 Keywords Cache check:', { cacheKey, accountId, days: apiDateRange.days, dataType });
+      const cacheKey = `keywords_${accountId}_${days}days_${dataType}`;
+      console.log('🎯 Keywords Cache check:', { cacheKey, accountId, days, dataType });
       
       // Check cache first (30 min TTL) unless forcing refresh
-      if (!skipCache && !forceRefresh) {
+      if (!skipCache) {
         const cachedData = getFromCache(cacheKey, 30);
         
         if (cachedData) {
-          console.log('🎯 CACHE HIT - Using cached keywords data');
+          console.log('🎯 CACHE HIT - Using cached keywords data (no loading state)');
           setData(cachedData);
-          setLoading(false);
+          // Don't set loading to false here since we never set it to true for cache hits
           return;
         }
       }
       
-      // Cache miss - fetch from API
+      // Cache miss - fetch from API (only now set loading to true)
       console.log('🎯 CACHE MISS - Fetching keywords from API');
+      setLoading(true);
       
       const response = await fetch(
-        `/api/keywords?customerId=${accountId}&dateRange=${apiDateRange.days}&dataType=${dataType}`
+        `/api/keywords?customerId=${accountId}&dateRange=${days}&dataType=${dataType}`
       );
       
       if (!response.ok) {
@@ -103,11 +102,11 @@ export function useKeywordData(
     } finally {
       setLoading(false);
     }
-  }, [accountId, dateRange, dataType]);
+  }, [accountId, dateRange, dataType, forceRefresh]);
 
   useEffect(() => {
-    fetchKeywordData(forceRefresh);
-  }, [fetchKeywordData, forceRefresh]);
+    fetchKeywordData();
+  }, [fetchKeywordData]);
 
   const refetch = useCallback(() => fetchKeywordData(true), [fetchKeywordData]);
 

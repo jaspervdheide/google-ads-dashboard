@@ -145,6 +145,17 @@ export const generateMultiMetricChartData = (selectedMetrics: string[], historic
 
 // Get chart colors for KPIs
 export const getKpiChartColor = (kpiId: string, selectedChartMetrics: string[]): string => {
+  // Special colors for impression share metrics
+  const specialColors: { [key: string]: string } = {
+    'impressionShare': '#0f766e', // teal-600 - primary metric
+    'budgetLost': '#f59e0b',      // amber-500 - secondary
+    'rankLost': '#ef4444'         // red-500 - secondary
+  };
+  
+  if (specialColors[kpiId]) {
+    return specialColors[kpiId];
+  }
+  
   const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b']; // blue, green, purple, orange
   const index = selectedChartMetrics.indexOf(kpiId);
   return colors[index % colors.length];

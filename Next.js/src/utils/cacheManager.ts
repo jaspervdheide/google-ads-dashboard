@@ -4,7 +4,7 @@
  */
 
 const CACHE_PREFIX = "kovvar_cache_";
-const MAX_CACHE_SIZE = 4 * 1024 * 1024; // 4MB limit (safe under 5MB localStorage limit)
+const MAX_CACHE_SIZE = 15 * 1024 * 1024; // 15MB limit for keyword data support (localStorage can handle ~50MB)
 const CACHE_TTL_MINUTES = 30; // Default TTL
 
 interface CacheEntry {

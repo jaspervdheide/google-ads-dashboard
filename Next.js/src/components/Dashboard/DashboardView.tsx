@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Table, BarChart3, Shield } from 'lucide-react';
+import { Table, BarChart3, Shield, DollarSign } from 'lucide-react';
 import KPICards from './KPICards';
 import Charts from './Charts';
 import CampaignTable from './CampaignTable';
@@ -9,6 +9,7 @@ import TopCampaignsPerformance from './TopCampaignsPerformance';
 import GenericPerformanceMatrix from './GenericPerformanceMatrix';
 import SearchImpressionShareWidget from './SearchImpressionShareWidget';
 import KeywordCpcConversionChart from './KeywordCpcConversionChart';
+import CampaignRoasPerformanceMatrix from './CampaignRoasPerformanceMatrix';
 import { campaignMatrixConfig } from '../../utils/matrixConfigs';
 
 interface DashboardViewProps {
@@ -83,9 +84,15 @@ export default function DashboardView({
     },
     {
       id: 2,
-      title: 'Competitive',
+      title: 'Competition',
       description: 'Search impression share and visibility analysis',
       icon: Shield
+    },
+    {
+      id: 3,
+      title: 'Bidding',
+      description: 'CPC optimization and keyword bidding analysis',
+      icon: DollarSign
     }
   ];
 
@@ -248,15 +255,48 @@ export default function DashboardView({
                 <div className="flex flex-col h-full">
                   <SearchImpressionShareWidget 
                     customerId={selectedAccount}
-                    dateRange={selectedDateRange?.days?.toString() || '30'}
+                    dateRange={selectedDateRange?.apiDays?.toString() || '30'}
+                    selectedDateRange={selectedDateRange}
                     className="h-full"
                   />
                 </div>
                 
                 <div className="flex flex-col space-y-8 h-full">
+                  {/* Placeholder for additional competitive analysis */}
+                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-full flex flex-col">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Competitive Analysis</h3>
+                        <p className="text-sm text-gray-600 mt-1">Additional competitive insights coming soon</p>
+                      </div>
+                    </div>
+                    <div className="flex-1 flex items-center justify-center">
+                      <div className="text-center">
+                        <Shield className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                        <p className="text-gray-500">Competitive metrics and benchmarking</p>
+                        <p className="text-sm text-gray-400 mt-2">Market share analysis and competitor insights</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {currentChartPage === 3 && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="flex flex-col h-full">
                   <KeywordCpcConversionChart 
                     customerId={selectedAccount}
-                    dateRange={selectedDateRange?.days?.toString() || '30'}
+                    dateRange={selectedDateRange?.apiDays?.toString() || '30'}
+                    selectedDateRange={selectedDateRange}
+                    className="h-full"
+                  />
+                </div>
+                
+                <div className="flex flex-col space-y-8 h-full">
+                  <CampaignRoasPerformanceMatrix 
+                    selectedAccount={selectedAccount}
+                    selectedDateRange={selectedDateRange}
                     className="h-full"
                   />
                 </div>

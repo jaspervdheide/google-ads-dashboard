@@ -7,7 +7,7 @@ import {
 import {
   Target, DollarSign, TrendingUp, Info, Eye, Award
 } from 'lucide-react';
-import { useKeywordData } from '../../hooks/useCampaignData';
+import { useKeywordData } from '../../hooks/useKeywordData';
 
 // CPC bucket data structure
 interface CpcBucketData {
@@ -24,23 +24,27 @@ interface CpcBucketData {
 interface KeywordCpcConversionChartProps {
   customerId: string;
   dateRange?: string;
+  selectedDateRange?: any; // Add selectedDateRange prop
   className?: string;
 }
 
 const KeywordCpcConversionChart: React.FC<KeywordCpcConversionChartProps> = ({
   customerId,
   dateRange = '30',
+  selectedDateRange,
   className = ""
 }) => {
   const [bucketSize, setBucketSize] = useState(0.25); // Default 25 cents
   const [hoveredBucket, setHoveredBucket] = useState<string | null>(null);
 
-  // Use real keyword data
-  const { data: keywordData, loading, error } = useKeywordData(customerId, dateRange, 'both');
+  // Use real keyword data - now accepts string dateRange like other hooks
+  const { data: keywordData, loading, error } = useKeywordData(customerId, dateRange, false, 'both');
 
   // Process and bucket the data
   const processedData = React.useMemo(() => {
-    if (!keywordData || !keywordData.keywords || keywordData.keywords.length === 0) return [];
+    if (!keywordData || !keywordData.keywords || keywordData.keywords.length === 0) {
+      return [];
+    }
 
     // Filter keywords with valid data
     const validKeywords = keywordData.keywords.filter((keyword: any) => 
@@ -49,7 +53,9 @@ const KeywordCpcConversionChart: React.FC<KeywordCpcConversionChartProps> = ({
       keyword.average_cpc > 0
     );
 
-    if (validKeywords.length === 0) return [];
+    if (validKeywords.length === 0) {
+      return [];
+    }
 
     // Create CPC buckets
     const buckets: { [key: string]: {
@@ -142,7 +148,7 @@ const KeywordCpcConversionChart: React.FC<KeywordCpcConversionChartProps> = ({
               data.efficiency === 'low' ? 'bg-red-100 text-red-800' :
               'bg-yellow-100 text-yellow-800'
             }`}>
-              {data.efficiency}
+              {data.efficiency.charAt(0).toUpperCase() + data.efficiency.slice(1)}
             </span>
           </div>
           
@@ -184,7 +190,7 @@ const KeywordCpcConversionChart: React.FC<KeywordCpcConversionChartProps> = ({
     return null;
   };
 
-  if (loading) {
+  if (loading && !keywordData) {
     return (
       <div className={`bg-white rounded-xl p-6 shadow-sm border border-gray-100 ${className}`}>
         <div className="flex items-center justify-between mb-6">
@@ -246,22 +252,29 @@ const KeywordCpcConversionChart: React.FC<KeywordCpcConversionChartProps> = ({
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">CPC vs Conversions Analysis</h3>
-          <p className="text-sm text-gray-600 mt-1">Keyword performance by CPC ranges (€{bucketSize.toFixed(2)} buckets)</p>
+          <p className="text-sm text-gray-600 mt-1">
+            Keyword performance by CPC ranges (€{bucketSize.toFixed(2)} buckets) - {selectedDateRange?.name || 'Last 30 days'}
+          </p>
         </div>
         
-        {/* Bucket Size Selector */}
+        {/* Bucket Size Toggles */}
         <div className="flex items-center space-x-2">
           <span className="text-sm text-gray-600">Bucket size:</span>
-          <select 
-            value={bucketSize} 
-            onChange={(e) => setBucketSize(parseFloat(e.target.value))}
-            className="text-sm border border-gray-300 rounded px-2 py-1"
-          >
-            <option value={0.10}>€0.10</option>
-            <option value={0.25}>€0.25</option>
-            <option value={0.50}>€0.50</option>
-            <option value={1.00}>€1.00</option>
-          </select>
+          <div className="flex items-center space-x-1">
+            {[0.10, 0.25, 0.50, 1.00].map(size => (
+              <button
+                key={size}
+                onClick={() => setBucketSize(size)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+                  bucketSize === size
+                    ? 'bg-teal-600 text-white shadow-sm'
+                    : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                }`}
+              >
+                €{size.toFixed(2)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

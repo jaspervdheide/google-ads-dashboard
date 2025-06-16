@@ -63,6 +63,9 @@ const Charts: React.FC<ChartsProps> = ({
       'roas': 'ROAS',
       'poas': 'POAS',
       'searchImpressionShare': 'Search Impression Share',
+      'impressionShare': 'Impression Share',
+      'budgetLost': 'Lost by Budget',
+      'rankLost': 'Lost by Rank',
       'qualityScore': 'Quality Score'
     };
     return metricNameMap[metricId] || metricId.charAt(0).toUpperCase() + metricId.slice(1);

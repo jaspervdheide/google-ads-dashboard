@@ -8,6 +8,7 @@ export async function GET(request: Request) {
     const customerId = searchParams.get('customerId');
     const dateRange = searchParams.get('dateRange') || '30'; // Default to 30 days
     const includeImpressionShare = searchParams.get('includeImpressionShare') === 'true';
+    const includeBiddingStrategy = searchParams.get('includeBiddingStrategy') === 'true';
     
     if (!customerId) {
       return NextResponse.json({
@@ -16,8 +17,7 @@ export async function GET(request: Request) {
       }, { status: 400 });
     }
 
-    console.log(`Fetching campaign performance for customer ${customerId} with ${dateRange} days range...`);
-    if (includeImpressionShare) console.log('Including search impression share data...');
+
     
     // Calculate date range using utility
     const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
@@ -49,6 +49,15 @@ export async function GET(request: Request) {
         metrics.search_rank_lost_impression_share`;
     }
 
+    // Add bidding strategy fields if requested
+    if (includeBiddingStrategy) {
+      query += `,
+        campaign.bidding_strategy_type,
+        campaign.target_roas.target_roas,
+        campaign.target_cpa.target_cpa_micros,
+        campaign.maximize_conversion_value.target_roas`;
+    }
+
     query += `
       FROM campaign
       WHERE campaign.status = 'ENABLED'
@@ -56,7 +65,7 @@ export async function GET(request: Request) {
       ORDER BY metrics.impressions DESC
     `;
 
-    console.log('Executing campaign performance query...');
+
     const results = await customer.query(query);
     
     // Process results and aggregate by campaign
@@ -95,6 +104,14 @@ export async function GET(request: Request) {
           conversionsValueMicros: row.metrics.conversions_value || 0,
         };
 
+        // Add bidding strategy data if requested
+        if (includeBiddingStrategy) {
+          campaignData.biddingStrategyType = row.campaign.bidding_strategy_type;
+          campaignData.targetRoas = row.campaign.target_roas?.target_roas;
+          campaignData.targetCpaMicros = row.campaign.target_cpa?.target_cpa_micros;
+          campaignData.maximizeConversionValueTargetRoas = row.campaign.maximize_conversion_value?.target_roas;
+        }
+
         // Add impression share data if requested
         if (includeImpressionShare) {
           campaignData.searchImpressionShare = row.metrics.search_impression_share || 0;
@@ -130,10 +147,7 @@ export async function GET(request: Request) {
         const budgetLostPercent = (campaign.searchBudgetLostImpressionShare || 0) * 100;
         const rankLostPercent = (campaign.searchRankLostImpressionShare || 0) * 100;
         
-        // Debug logging for impression share values
-        console.log(`Campaign: ${campaign.name}`);
-        console.log(`  Raw impression share: ${campaign.searchImpressionShare}`);
-        console.log(`  Converted to percentage: ${impressionSharePercent}%`);
+
         
         processedCampaign.impressionShare = {
           search_impression_share: impressionSharePercent,
@@ -147,6 +161,36 @@ export async function GET(request: Request) {
           trend_value: Math.floor(Math.random() * 10) - 5, // TODO: Calculate actual trend value
           competitive_strength: impressionSharePercent > 70 ? 'strong' : impressionSharePercent > 40 ? 'moderate' : 'weak'
         };
+      }
+
+      // Add formatted bidding strategy data
+      if (includeBiddingStrategy) {
+        // Map bidding strategy type enum to readable string
+        const biddingStrategyTypeMap: { [key: number]: string } = {
+          2: 'MANUAL_CPC',
+          3: 'MANUAL_CPM',
+          4: 'MANUAL_CPV',
+          6: 'MAXIMIZE_CONVERSIONS',
+          7: 'MAXIMIZE_CONVERSION_VALUE',
+          8: 'TARGET_CPA',
+          9: 'TARGET_IMPRESSION_SHARE',
+          10: 'TARGET_ROAS',
+          11: 'TARGET_SPEND',
+          12: 'PERCENT_CPC',
+          13: 'TARGET_CPM',
+          14: 'ENHANCED_CPC'
+        };
+
+        const biddingStrategyType = biddingStrategyTypeMap[campaign.biddingStrategyType] || 'UNKNOWN';
+        
+        processedCampaign.biddingStrategy = {
+          type: biddingStrategyType,
+          targetRoas: campaign.targetRoas, // Already in decimal format from API
+          targetCpaMicros: campaign.targetCpaMicros,
+          targetRoasOverride: campaign.maximizeConversionValueTargetRoas
+        };
+
+
       }
 
       return processedCampaign;
@@ -185,8 +229,9 @@ export async function GET(request: Request) {
 
     let message = `✅ Retrieved ${campaigns.length} campaigns for ${dateRange} days`;
     if (includeImpressionShare) message += ' with impression share data';
+    if (includeBiddingStrategy) message += ' with bidding strategy data';
 
-    console.log(`Successfully retrieved ${campaigns.length} campaigns`);
+
     
     return NextResponse.json({
       success: true,
@@ -200,7 +245,8 @@ export async function GET(request: Request) {
           endDate: endDateStr
         },
         customerId,
-        includeImpressionShare
+        includeImpressionShare,
+        includeBiddingStrategy
       }
     });
 

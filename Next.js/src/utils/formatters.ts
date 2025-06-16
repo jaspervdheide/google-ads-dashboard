@@ -42,6 +42,9 @@ export const formatKPIValue = (kpiId: string, value: number): string => {
       return formatCurrency(value);
     case 'ctr':
     case 'conversionRate':
+    case 'impressionShare':
+    case 'budgetLost':
+    case 'rankLost':
       return formatPercentage(value);
     case 'poas':
       // POAS as percentage

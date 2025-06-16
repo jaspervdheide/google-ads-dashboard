@@ -165,7 +165,7 @@ const GenericPerformanceMatrix: React.FC<GenericPerformanceMatrixProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-full">
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex-1">
