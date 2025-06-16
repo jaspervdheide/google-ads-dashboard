@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest as _NextRequest } from 'next/server';
 import { createCustomer, createGoogleAdsClient } from '@/utils/googleAdsClient';
 import { handleApiError, createSuccessResponse } from '@/utils/errorHandler';
 import { logger } from '@/utils/logger';

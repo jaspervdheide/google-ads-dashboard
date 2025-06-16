@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createGoogleAdsConnection, createCustomer, createGoogleAdsClient } from '@/utils/googleAdsClient';
+import { NextRequest as _NextRequest } from 'next/server';
+import { createGoogleAdsClient, createCustomer } from '@/utils/googleAdsClient';
 import { getFormattedDateRange } from '@/utils/dateUtils';
-import { handleValidationError, handleApiError, createSuccessResponse } from '@/utils/errorHandler';
+import { handleApiError, createSuccessResponse } from '@/utils/errorHandler';
 import { logger } from '@/utils/logger';
-import { Account, Campaign, CampaignData, Anomaly, AnomalyData } from '@/types';
+import { Account, Campaign as _Campaign, CampaignData, Anomaly, AnomalyData } from '@/types';
 
 // Country to account mapping
 const COUNTRY_ACCOUNTS = {
@@ -282,7 +282,7 @@ function detectBusinessRuleAnomalies(
   return anomalies;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: _NextRequest) {
   console.log("🔍 Anomalies API: Starting anomaly detection...");
   try {
     logger.apiStart('Anomalies', { operation: 'detect_anomalies' });

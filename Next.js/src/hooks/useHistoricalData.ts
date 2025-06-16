@@ -41,7 +41,7 @@ const useHistoricalData = (
         setError(result.message || 'Failed to fetch historical data');
         setData([]);
       }
-    } catch (err) {
+    } catch (_err) {
       setError('Error fetching historical data');
       setData([]);
     } finally {

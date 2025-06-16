@@ -2,19 +2,18 @@
 
 import React from 'react';
 import { 
-  Bell, 
-  Settings, 
-  RefreshCw, 
   ChevronDown, 
-  Calendar, 
-  CalendarDays,
+  RefreshCw, 
+  Bell, 
+  Settings,
+  Calendar,
   X,
   AlertTriangle,
   AlertCircle,
   Info,
   ExternalLink
 } from 'lucide-react';
-import { DateRange, Account, Anomaly, AnomalyData } from '../../types';
+import { DateRange, Account, AnomalyData } from '../../types';
 
 // Custom Kovvar Icon Component
 const KovvarIcon = ({ className }: { className?: string }) => (

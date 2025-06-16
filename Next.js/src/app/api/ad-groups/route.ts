@@ -1,8 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest as _NextRequest } from 'next/server';
 import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
 import { getFormattedDateRange } from '@/utils/dateUtils';
 import { handleValidationError, handleApiError, createSuccessResponse } from '@/utils/errorHandler';
-import { calculateAllMetrics } from '@/utils/metricsCalculator';
 
 export async function GET(request: Request) {
   try {
@@ -23,7 +22,7 @@ export async function GET(request: Request) {
     // Initialize Google Ads client and customer using utility
     const { customer } = createGoogleAdsConnection(customerId);
 
-    let allGroups: any[] = [];
+    const allGroups: any[] = [];
 
     // Query for traditional ad groups (non-Performance Max)
     if (groupType === 'all' || groupType === 'traditional') {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getFromCache, saveToCache } from '../utils/cacheManager';
-import { DateRange, formatDateForAPI, getApiDateRange } from '../utils/dateHelpers';
-import { Campaign, CampaignData, BiddingStrategy, CampaignMetrics } from '../types/campaign';
+import { DateRange, getApiDateRange } from '../utils/dateHelpers';
+import { Campaign, CampaignData } from '../types/campaign';
 
 // Use Campaign interface from types/campaign.ts (imported above)
 
@@ -112,10 +112,10 @@ const useCampaignData = (
         } else {
           setKpiPercentageChanges({});
         }
-      } catch (error) {
+      } catch (_error) {
         setKpiPercentageChanges({});
       }
-    } catch (err) {
+    } catch (_err) {
       setError('Error fetching campaign data');
     } finally {
       setLoading(false);

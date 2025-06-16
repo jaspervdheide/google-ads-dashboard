@@ -1,6 +1,6 @@
 import { getFromCache, saveToCache } from '../utils/cacheManager';
 import { useState, useEffect, useCallback } from 'react';
-import { AnomalyData, Anomaly } from '../types';
+import { AnomalyData } from '../types';
 
 const useAnomalyData = (
   accountId: string | null,
@@ -39,7 +39,7 @@ const useAnomalyData = (
         setError(result.message || 'Failed to fetch anomaly data');
         setData(null);
       }
-    } catch (err) {
+    } catch (_err) {
       setError('Error fetching anomaly data');
       setData(null);
     } finally {
