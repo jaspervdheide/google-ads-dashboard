@@ -1,3 +1,6 @@
+// Shared utilities
+export { useApiData } from './useApiData';
+
 // Data fetching hooks
 export { default as useCampaignData } from './useCampaignData';
 export { default as useHistoricalData } from './useHistoricalData';

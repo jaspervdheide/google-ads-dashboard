@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AdGroupData, DateRange } from '../types';
 import { getFromCache, saveToCache } from '../utils/cacheManager';
+import { getApiDateRange } from '../utils/dateHelpers';
 
 interface UseAdGroupDataResult {
   data: AdGroupData | null;
@@ -30,23 +31,6 @@ interface AdGroupApiResponse {
   };
 }
 
-const getApiDateRange = (range: DateRange | null): { days: number, startDate: string, endDate: string } => {
-  if (!range) {
-    return { days: 30, startDate: '', endDate: '' };
-  }
-
-  const endDate = new Date();
-  const startDate = new Date(range.startDate);
-  const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-  return {
-    days: diffDays,
-    startDate: startDate.toISOString().split('T')[0].replace(/-/g, ''),
-    endDate: endDate.toISOString().split('T')[0].replace(/-/g, '')
-  };
-};
-
 export const useAdGroupData = (
   selectedAccount: string | null,
   selectedDateRange: DateRange | null,
@@ -71,21 +55,17 @@ export const useAdGroupData = (
       
       // Build cache key
       const cacheKey = `adgroups_${selectedAccount}_${apiDateRange.days}days_${groupType}`;
-      console.log('🎯 Ad Groups Cache check:', { cacheKey, selectedAccount, days: apiDateRange.days, groupType });
       
       // Check cache first (30 min TTL)
       const cachedData = getFromCache(cacheKey, 30);
       
       if (cachedData) {
-        console.log('🎯 CACHE HIT - Using cached ad groups data');
         setData(cachedData);
         setLoading(false);
         return;
       }
       
       // Cache miss - fetch from API
-      console.log('🎯 CACHE MISS - Fetching ad groups from API');
-      
       const response = await fetch(
         `/api/ad-groups?customerId=${selectedAccount}&dateRange=${apiDateRange.days}&groupType=${groupType}`
       );
@@ -97,8 +77,6 @@ export const useAdGroupData = (
       const result: AdGroupApiResponse = await response.json();
       
       if (result.success && result.data) {
-        console.log('📊 Real Ad Groups Data Fetched:', result.data);
-        
         // Transform API response to match AdGroupData interface
         const transformedData: AdGroupData = {
           adGroups: result.data.groups.map((group: any) => ({
@@ -132,7 +110,6 @@ export const useAdGroupData = (
         
         // Save to cache
         saveToCache(cacheKey, transformedData);
-        console.log('💾 Saved ad groups to cache successfully');
         
         setData(transformedData);
       } else {

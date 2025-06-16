@@ -60,7 +60,6 @@ const useCampaignData = (
   const [kpiPercentageChanges, setKpiPercentageChanges] = useState<{[key: string]: number}>({});
 
   const fetchData = useCallback(async (skipCache = false) => {
-    console.log("🎯 useCampaignData.fetchData called");
     if (!accountId || !dateRange) return;
 
     try {
@@ -75,7 +74,6 @@ const useCampaignData = (
       if (!skipCache) {
         const cachedData = getFromCache(cacheKey, 30);
         if (cachedData) {
-          console.log("🎯 CACHE HIT - Using cached campaigns data");
           setData(cachedData);
           dataFromCache = true;
         }
@@ -83,7 +81,6 @@ const useCampaignData = (
       
       // Fetch fresh data if not from cache
       if (!dataFromCache) {
-        console.log("🎯 CACHE MISS - Fetching from API");
         const params = new URLSearchParams({
           customerId: accountId,
           dateRange: apiDateRange.days.toString()
@@ -107,21 +104,15 @@ const useCampaignData = (
       
       // Always fetch KPI percentage changes (whether data was cached or fresh)
       try {
-        console.log('🔍 Fetching KPI comparison for:', accountId, 'days:', apiDateRange.days);
         const comparisonResponse = await fetch(`/api/kpi-comparison?customerId=${accountId}&dateRange=${apiDateRange.days}`);
         const comparisonResult = await comparisonResponse.json();
         
-        console.log('📊 KPI Comparison Response:', comparisonResult);
-        
         if (comparisonResult.success) {
-          console.log('✅ Setting KPI percentage changes:', comparisonResult.data.changes);
           setKpiPercentageChanges(comparisonResult.data.changes);
         } else {
-          console.error('❌ KPI comparison failed:', comparisonResult.message);
           setKpiPercentageChanges({});
         }
       } catch (error) {
-        console.error('Error fetching KPI comparison:', error);
         setKpiPercentageChanges({});
       }
     } catch (err) {
@@ -161,23 +152,19 @@ export const useExtendedCampaignData = (options: CampaignDataOptions) => {
 
       // Build cache key
       const cacheKey = `campaigns_extended_${customerId}_${dateRange}days_impressionShare${includeImpressionShare}`;
-      console.log('🎯 Extended Campaigns Cache check:', { cacheKey, customerId, dateRange, includeImpressionShare });
       
       // Check cache first (30 min TTL) unless forcing refresh
       if (!skipCache) {
         const cachedData = getFromCache(cacheKey, 30);
         
         if (cachedData) {
-          console.log('🎯 CACHE HIT - Using cached extended campaigns data (no loading state)');
           setData(cachedData.campaigns || []);
           setTotals(cachedData.totals || null);
-          // Don't set loading to false here since we never set it to true for cache hits
           return;
         }
       }
       
-      // Cache miss - fetch from API (only now set loading to true)
-      console.log('🎯 CACHE MISS - Fetching extended campaigns from API');
+      // Cache miss - fetch from API
       setLoading(true);
 
       const params = new URLSearchParams({
@@ -196,16 +183,9 @@ export const useExtendedCampaignData = (options: CampaignDataOptions) => {
           totals: result.data.totals
         };
         saveToCache(cacheKey, cacheData);
-        console.log('💾 Saved extended campaigns to cache successfully', { cacheKey });
         
         setData(result.data.campaigns);
         setTotals(result.data.totals);
-        
-        console.log(`📊 Extended campaigns loaded from API:`, {
-          totalCampaigns: result.data.campaigns.length,
-          includeImpressionShare,
-          totals: result.data.totals
-        });
       } else {
         setError(result.error || result.message);
       }
