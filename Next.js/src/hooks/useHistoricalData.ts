@@ -20,7 +20,8 @@ const useHistoricalData = (
       setError('');
       
       const apiDateRange = getApiDateRange(dateRange);
-      const cacheKey = `historical_${accountId}_${apiDateRange.days}days`;
+      // Use a more stable cache key based on actual date values
+      const cacheKey = `historical_${accountId}_${apiDateRange.startDate}_${apiDateRange.endDate}`;
       
       if (!skipCache) {
         const cachedData = getFromCache(cacheKey, 30);
@@ -47,7 +48,7 @@ const useHistoricalData = (
     } finally {
       setLoading(false);
     }
-  }, [accountId, dateRange]);
+  }, [accountId, dateRange?.id, dateRange?.startDate?.getTime(), dateRange?.endDate?.getTime()]);
 
   useEffect(() => {
     fetchData(forceRefresh);

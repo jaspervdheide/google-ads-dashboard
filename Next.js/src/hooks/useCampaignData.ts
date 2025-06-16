@@ -67,7 +67,7 @@ const useCampaignData = (
       setError('');
       
       const apiDateRange = getApiDateRange(dateRange);
-      const cacheKey = `campaigns_${accountId}_${apiDateRange.days}days${includeBiddingStrategy ? '_bidding' : ''}`;
+      const cacheKey = `campaigns_${accountId}_${apiDateRange.startDate}_${apiDateRange.endDate}${includeBiddingStrategy ? '_bidding' : ''}`;
       
       let dataFromCache = false;
       
@@ -120,7 +120,7 @@ const useCampaignData = (
     } finally {
       setLoading(false);
     }
-  }, [accountId, dateRange, includeBiddingStrategy]);
+  }, [accountId, dateRange?.id, dateRange?.startDate?.getTime(), dateRange?.endDate?.getTime(), includeBiddingStrategy]);
 
   useEffect(() => {
     fetchData(forceRefresh);

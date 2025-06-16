@@ -2,24 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
 import { getFormattedDateRange, formatDateForGoogleAds } from '@/utils/dateUtils';
 import { calculateAllMetrics } from '@/utils/metricsCalculator';
+import { formatDateForAPI } from '@/utils/dateHelpers';
+import { handleApiError, createSuccessResponse } from '@/utils/errorHandler';
+import { logger } from '@/utils/logger';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
-    const dateRange = searchParams.get('dateRange');
-
-    if (!customerId || !dateRange) {
-      return NextResponse.json({
-        success: false,
-        message: 'Customer ID and date range are required'
-      }, { status: 400 });
+    const dateRange = searchParams.get('dateRange') || '30';
+    
+    if (!customerId) {
+      return handleApiError(new Error('Customer ID is required'), 'Historical Data');
     }
+
+    logger.apiStart('Historical Data', { customerId, dateRange });
+
+    // Calculate date range
+    const days = parseInt(dateRange);
+    const endDate = new Date();
+    const _startDate = new Date(endDate);
+    _startDate.setDate(endDate.getDate() - days);
+    const _endDateFormatted = formatDateForAPI(endDate);
 
     console.log(`Fetching historical data for customer ${customerId} with ${dateRange} days range...`);
 
     // Calculate date range using utility
-    const { startDate, endDate, startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
+    const { startDate, endDate: utilEndDate, startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
 
     // Create Google Ads connection using utility
     const { customer } = createGoogleAdsConnection(customerId);

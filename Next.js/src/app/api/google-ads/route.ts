@@ -8,7 +8,7 @@ export async function GET() {
     logger.apiStart('Google Ads Connection', { customerId });
     
     // Initialize Google Ads client and customer using utility
-    const { client, customer } = createGoogleAdsConnection(customerId);
+    const { client: _client, customer } = createGoogleAdsConnection(customerId);
     logger.googleAdsConnection(customerId, 'NL - Just Carpets');
 
     // Simple GAQL query to test connection

@@ -104,31 +104,27 @@ const CampaignTable: React.FC<CampaignTableProps> = ({
   onMetricLeave,
   totals
 }) => {
+  // Calculate totals using useMemo at the top level (before any early returns)
+  const calculatedTotals = useMemo(() => {
+    if (!data?.campaigns) return null;
+    return calculateTableTotals(data, statusFilter, new Set(), searchTerm, { field: sortColumn, direction: sortDirection });
+  }, [data, statusFilter, searchTerm, sortColumn, sortDirection]);
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex justify-center items-center py-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
-  if (!data?.campaigns || data.campaigns.length === 0) {
+  if (!data || !data.campaigns) {
     return (
-      <div className="text-center py-8 text-gray-500">
-        No campaigns found
+      <div className="text-center py-8">
+        <p className="text-gray-500">No campaign data available</p>
       </div>
     );
   }
-
-  // Calculate table totals using the same logic as the main dashboard
-  const calculatedTotals = useMemo(() => {
-    if (!data?.campaigns) return null;
-    
-    // Create a mock campaignSort object since we need it for calculateTableTotals
-    const campaignSort = { field: sortColumn, direction: sortDirection };
-    
-    return calculateTableTotals(data, statusFilter, new Set(), searchTerm, campaignSort);
-  }, [data?.campaigns, statusFilter, searchTerm, sortColumn, sortDirection]);
 
   // Use calculated totals instead of prop totals
   const displayTotals = calculatedTotals || totals;
@@ -136,7 +132,8 @@ const CampaignTable: React.FC<CampaignTableProps> = ({
   // Filter campaigns based on status and search term
   const filteredCampaigns = data.campaigns
     .filter(campaign => {
-      const matchesStatus = statusFilter === 'all' || campaign.status.toLowerCase() === 'enabled';
+      const matchesStatus = statusFilter === 'all' || 
+        (statusFilter === 'active' && (campaign.impressions > 0 || campaign.clicks > 0));
       const matchesSearch = !searchTerm || campaign.name.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesStatus && matchesSearch;
     })

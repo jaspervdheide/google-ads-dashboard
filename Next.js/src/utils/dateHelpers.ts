@@ -3,7 +3,6 @@
  * Extracted from the main Dashboard component for better code organization
  */
 
-import React from 'react';
 import { 
   Clock,
   History,

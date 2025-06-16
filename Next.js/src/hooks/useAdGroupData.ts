@@ -53,8 +53,8 @@ export const useAdGroupData = (
 
       const apiDateRange = getApiDateRange(selectedDateRange);
       
-      // Build cache key
-      const cacheKey = `adgroups_${selectedAccount}_${apiDateRange.days}days_${groupType}`;
+      // Build cache key with stable date values
+      const cacheKey = `adgroups_${selectedAccount}_${apiDateRange.startDate}_${apiDateRange.endDate}_${groupType}`;
       
       // Check cache first (30 min TTL)
       const cachedData = getFromCache(cacheKey, 30);
@@ -124,19 +124,19 @@ export const useAdGroupData = (
     } finally {
       setLoading(false);
     }
-  }, [selectedAccount, selectedDateRange, groupType]);
+  }, [selectedAccount, selectedDateRange?.id, selectedDateRange?.startDate?.getTime(), selectedDateRange?.endDate?.getTime(), groupType]);
 
   const refetch = useCallback(() => {
     if (selectedAccount && selectedDateRange) {
       const apiDateRange = getApiDateRange(selectedDateRange);
-      const cacheKey = `adgroups_${selectedAccount}_${apiDateRange.days}days_${groupType}`;
+      const cacheKey = `adgroups_${selectedAccount}_${apiDateRange.startDate}_${apiDateRange.endDate}_${groupType}`;
       
       // Clear cache for this key to force fresh fetch
       localStorage.removeItem(cacheKey);
       
       fetchAdGroupData();
     }
-  }, [fetchAdGroupData, selectedAccount, selectedDateRange, groupType]);
+  }, [fetchAdGroupData, selectedAccount, selectedDateRange?.id, selectedDateRange?.startDate?.getTime(), selectedDateRange?.endDate?.getTime(), groupType]);
 
   useEffect(() => {
     fetchAdGroupData();
