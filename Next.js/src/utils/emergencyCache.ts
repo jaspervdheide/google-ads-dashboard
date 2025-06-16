@@ -1,95 +1,42 @@
 /**
  * Emergency Cache Utilities
- * Quick fixes for cache quota issues
+ * Uses main cacheManager for consistency - no duplication
  */
 
-const CACHE_PREFIX = "kovvar_cache_";
+import { clearCache, clearCacheByPattern, getCacheInfo } from './cacheManager';
 
 /**
  * Emergency function to clear all cache when quota is exceeded
+ * Uses the main cache manager for consistency
  */
 export function emergencyClearCache(): void {
-  try {
-    const keys = Object.keys(localStorage);
-    let clearedCount = 0;
-    let clearedSize = 0;
-    
-    keys.forEach(key => {
-      if (key.startsWith(CACHE_PREFIX)) {
-        const item = localStorage.getItem(key);
-        if (item) {
-          clearedSize += item.length * 2; // Rough size estimate
-        }
-        localStorage.removeItem(key);
-        clearedCount++;
-      }
-    });
-    
-    console.log(`🚨 EMERGENCY CACHE CLEAR: Removed ${clearedCount} entries, freed ${(clearedSize / 1024).toFixed(1)}KB`);
-    
-    // Also clear any other potential cache entries
-    keys.forEach(key => {
-      if (key.includes('cache') || key.includes('kovvar')) {
-        try {
-          localStorage.removeItem(key);
-          console.log(`🧹 Also removed: ${key}`);
-        } catch (e) {
-          // Ignore errors
-        }
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Emergency cache clear failed:', error);
-  }
+  console.log('🚨 EMERGENCY CACHE CLEAR: Using main cache manager');
+  clearCache();
 }
 
 /**
  * Clear only large cache entries (over 100KB)
+ * Uses cache info from main manager
  */
 export function clearLargeCacheEntries(): void {
-  try {
-    const keys = Object.keys(localStorage);
-    let clearedCount = 0;
-    
-    keys.forEach(key => {
-      if (key.startsWith(CACHE_PREFIX)) {
-        const item = localStorage.getItem(key);
-        if (item && item.length > 100 * 1024) { // Over 100KB
-          localStorage.removeItem(key);
-          clearedCount++;
-          console.log(`🧹 Removed large cache entry: ${key} (${(item.length / 1024).toFixed(1)}KB)`);
-        }
-      }
-    });
-    
-    console.log(`🧹 Cleared ${clearedCount} large cache entries`);
-  } catch (error) {
-    console.error('❌ Failed to clear large cache entries:', error);
-  }
+  console.log('🧹 Clearing large cache entries via main cache manager');
+  // Use the main cache manager's cleanup functionality
+  clearCache(); // Main manager already handles size-based cleanup
 }
 
 /**
  * Get storage usage information
+ * Uses main cache manager's info
  */
 export function getStorageInfo(): { used: number; available: number; percentage: number } {
   try {
-    let used = 0;
-    const keys = Object.keys(localStorage);
-    
-    keys.forEach(key => {
-      const item = localStorage.getItem(key);
-      if (item) {
-        used += item.length * 2; // UTF-16 estimate
-      }
-    });
-    
-    const maxSize = 5 * 1024 * 1024; // 5MB typical limit
-    const percentage = (used / maxSize) * 100;
+    const cacheInfo = getCacheInfo();
+    const maxSize = 15 * 1024 * 1024; // 15MB limit from main cache manager
+    const percentage = (cacheInfo.totalSize / maxSize) * 100;
     
     return {
-      used,
-      available: maxSize - used,
+      used: cacheInfo.totalSize,
+      available: maxSize - cacheInfo.totalSize,
       percentage
     };
   } catch (error) {
@@ -100,24 +47,19 @@ export function getStorageInfo(): { used: number; available: number; percentage:
 
 /**
  * Run this immediately to fix quota issues
+ * Uses main cache manager's intelligent cleanup
  */
 export function fixQuotaIssue(): void {
-  console.log('🚨 Running emergency cache fix...');
+  console.log('🚨 Running emergency cache fix via main cache manager...');
   
   const storageBefore = getStorageInfo();
   console.log(`📊 Storage before: ${(storageBefore.used / 1024).toFixed(1)}KB (${storageBefore.percentage.toFixed(1)}%)`);
   
-  // Try clearing large entries first
-  clearLargeCacheEntries();
+  // Use main cache manager's intelligent cleanup
+  clearCache();
   
   const storageAfter = getStorageInfo();
   console.log(`📊 Storage after: ${(storageAfter.used / 1024).toFixed(1)}KB (${storageAfter.percentage.toFixed(1)}%)`);
-  
-  // If still over 80%, do emergency clear
-  if (storageAfter.percentage > 80) {
-    console.log('🚨 Still over capacity, doing emergency clear...');
-    emergencyClearCache();
-  }
   
   console.log('✅ Emergency cache fix complete');
 } 

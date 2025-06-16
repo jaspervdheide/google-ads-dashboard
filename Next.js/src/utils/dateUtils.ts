@@ -1,11 +1,12 @@
 /**
- * Formats a Date object to Google Ads API format (YYYYMMDD)
- * @param date - Date object to format
- * @returns String in YYYYMMDD format
+ * Google Ads specific date utilities
+ * Uses shared formatDateForAPI from dateHelpers for consistency
  */
-export const formatDateForGoogleAds = (date: Date): string => {
-  return date.toISOString().split('T')[0].replace(/-/g, '');
-};
+
+import { formatDateForAPI } from './dateHelpers';
+
+// Re-export the shared function with Google Ads specific name for backward compatibility
+export const formatDateForGoogleAds = formatDateForAPI;
 
 /**
  * Calculates start and end dates for a given date range
@@ -36,8 +37,8 @@ export const getFormattedDateRange = (dateRange: number) => {
   const { startDate, endDate } = calculateDateRange(dateRange);
   
   return {
-    startDateStr: formatDateForGoogleAds(startDate),
-    endDateStr: formatDateForGoogleAds(endDate),
+    startDateStr: formatDateForAPI(startDate),
+    endDateStr: formatDateForAPI(endDate),
     startDate,
     endDate
   };
@@ -64,14 +65,14 @@ export const calculateComparisonPeriods = (dateRange: number) => {
     currentPeriod: {
       startDate: currentStartDate,
       endDate: currentEndDate,
-      startDateStr: formatDateForGoogleAds(currentStartDate),
-      endDateStr: formatDateForGoogleAds(currentEndDate)
+      startDateStr: formatDateForAPI(currentStartDate),
+      endDateStr: formatDateForAPI(currentEndDate)
     },
     previousPeriod: {
       startDate: previousStartDate,
       endDate: previousEndDate,
-      startDateStr: formatDateForGoogleAds(previousStartDate),
-      endDateStr: formatDateForGoogleAds(previousEndDate)
+      startDateStr: formatDateForAPI(previousStartDate),
+      endDateStr: formatDateForAPI(previousEndDate)
     }
   };
 }; 

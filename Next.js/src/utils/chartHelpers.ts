@@ -112,16 +112,8 @@ export const getChartDataWithGranularity = (data: any[], granularity: 'daily' | 
 // Generate multi-metric chart data using real historical data
 export const generateMultiMetricChartData = (selectedMetrics: string[], historicalData: any[], dateGranularity: 'daily' | 'weekly' | 'monthly', selectedDateRange: any) => {
   if (!selectedDateRange || !historicalData || historicalData.length === 0) {
-    console.log('📊 No historical data available, returning empty array');
     return [];
   }
-  
-  console.log('📊 Generating chart data from historical data:', {
-    selectedMetrics,
-    historicalDataLength: historicalData.length,
-    firstDataPoint: historicalData[0],
-    lastDataPoint: historicalData[historicalData.length - 1]
-  });
   
   // Apply granularity aggregation
   const aggregatedData = getChartDataWithGranularity(historicalData, dateGranularity);
@@ -172,26 +164,20 @@ export const getYAxisOrientation = (metricId: string, selectedMetrics: string[],
 
   // For 2+ metrics: first metric on left, all others on right
   // This separates high-value metrics (clicks, impressions) from low-value ones (conversions, rates)
-  const orientation = selectedMetrics.indexOf(metricId) === 0 ? 'left' : 'right';
-  console.log('🎯 getYAxisOrientation:', { metricId, selectedMetrics, orientation });
-  return orientation;
+  return selectedMetrics.indexOf(metricId) === 0 ? 'left' : 'right';
 };
 
 // Helper to check if we need dual Y-axis
 // User requirement: 1 KPI = 1 Y-axis, 2+ KPIs = 2 Y-axis
 export const needsDualYAxis = (metrics: string[], chartData: any[]): boolean => {
-  const isDual = metrics.length >= 2;
-  console.log('🔄 needsDualYAxis:', { metrics, isDual });
-  return isDual;
+  return metrics.length >= 2;
 };
 
 // Calculate domain for left Y-axis (updated to use new orientation logic)
 export const getLeftAxisDomain = (selectedMetrics: string[], chartData: any[]): [number, number] => {
   const leftMetrics = selectedMetrics.filter(m => getYAxisOrientation(m, selectedMetrics, chartData) === 'left');
-  console.log('🔍 getLeftAxisDomain:', { selectedMetrics, leftMetrics, chartDataLength: chartData.length });
   
   if (leftMetrics.length === 0) {
-    console.log('⚠️ No left metrics found, returning default domain');
     return [0, 100];
   }
   
@@ -202,7 +188,6 @@ export const getLeftAxisDomain = (selectedMetrics: string[], chartData: any[]): 
     chartData.forEach((dataPoint, index) => {
       leftMetrics.forEach(metric => {
         const value = dataPoint[metric];
-        console.log(`📊 DataPoint ${index}, Metric ${metric}:`, value);
         
         if (typeof value === 'number' && !isNaN(value) && value > maxValue) {
           maxValue = value;
@@ -211,21 +196,15 @@ export const getLeftAxisDomain = (selectedMetrics: string[], chartData: any[]): 
       });
     });
     
-    console.log('📊 Left axis calculation:', { maxValue, dataPoints, leftMetrics });
-    
     // Add 10% padding to the top
     const paddedMax = maxValue > 0 ? maxValue * 1.1 : 100;
-    console.log('🔧 Left axis paddedMax calculated:', paddedMax);
     
     const ceiledMax = Math.ceil(paddedMax);
-    console.log('🔧 Left axis ceiledMax calculated:', ceiledMax);
     
     const domain: [number, number] = [0, ceiledMax];
-    console.log('📊 Left axis domain FINAL:', { maxValue, paddedMax, ceiledMax, domain });
     
     return domain;
   } catch (error) {
-    console.error('❌ Error in getLeftAxisDomain:', error);
     return [0, 100];
   }
 };
@@ -233,10 +212,8 @@ export const getLeftAxisDomain = (selectedMetrics: string[], chartData: any[]): 
 // Calculate domain for right Y-axis (updated to use new orientation logic)  
 export const getRightAxisDomain = (selectedMetrics: string[], chartData: any[]): [number, number] => {
   const rightMetrics = selectedMetrics.filter(m => getYAxisOrientation(m, selectedMetrics, chartData) === 'right');
-  console.log('🔍 getRightAxisDomain:', { selectedMetrics, rightMetrics, chartDataLength: chartData.length });
   
   if (rightMetrics.length === 0) {
-    console.log('⚠️ No right metrics found, returning default domain');
     return [0, 100];
   }
   
@@ -247,7 +224,6 @@ export const getRightAxisDomain = (selectedMetrics: string[], chartData: any[]):
     chartData.forEach((dataPoint, index) => {
       rightMetrics.forEach(metric => {
         const value = dataPoint[metric];
-        console.log(`📊 DataPoint ${index}, Metric ${metric}:`, value);
         
         if (typeof value === 'number' && !isNaN(value) && value > maxValue) {
           maxValue = value;
@@ -256,21 +232,15 @@ export const getRightAxisDomain = (selectedMetrics: string[], chartData: any[]):
       });
     });
     
-    console.log('📊 Right axis calculation:', { maxValue, dataPoints, rightMetrics });
-    
     // Add 10% padding to the top
     const paddedMax = maxValue > 0 ? maxValue * 1.1 : 100;
-    console.log('🔧 Right axis paddedMax calculated:', paddedMax);
     
     const ceiledMax = Math.ceil(paddedMax);
-    console.log('🔧 Right axis ceiledMax calculated:', ceiledMax);
     
     const domain: [number, number] = [0, ceiledMax];
-    console.log('📊 Right axis domain FINAL:', { maxValue, paddedMax, ceiledMax, domain });
     
     return domain;
   } catch (error) {
-    console.error('❌ Error in getRightAxisDomain:', error);
     return [0, 100];
   }
 };

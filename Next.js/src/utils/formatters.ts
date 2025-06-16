@@ -27,9 +27,6 @@ export const formatLargeNumber = (num: number): string => {
 
 // Format KPI values
 export const formatKPIValue = (kpiId: string, value: number): string => {
-  // Debug: Log the values being formatted
-  console.log(`📊 Formatting ${kpiId}:`, value);
-  
   switch (kpiId) {
     case 'clicks':
     case 'impressions':

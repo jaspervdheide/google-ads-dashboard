@@ -8,12 +8,12 @@ export * from './dashboardHelpers';
 
 // Data management
 export * from './cacheManager';
-export * from './emergencyCache';
+export * from './emergencyCache'; // Now uses cacheManager internally
 export * from './metricsCalculator';
 
-// Google Ads integration (server-side only)
-// Note: googleAdsClient is excluded as it contains Node.js dependencies
+// Google Ads integration
 export * from './queryBuilder';
+export * from './dateUtils'; // Google Ads specific date utilities
 
 // Configuration
 export * from './matrixConfigs';
@@ -21,7 +21,6 @@ export * from './topPerformanceConfigs';
 
 // Specialized helpers
 export * from './adGroupTableHelpers';
-export * from './dateUtils';
 
 // System utilities
 export * from './errorHandler';
