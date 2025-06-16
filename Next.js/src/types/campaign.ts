@@ -3,6 +3,8 @@
  * Extracted from the main Dashboard component for better organization
  */
 
+import { DateRangeInfo } from './common';
+
 export interface Account {
   id: string;
   name: string;
@@ -73,11 +75,7 @@ export interface CampaignData {
     cpa: number;
     roas: number;
   };
-  dateRange: {
-    days: number;
-    startDate: string;
-    endDate: string;
-  };
+  dateRange: DateRangeInfo;
   customerId: string;
 }
 

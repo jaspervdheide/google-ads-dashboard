@@ -3,6 +3,8 @@
  * Extracted from the main Dashboard component for better organization
  */
 
+import { DateRangeInfo } from './common';
+
 export interface Keyword {
   id: string;
   text: string;
@@ -22,11 +24,7 @@ export interface Keyword {
 
 export interface KeywordData {
   keywords: Keyword[];
-  dateRange: {
-    days: number;
-    startDate: string;
-    endDate: string;
-  };
+  dateRange: DateRangeInfo;
   customerId: string;
 }
 

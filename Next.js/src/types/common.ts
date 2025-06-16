@@ -17,4 +17,11 @@ export interface DateRange {
 export interface CustomDateRange {
   startDate: Date;
   endDate: Date;
+}
+
+// Shared date range info object used across multiple data interfaces
+export interface DateRangeInfo {
+  days: number;
+  startDate: string;
+  endDate: string;
 } 

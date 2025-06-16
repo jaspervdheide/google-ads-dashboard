@@ -14,70 +14,19 @@ import {
   Info,
   ExternalLink
 } from 'lucide-react';
+import { DateRange, Account, Anomaly, AnomalyData } from '../../types';
 
 // Custom Kovvar Icon Component
 const KovvarIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <g>
-      {/* Large curved arrow */}
-      <path d="M2 18 C2 10, 8 5, 16 8 C18 9, 19 10, 19 12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round"/>
-      
-      {/* Medium curved arrow */}
-      <path d="M5 16 C5 12, 9 9, 14 10 C15.5 10.5, 16 11.5, 16 13" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-      
-      {/* Arrow head pointing right */}
-      <path d="M16 10 L20 12 L16 14 Z" fill="currentColor"/>
-      
-      {/* Small curved element */}
-      <path d="M8 14 C8 12, 10 11, 12 12" stroke="currentColor" strokeWidth="1" fill="none" strokeLinecap="round"/>
-    </g>
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
   </svg>
 );
-
-interface Account {
-  id: string;
-  name: string;
-  currency: string;
-  timeZone: string;
-  countryCode: string;
-  totalClicks?: number;
-}
-
-interface DateRange {
-  id: string;
-  name: string;
-  icon: React.ComponentType<{ className?: string }>;
-  startDate: Date;
-  endDate: Date;
-  apiDays?: number;
-}
-
-interface Anomaly {
-  id: string;
-  accountId: string;
-  accountName: string;
-  countryCode: string;
-  severity: 'high' | 'medium' | 'low';
-  type: 'business' | 'statistical';
-  category: string;
-  title: string;
-  description: string;
-  metric?: string;
-  currentValue?: number;
-  expectedValue?: number;
-  deviation?: number;
-  detectedAt: string;
-}
-
-interface AnomalyData {
-  anomalies: Anomaly[];
-  summary: {
-    total: number;
-    high: number;
-    medium: number;
-    low: number;
-  };
-}
 
 interface HeaderProps {
   selectedAccount: string;

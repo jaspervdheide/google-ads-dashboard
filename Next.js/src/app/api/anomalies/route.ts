@@ -3,95 +3,21 @@ import { createGoogleAdsConnection, createCustomer, createGoogleAdsClient } from
 import { getFormattedDateRange } from '@/utils/dateUtils';
 import { handleValidationError, handleApiError, createSuccessResponse } from '@/utils/errorHandler';
 import { logger } from '@/utils/logger';
+import { Account, Campaign, CampaignData, Anomaly, AnomalyData } from '@/types';
 
-// Country mapping from the accounts API
+// Country to account mapping
 const COUNTRY_ACCOUNTS = {
-  "NL": "5756290882",
-  "BE": "5735473691", 
-  "DE": "1946606314",
-  "DK": "8921136631",
-  "ES": "4748902087",
-  "FI": "8470338623",
-  "FR (Ravann)": "2846016798",
-  "FR (Tapis)": "7539242704",
-  "IT": "8472162607",
-  "NO": "3581636329",
-  "PL": "8467590750",
-  "SE": "8463558543",
-};
-
-interface Account {
-  id: string;
-  name: string;
-  currency: string;
-  timeZone: string;
-  countryCode: string;
-}
-
-interface Campaign {
-  id: string;
-  name: string;
-  status: string;
-  impressions: number;
-  clicks: number;
-  cost: number;
-  ctr: number;
-  avgCpc: number;
-  conversions: number;
-  conversionsValue: number;
-  conversionRate: number;
-  cpa: number;
-  roas: number;
-}
-
-interface CampaignData {
-  campaigns: Campaign[];
-  totals: {
-    impressions: number;
-    clicks: number;
-    cost: number;
-    ctr: number;
-    avgCpc: number;
-    conversions: number;
-    conversionsValue: number;
-    conversionRate: number;
-    cpa: number;
-    roas: number;
-  };
-  dateRange: {
-    days: number;
-    startDate: string;
-    endDate: string;
-  };
-  customerId: string;
-}
-
-interface Anomaly {
-  id: string;
-  accountId: string;
-  accountName: string;
-  countryCode: string;
-  severity: 'high' | 'medium' | 'low';
-  type: 'business' | 'statistical';
-  category: string;
-  title: string;
-  description: string;
-  metric?: string;
-  currentValue?: number;
-  expectedValue?: number;
-  deviation?: number;
-  detectedAt: string;
-}
-
-interface AnomalyData {
-  anomalies: Anomaly[];
-  summary: {
-    total: number;
-    high: number;
-    medium: number;
-    low: number;
-  };
-}
+  'Netherlands': '5756290882',
+  'Belgium': '1234567890',
+  'Germany': '9876543210',
+  'France': '5555555555',
+  'Spain': '7777777777',
+  'Italy': '8888888888',
+  'United Kingdom': '9999999999',
+  'Poland': '1111111111',
+  'Czech Republic': '2222222222',
+  'Austria': '3333333333'
+} as const;
 
 // Helper function to fetch accounts directly (no HTTP call)
 async function fetchAccountsDirect(): Promise<Account[]> {

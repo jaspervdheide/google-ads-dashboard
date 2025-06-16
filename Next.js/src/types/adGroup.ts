@@ -3,6 +3,8 @@
  * Extracted from the main Dashboard component for better organization
  */
 
+import { DateRangeInfo } from './common';
+
 export interface AdGroup {
   id: string;
   name: string;
@@ -31,10 +33,6 @@ export interface AdGroup {
 export interface AdGroupData {
   adGroups: AdGroup[];
   campaignId: string;
-  dateRange: {
-    days: number;
-    startDate: string;
-    endDate: string;
-  };
+  dateRange: DateRangeInfo;
   customerId: string;
 } 
