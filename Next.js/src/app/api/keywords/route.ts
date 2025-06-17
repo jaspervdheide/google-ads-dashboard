@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
         AND ad_group_criterion.status = 'ENABLED'
         ${dateFilter}
       ORDER BY metrics.impressions DESC
-      LIMIT 5000
+      LIMIT 1000
     `;
 
     // Get search terms with performance data from active campaigns  
@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
         AND search_term_view.status = 'NONE'
         ${dateFilter}
       ORDER BY metrics.impressions DESC
-      LIMIT 2000
+      LIMIT 500
     `;
 
     let keywordsResponse: any[] = [];

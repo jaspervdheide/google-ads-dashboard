@@ -8,6 +8,7 @@ import {
   Target, DollarSign, TrendingUp, Info, Eye, Award
 } from 'lucide-react';
 import { useKeywordData } from '../../hooks/useKeywordData';
+import { DateRange } from '../../types/common';
 
 // CPC bucket data structure
 interface CpcBucketData {
@@ -23,8 +24,8 @@ interface CpcBucketData {
 
 interface KeywordCpcConversionChartProps {
   customerId: string;
-  dateRange?: string;
-  selectedDateRange?: any; // Add selectedDateRange prop
+  dateRange?: string; // Keep for backward compatibility
+  selectedDateRange?: DateRange | null; // Use proper DateRange type
   className?: string;
 }
 
@@ -37,8 +38,18 @@ const KeywordCpcConversionChart: React.FC<KeywordCpcConversionChartProps> = ({
   const [bucketSize, setBucketSize] = useState(0.25); // Default 25 cents
   const [hoveredBucket, setHoveredBucket] = useState<string | null>(null);
 
-  // Use real keyword data - now accepts string dateRange like other hooks
-  const { data: keywordData, loading, error } = useKeywordData(customerId, dateRange, false, 'both');
+  // Use the selectedDateRange if available, otherwise fall back to string dateRange
+  const dateRangeToUse = selectedDateRange || { 
+    id: `last-${dateRange}-days`,
+    name: `Last ${dateRange} days`,
+    icon: Target, // Use Target icon as fallback
+    startDate: new Date(Date.now() - parseInt(dateRange) * 24 * 60 * 60 * 1000),
+    endDate: new Date(),
+    apiDays: parseInt(dateRange)
+  };
+
+  // Use real keyword data with proper DateRange object
+  const { data: keywordData, loading, error } = useKeywordData(customerId, dateRangeToUse, false, 'both');
 
   // Process and bucket the data
   const processedData = React.useMemo(() => {

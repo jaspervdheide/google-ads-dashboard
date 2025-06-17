@@ -8,7 +8,6 @@ export * from './dashboardHelpers';
 
 // Data management
 export * from './cacheManager';
-export * from './emergencyCache'; // Now uses cacheManager internally
 
 // Calculations - Use performanceCalculations as primary
 export * from './performanceCalculations';

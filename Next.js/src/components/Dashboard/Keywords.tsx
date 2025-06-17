@@ -1,14 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Target } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
-import { getFromCache, saveToCache } from "../../utils/cacheManager";
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { useKeywordData, KeywordItem } from '../../hooks/useKeywordData';
 import { 
   formatNumber, 
   formatCurrency, 
-  formatPercentage,
-  getApiDateRange
+  formatPercentage
 } from '../../utils';
 import { DateRange } from '../../types/common';
 import TopKeywordsPerformance from './TopKeywordsPerformance';
@@ -25,25 +24,8 @@ import {
 // TYPE DEFINITIONS
 // =============================================================================
 
-interface KeywordData {
-  id: string;
-  keyword_text: string;
-  match_type: 'EXACT' | 'PHRASE' | 'BROAD' | 'SEARCH_TERM';
-  type: 'keyword' | 'search_term';
-  impressions: number;
-  clicks: number;
-  cost: number;
-  ctr: number;
-  cpc: number;
-  conversions: number;
-  conversions_value: number;
-  roas: number;
-  quality_score?: number;
-  ad_group_name: string;
-  campaign_name: string;
-  triggering_keyword?: string;
-  status: string;
-}
+// Use the KeywordItem type from the hook
+type KeywordData = KeywordItem;
 
 interface KeywordsProps {
   selectedAccount: string;
@@ -57,8 +39,6 @@ interface KeywordsProps {
   viewMode: 'table' | 'graphs';
   onSort: (column: string) => void;
 }
-
-
 
 // Get keyword type badge styles
 const getKeywordTypeBadge = (type: 'keyword' | 'search_term') => {
@@ -269,89 +249,16 @@ const Keywords: React.FC<KeywordsProps> = ({
   viewMode,
   onSort
 }) => {
-  // Core state
-  const [keywordData, setKeywordData] = useState<KeywordData[]>([]);
-  const [keywordsLoading, setKeywordsLoading] = useState(false);
+  // Use the standardized hook for data fetching with proper caching
+  const { data: keywordDataResponse, loading: keywordsLoading, error } = useKeywordData(
+    selectedAccount, 
+    selectedDateRange, 
+    false, // forceRefresh
+    'both' // Always fetch both keywords and search terms
+  );
 
-  // =============================================================================
-  // DATA FETCHING
-  // =============================================================================
-
-  const fetchKeywordsData = useCallback(async () => {
-    if (!selectedAccount || !selectedDateRange) return;
-
-    try {
-      setKeywordsLoading(true);
-
-      const apiDateRange = getApiDateRange(selectedDateRange);
-      
-      // Build proper cache key
-      const cacheKey = `keywords_${selectedAccount}_${apiDateRange.days}days_both`;
-      
-      console.log(`🔍 Keywords: Checking cache for key: ${cacheKey}`);
-      
-      // Check cache first
-      const cachedData = getFromCache<{keywords: KeywordData[], summary?: any}>(cacheKey);
-      
-      if (cachedData) {
-        const cachedKeywords = Array.isArray(cachedData.keywords) ? cachedData.keywords : [];
-        console.log(`✅ Keywords: Using cached data (${cachedKeywords.length} items)`);
-        setKeywordData(cachedKeywords);
-        setKeywordsLoading(false);
-        return;
-      }
-      
-      console.log(`🌐 Keywords: No cache found, fetching from API...`);
-      
-      // Fetch both keywords and search terms
-      const response = await fetch(`/api/keywords?customerId=${selectedAccount}&dateRange=${apiDateRange.days}&dataType=both`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch keywords: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      
-      // Handle different API response formats
-      let keywordsArray = [];
-      if (result.success && result.data) {
-        // If API returns { success: true, data: { keywords: [...] } }
-        if (result.data.keywords && Array.isArray(result.data.keywords)) {
-          keywordsArray = result.data.keywords;
-        }
-        // If API returns { success: true, data: [...] }
-        else if (Array.isArray(result.data)) {
-          keywordsArray = result.data;
-        }
-      }
-      // If API returns direct array
-      else if (Array.isArray(result)) {
-        keywordsArray = result;
-      }
-      
-      console.log(`📊 Keywords: Processed ${keywordsArray.length} keywords from API`);
-      
-      // Save to cache after successful API response
-      const cacheData = {
-        keywords: keywordsArray,
-        summary: result.summary || null
-      };
-      console.log(`💾 Keywords: Saving to cache (${keywordsArray.length} items)`);
-      saveToCache(cacheKey, cacheData, 30 * 60 * 1000); // 30 minute TTL
-      
-      setKeywordData(keywordsArray);
-
-    } catch (err) {
-      console.error('Error fetching keywords:', err);
-    } finally {
-      setKeywordsLoading(false);
-    }
-  }, [selectedAccount, selectedDateRange]);
-
-  // Fetch data when dependencies change
-  useEffect(() => {
-    fetchKeywordsData();
-  }, [fetchKeywordsData]);
+  // Extract the keywords array from the response
+  const keywordData: KeywordItem[] = keywordDataResponse?.keywords || [];
 
   // =============================================================================
   // DATA PROCESSING - MEMOIZED FOR PERFORMANCE
@@ -365,7 +272,7 @@ const Keywords: React.FC<KeywordsProps> = ({
     }
     
     return keywordData
-      .filter(keyword => {
+      .filter((keyword: KeywordItem) => {
         // Apply status filter
         const statusMatch = statusFilter === 'all' || 
           (statusFilter === 'active' && (keyword.impressions > 0 || keyword.clicks > 0));
@@ -468,7 +375,7 @@ const Keywords: React.FC<KeywordsProps> = ({
   // Show charts view
   if (viewMode === 'graphs') {
     // Create filtered data object that respects the dataTypeFilter
-    const filteredGraphData = keywordData ? keywordData.filter(keyword => {
+    const filteredGraphData = keywordData ? keywordData.filter((keyword: KeywordItem) => {
       // Apply the same data type filtering logic as the table
       if (dataTypeFilter === 'keywords') {
         return keyword.type === 'keyword';

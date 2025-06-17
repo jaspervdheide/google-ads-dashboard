@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { Campaign, CampaignData } from '../types';
+import { logger } from './logger';
 
 // Helper function to get current High Spend threshold
 export const getHighSpendThreshold = (campaignData: CampaignData | null) => {
@@ -28,38 +29,38 @@ export const applyPreFilters = (campaigns: Campaign[], activeFilters: Set<string
   let filtered = [...campaigns];
   
   if (activeFilters.has('high_spend')) {
-    // Calculate average spend from campaigns with actual spend
     const campaignsWithSpend = campaigns.filter(c => c.cost > 0);
     
     if (campaignsWithSpend.length === 0) {
-      console.log(`📊 High Spend filter - No campaigns with spend found`);
-      filtered = []; // No campaigns to show if none have spend
+      filtered = [];
     } else {
       const totalSpend = campaignsWithSpend.reduce((sum, c) => sum + c.cost, 0);
       const averageSpend = totalSpend / campaignsWithSpend.length;
-      const highSpendThreshold = Math.max(averageSpend * 2, 10); // Double the average, minimum €10
+      const highSpendThreshold = Math.max(averageSpend * 2, 10);
       
-      console.log(`📊 High Spend filter - Average: €${averageSpend.toFixed(2)}, Threshold (2x avg, min €10): €${highSpendThreshold.toFixed(2)}`);
-      
-      // High spend: campaigns that spend double the average
       const beforeCount = filtered.length;
       filtered = filtered.filter(c => c.cost > highSpendThreshold);
-      console.log(`📊 High Spend filter result: ${beforeCount} -> ${filtered.length} campaigns (${filtered.length > 0 ? filtered.map(c => `${c.name}: €${c.cost.toFixed(2)}`).join(', ') : 'none'})`);
+      
+      // Only log in debug mode for performance insights
+      logger.debug('High Spend filter applied', {
+        averageSpend: averageSpend.toFixed(2),
+        threshold: highSpendThreshold.toFixed(2),
+        beforeCount,
+        afterCount: filtered.length
+      });
     }
   }
   
   if (activeFilters.has('low_ctr')) {
-    // Low CTR: campaigns with CTR < 2%
     const beforeCount = filtered.length;
     filtered = filtered.filter(c => c.ctr < 2.0);
-    console.log(`📊 Low CTR filter result: ${beforeCount} -> ${filtered.length} campaigns`);
+    logger.debug('Low CTR filter applied', { beforeCount, afterCount: filtered.length });
   }
   
   if (activeFilters.has('high_cpa')) {
-    // High CPA: campaigns with CPA > €20 (only for campaigns with conversions)
     const beforeCount = filtered.length;
     filtered = filtered.filter(c => c.conversions > 0 && c.cpa > 20);
-    console.log(`📊 High CPA filter result: ${beforeCount} -> ${filtered.length} campaigns`);
+    logger.debug('High CPA filter applied', { beforeCount, afterCount: filtered.length });
   }
   
   return filtered;
@@ -237,4 +238,25 @@ export const getPerformanceIndicatorClass = (metric: string) => {
     before:w-2 before:h-2 before:rounded-full
     text-gray-700
   `;
+};
+
+// Performance level indicators
+export const PerformanceIndicator: React.FC<{ level: 'high' | 'medium' | 'low' }> = ({ level }) => {
+  const colors = {
+    high: 'bg-green-400',
+    medium: 'bg-yellow-400', 
+    low: 'bg-red-400'
+  };
+  
+  return <div className={`w-2 h-2 rounded-full ${colors[level]} mr-2`} />;
+};
+
+export const getPerformanceLevel = (value: number, allValues: number[], metric: string): 'high' | 'medium' | 'low' => {
+  if (allValues.length === 0) return 'medium';
+  
+  const sorted = [...allValues].sort((a, b) => a - b);
+  const p75 = sorted[Math.floor(sorted.length * 0.75)];
+  const p25 = sorted[Math.floor(sorted.length * 0.25)];
+  
+  return value >= p75 ? 'high' : value <= p25 ? 'low' : 'medium';
 }; 

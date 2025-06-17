@@ -1,76 +1,51 @@
-import { useState, useEffect, useCallback } from 'react';
-import { getFromCache, saveToCache } from '../utils/cacheManager';
-import { KeywordData } from '../types';
+import { useKeywordApiData } from './useApiData';
+import { DateRange } from '../types/common';
 
+// Define the keyword data structure to match the API response
+export interface KeywordItem {
+  id: string;
+  keyword_text: string;
+  match_type: 'EXACT' | 'PHRASE' | 'BROAD' | 'SEARCH_TERM';
+  type: 'keyword' | 'search_term';
+  impressions: number;
+  clicks: number;
+  cost: number;
+  ctr: number;
+  cpc: number;
+  conversions: number;
+  conversions_value: number;
+  roas: number;
+  quality_score?: number;
+  ad_group_name: string;
+  campaign_name: string;
+  triggering_keyword?: string;
+  status: string;
+}
+
+export interface KeywordData {
+  keywords: KeywordItem[];
+  summary?: any;
+  dateRange: {
+    days: number;
+    startDate: string;
+    endDate: string;
+  };
+  customerId: string;
+}
+
+/**
+ * Simplified keyword data hook using unified API pattern
+ * Eliminates DRY violations and excessive logging
+ */
 export function useKeywordData(
-  accountId: string,
-  dateRange: string = '30',
+  accountId: string | null,
+  dateRange: DateRange | null,
   forceRefresh: boolean = false,
   dataType: 'keywords' | 'search_terms' | 'both' = 'both'
 ) {
-  const [data, setData] = useState<KeywordData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>('');
-
-  const fetchKeywordData = useCallback(async (skipCache = false) => {
-    if (!accountId || !dateRange) return;
-
-    try {
-      setError('');
-
-      // Build cache key using simple dateRange string (same pattern as other hooks)
-      const days = parseInt(dateRange) || 30;
-      
-      // Build cache key
-      const cacheKey = `keywords_${accountId}_${days}days_${dataType}`;
-      
-      // Check cache first
-      const cachedData = getFromCache<KeywordData>(cacheKey);
-      
-      if (cachedData) {
-        setData(cachedData);
-        return;
-      }
-      
-      // Cache miss - fetch from API
-      setLoading(true);
-      
-      const response = await fetch(
-        `/api/keywords?customerId=${accountId}&dateRange=${days}&dataType=${dataType}`
-      );
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const result = await response.json();
-      
-      if (!result.success) {
-        throw new Error(result.message || 'Failed to fetch keywords data');
-      }
-      
-      const keywordData: KeywordData = {
-        keywords: result.data?.keywords || [],
-        dateRange: result.data?.dateRange || { days, startDate: '', endDate: '' },
-        customerId: result.data?.customerId || accountId
-      };
-      
-      // Save to cache with 30 minute TTL
-      saveToCache(cacheKey, keywordData, 30 * 60 * 1000);
-      setData(keywordData);
-      
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch keyword data');
-    } finally {
-      setLoading(false);
-    }
-  }, [accountId, dateRange, dataType, forceRefresh]);
-
-  useEffect(() => {
-    fetchKeywordData();
-  }, [fetchKeywordData]);
-
-  const refetch = useCallback(() => fetchKeywordData(true), [fetchKeywordData]);
-
-  return { data, loading, error, refetch };
+  // The unified hook returns KeywordData directly from the API
+  return useKeywordApiData(accountId, dateRange, {
+    forceRefresh,
+    dataType
+  }) as { data: KeywordData | null; loading: boolean; error: string; refetch: () => void };
 } 

@@ -56,9 +56,21 @@ const getGroupTypeBadge = (groupType: 'ad_group' | 'asset_group') => {
 // Get ad strength badge styles
 const getAdStrengthBadge = (strength: 'Poor' | 'Good' | 'Excellent') => {
   switch (strength) {
-    case 'Excellent': return 'bg-green-100 text-green-800 border border-green-200';
-    case 'Good': return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
-    case 'Poor': return 'bg-red-100 text-red-800 border border-red-200';
+    case 'Poor': return 'bg-red-100 text-red-800';
+    case 'Good': return 'bg-yellow-100 text-yellow-800';
+    case 'Excellent': return 'bg-green-100 text-green-800';
+    default: return 'bg-gray-100 text-gray-800';
+  }
+};
+
+// Helper function to convert Ad Strength to percentage for progress bar display
+const getAdStrengthPercentage = (strength: 'Poor' | 'Good' | 'Excellent' | 'Average' | string): number => {
+  switch (strength) {
+    case 'Poor': return 25;
+    case 'Average': return 50;
+    case 'Good': return 75;
+    case 'Excellent': return 90;
+    default: return 50;
   }
 };
 
@@ -717,9 +729,20 @@ const AdGroupTable: React.FC<AdGroupTableProps> = ({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
                   {adGroup.adStrength ? (
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getAdStrengthBadge(adGroup.adStrength)}`}>
-                      {adGroup.adStrength}
-                    </span>
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="w-16 bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full ${
+                            getAdStrengthPercentage(adGroup.adStrength) >= 80 ? 'bg-green-500' : 
+                            getAdStrengthPercentage(adGroup.adStrength) >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${getAdStrengthPercentage(adGroup.adStrength)}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-xs font-medium text-gray-700">
+                        {getAdStrengthPercentage(adGroup.adStrength)}%
+                      </span>
+                    </div>
                   ) : (
                     <span className="text-gray-400 text-xs">—</span>
                   )}

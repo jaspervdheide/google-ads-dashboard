@@ -6,7 +6,7 @@ import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Cell
 } from 'recharts';
 import {
-  Target, TrendingUp, Award, AlertTriangle, Info, Eye, DollarSign, Zap, TrendingDown
+  Target, TrendingUp, Award, AlertTriangle, Eye, Zap, TrendingDown
 } from 'lucide-react';
 import useCampaignData from '../../hooks/useCampaignData';
 import { calculateRoasAnalysisByType, RoasAnalysisByType } from '../../utils/campaignAnalysis';
@@ -64,8 +64,6 @@ const CampaignRoasPerformanceMatrix: React.FC<CampaignRoasPerformanceMatrixProps
       return [];
     }
 
-
-
     // Filter campaigns with valid data
     const validCampaigns = campaignData.campaigns.filter((campaign: any) => 
       campaign.cost > 0 && 
@@ -96,24 +94,22 @@ const CampaignRoasPerformanceMatrix: React.FC<CampaignRoasPerformanceMatrixProps
       let targetRoas: number | null = null;
       let biddingStrategyType = 'Unknown';
       
-
-      
-              if (campaign.biddingStrategy?.type === 'TARGET_ROAS' && campaign.biddingStrategy?.targetRoas) {
-          // Convert from decimal to percentage (API returns as decimal, e.g., 3.0 = 300%)
-          targetRoas = campaign.biddingStrategy.targetRoas * 100;
-          biddingStrategyType = 'Target ROAS';
-        } else if (campaign.biddingStrategy?.targetRoasOverride) {
-          // For any bidding strategy with target ROAS override (TARGET_SPEND, MAXIMIZE_CONVERSION_VALUE, etc.)
-          targetRoas = campaign.biddingStrategy.targetRoasOverride * 100;
-          biddingStrategyType = campaign.biddingStrategy.type === 'MAXIMIZE_CONVERSION_VALUE' ? 'Max Conv Value (tROAS)' : 'Target Spend (tROAS)';
-        } else if (campaign.metrics?.averageTargetRoas) {
-          // Fallback to metrics.average_target_roas if available
-          targetRoas = campaign.metrics.averageTargetRoas * 100;
-          biddingStrategyType = 'Target ROAS (avg)';
-        } else if (campaign.biddingStrategy?.type) {
-          biddingStrategyType = campaign.biddingStrategy.type.replace(/_/g, ' ').toLowerCase()
-            .replace(/\b\w/g, (l: string) => l.toUpperCase());
-        }
+      if (campaign.biddingStrategy?.type === 'TARGET_ROAS' && campaign.biddingStrategy?.targetRoas) {
+        // Convert from decimal to percentage (API returns as decimal, e.g., 3.0 = 300%)
+        targetRoas = campaign.biddingStrategy.targetRoas * 100;
+        biddingStrategyType = 'Target ROAS';
+      } else if (campaign.biddingStrategy?.targetRoasOverride) {
+        // For any bidding strategy with target ROAS override (TARGET_SPEND, MAXIMIZE_CONVERSION_VALUE, etc.)
+        targetRoas = campaign.biddingStrategy.targetRoasOverride * 100;
+        biddingStrategyType = campaign.biddingStrategy.type === 'MAXIMIZE_CONVERSION_VALUE' ? 'Max Conv Value (tROAS)' : 'Target Spend (tROAS)';
+      } else if (campaign.metrics?.averageTargetRoas) {
+        // Fallback to metrics.average_target_roas if available
+        targetRoas = campaign.metrics.averageTargetRoas * 100;
+        biddingStrategyType = 'Target ROAS (avg)';
+      } else if (campaign.biddingStrategy?.type) {
+        biddingStrategyType = campaign.biddingStrategy.type.replace(/_/g, ' ').toLowerCase()
+          .replace(/\b\w/g, (l: string) => l.toUpperCase());
+      }
       
       const roasGap = targetRoas ? achievedRoas - targetRoas : 0;
       
@@ -947,7 +943,7 @@ const CampaignRoasPerformanceMatrix: React.FC<CampaignRoasPerformanceMatrixProps
               <div>
                 <h4 className="text-sm font-medium text-red-900">Reach Limitation Alert</h4>
                 <div className="text-xs text-red-700 mt-1 space-y-1">
-                                     <div>• <strong>{insights.reachLimited} campaigns</strong> may have reach limited by high ROAS targets (&gt;400%)</div>
+                  <div>• <strong>{insights.reachLimited} campaigns</strong> may have reach limited by high ROAS targets (&gt;400%)</div>
                   <div>• High targets can restrict ad serving and limit impression volume</div>
                   <div>• Consider lowering targets slightly to increase reach while maintaining profitability</div>
                   <div>• Monitor impression share metrics to confirm reach limitations</div>

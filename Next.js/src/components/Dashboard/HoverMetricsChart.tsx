@@ -21,6 +21,27 @@ interface DailyData {
   formattedDate: string;
 }
 
+// Helper function to validate if an ID is a valid campaign/ad group/keyword ID
+const isValidMetricsId = (id: string): boolean => {
+  // Product IDs typically contain underscores and mixed alphanumeric characters
+  // Campaign IDs are typically numeric strings
+  // Ad group IDs are typically numeric strings  
+  // Keyword IDs are typically numeric strings
+  
+  // If ID contains underscore and mixed case, it's likely a product ID
+  if (id.includes('_') && /[a-z]/.test(id) && /[A-Z0-9]/.test(id)) {
+    return false;
+  }
+  
+  // If ID is purely numeric or starts with a number, it's likely a valid campaign/ad group/keyword ID
+  if (/^\d+$/.test(id) || /^\d/.test(id)) {
+    return true;
+  }
+  
+  // For safety, reject anything that looks like a product item ID pattern
+  return false;
+};
+
 const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
   isVisible,
   position,
@@ -33,10 +54,12 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
 }) => {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isHovering, setIsHovering] = useState(false);
+
+  // Don't show chart for invalid IDs (like product IDs)
+  const shouldShowChart = isValidMetricsId(campaignId);
 
   useEffect(() => {
-    if (!isVisible || !campaignId || !metricType) return;
+    if (!isVisible || !campaignId || !metricType || !shouldShowChart) return;
 
     setLoading(true);
     setDailyData([]);
@@ -123,7 +146,7 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
     };
 
     fetchDailyMetrics();
-  }, [isVisible, campaignId, metricType, metricValue]);
+  }, [isVisible, campaignId, metricType, metricValue, shouldShowChart]);
 
   const formatMetricValue = (value: number, metric: string): string => {
     switch (metric) {
@@ -217,7 +240,7 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
     }
   };
 
-  if (!isVisible) return null;
+  if (!isVisible || !shouldShowChart) return null;
 
   const chartPosition = getChartPosition();
 
@@ -234,11 +257,9 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
         borderColor: '#f1f5f9'
       }}
       onMouseEnter={() => {
-        setIsHovering(true);
         onChartHover?.();
       }}
       onMouseLeave={() => {
-        setIsHovering(false);
         onChartLeave?.();
       }}
     >
