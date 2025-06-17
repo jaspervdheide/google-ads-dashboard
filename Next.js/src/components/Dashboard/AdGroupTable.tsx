@@ -1,13 +1,20 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Calculator, Search, Package, Zap, MoreHorizontal, Target } from 'lucide-react';
+import { Target } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { AdGroup, AdGroupData } from '../../types';
 import { formatNumber, formatPercentage, formatCurrency } from '../../utils';
 import TopAdGroupsPerformance from './TopAdGroupsPerformance';
 import GenericPerformanceMatrix from './GenericPerformanceMatrix';
 import { adGroupMatrixConfig } from '../../utils/matrixConfigs';
+import { 
+  getPerformanceLevel, 
+  PerformanceIndicator,
+  detectCampaignType,
+  getCampaignTypeIndicator,
+  TableTotalsRow
+} from './shared';
 
 interface AdGroupTableProps {
   data: AdGroupData | null;
@@ -37,89 +44,7 @@ interface AdGroupTableProps {
   } | null;
 }
 
-// Performance indicator types
-type PerformanceLevel = 'high' | 'medium' | 'low';
 
-// Helper function to calculate performance percentiles
-const getPerformanceLevel = (
-  value: number, 
-  allValues: number[], 
-  metricType: string
-): PerformanceLevel => {
-  if (allValues.length < 3) return 'medium';
-  
-  // Filter out zero values for better percentile calculation
-  const nonZeroValues = allValues.filter(v => v > 0);
-  if (nonZeroValues.length === 0) return 'medium';
-  
-  // Sort values based on whether higher or lower is better
-  const isHigherBetter = ['clicks', 'impressions', 'ctr', 'conversions', 'conversionsValue', 'conversionRate', 'roas', 'assetCoverage', 'avgQualityScore'].includes(metricType);
-  const sortedValues = [...nonZeroValues].sort((a, b) => isHigherBetter ? b - a : a - b);
-  
-  // If the current value is 0 and we're looking at a "higher is better" metric, it's low performance
-  if (value === 0 && isHigherBetter) return 'low';
-  
-  // Calculate percentile thresholds
-  const topThreshold = sortedValues[Math.floor(sortedValues.length * 0.33)];
-  const bottomThreshold = sortedValues[Math.floor(sortedValues.length * 0.67)];
-  
-  if (isHigherBetter) {
-    if (value >= topThreshold) return 'high';
-    if (value >= bottomThreshold) return 'medium';
-    return 'low';
-  } else {
-    // For metrics where lower is better (cost, avgCpc, cpa)
-    if (value <= topThreshold) return 'high';
-    if (value <= bottomThreshold) return 'medium';
-    return 'low';
-  }
-};
-
-// Helper function to get performance indicator color and glow
-const getPerformanceStyles = (level: PerformanceLevel): string => {
-  const baseStyles = 'inline-block w-1.5 h-1.5 rounded-full mr-2 shadow-sm ring-1 ring-white/20';
-  
-  switch (level) {
-    case 'high': return `${baseStyles} bg-emerald-400 shadow-emerald-200/50`;
-    case 'medium': return `${baseStyles} bg-amber-400 shadow-amber-200/50`;
-    case 'low': return `${baseStyles} bg-rose-400 shadow-rose-200/50`;
-    default: return `${baseStyles} bg-gray-400 shadow-gray-200/50`;
-  }
-};
-
-// Performance indicator component
-const PerformanceIndicator: React.FC<{ level: PerformanceLevel }> = ({ level }) => (
-  <div 
-    className={getPerformanceStyles(level)}
-    title={`Performance: ${level}`}
-  />
-);
-
-// Campaign type detection based on naming conventions
-const detectCampaignType = (campaignName: string): 'search' | 'shopping' | 'performance_max' | 'other' => {
-  const nameLower = campaignName.toLowerCase();
-  if (nameLower.includes('performance max') || nameLower.includes('pmax')) {
-    return 'performance_max';
-  }
-  if (nameLower.includes('shopping')) {
-    return 'shopping';
-  }
-  if (nameLower.includes('search')) {
-    return 'search';
-  }
-  return 'other';
-};
-
-// Get campaign type indicator
-const getCampaignTypeIndicator = (campaignType: 'search' | 'shopping' | 'performance_max' | 'other') => {
-  const indicators = {
-    'search': { icon: Search, color: 'text-blue-600', bg: 'bg-blue-100' },
-    'shopping': { icon: Package, color: 'text-green-600', bg: 'bg-green-100' },
-    'performance_max': { icon: Zap, color: 'text-purple-600', bg: 'bg-purple-100' },
-    'other': { icon: MoreHorizontal, color: 'text-gray-600', bg: 'bg-gray-100' }
-  };
-  return indicators[campaignType];
-};
 
 // Get group type badge styles
 const getGroupTypeBadge = (groupType: 'ad_group' | 'asset_group') => {
@@ -677,7 +602,6 @@ const AdGroupTable: React.FC<AdGroupTableProps> = ({
         <tbody className="bg-white divide-y divide-gray-200">
           {filteredAdGroups.map((adGroup) => {
             const campaignType = detectCampaignType(adGroup.campaignName || '');
-            const typeIndicator = getCampaignTypeIndicator(campaignType);
             
             return (
               <tr 
@@ -692,11 +616,7 @@ const AdGroupTable: React.FC<AdGroupTableProps> = ({
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <div className="flex items-center space-x-2">
-                    <div className={`w-6 h-6 rounded flex items-center justify-center ${typeIndicator.bg}`}>
-                      {React.createElement(typeIndicator.icon, { 
-                        className: `h-3 w-3 ${typeIndicator.color}` 
-                      })}
-                    </div>
+                    {getCampaignTypeIndicator(campaignType)}
                     <span className="font-medium">{adGroup.campaignName}</span>
                   </div>
                 </td>
@@ -853,61 +773,12 @@ const AdGroupTable: React.FC<AdGroupTableProps> = ({
           })}
         </tbody>
         {displayTotals && (
-          <tfoot className="bg-gray-50 border-t-2 border-gray-200">
-            <tr className="font-medium">
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                <div className="flex items-center">
-                  <Calculator className="h-4 w-4 text-gray-500 mr-2" />
-                  Totals ({displayTotals.adGroupCount || filteredAdGroups.length} ad groups)
-                </div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatNumber(displayTotals.clicks)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatNumber(displayTotals.impressions)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatPercentage(displayTotals.ctr)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatCurrency(displayTotals.avgCpc)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatCurrency(displayTotals.cost)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatNumber(displayTotals.conversions)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatCurrency(displayTotals.cpa)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatCurrency(displayTotals.conversionsValue)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {displayTotals.roas.toFixed(2)}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
-              {/* Conditional column for footer */}
-              {groupTypeFilter === 'traditional' && (
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-center">
-                  {allQualityScores.length > 0 ? (
-                    <span className="text-xs text-gray-500">
-                      Avg: {(allQualityScores.reduce((a, b) => a + b, 0) / allQualityScores.length).toFixed(1)}
-                    </span>
-                  ) : (
-                    <span className="text-gray-400 text-xs">—</span>
-                  )}
-                </td>
-              )}
-              {groupTypeFilter === 'asset' && (
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
-              )}
-            </tr>
-          </tfoot>
+          <TableTotalsRow
+            totals={displayTotals}
+            itemCount={displayTotals.adGroupCount || filteredAdGroups.length}
+            itemType="ad groups"
+            showExtraColumns={groupTypeFilter !== 'all'}
+          />
         )}
       </table>
     </div>

@@ -4,6 +4,7 @@ import { getFormattedDateRange } from '@/utils/dateUtils';
 import { handleValidationError, handleApiError, createSuccessResponse } from '@/utils/errorHandler';
 import { CampaignTypeDetector, MatchTypeUtilities } from '@/utils/queryBuilder';
 import { logger } from '@/utils/logger';
+import { calculateDerivedMetrics, calculateZeroPerformanceStats, convertCostFromMicros } from '@/utils/apiHelpers';
 
 // Using centralized campaign type detection utility
 
@@ -36,7 +37,7 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
     }
     
     return {
-      id: item.ad_group_criterion?.criterion_id || item.search_term_view?.resource_name || `search_term_${Math.random()}`,
+      id: item.ad_group_criterion?.criterion_id || item.search_term_view?.resource_name || `${type}_${item.ad_group?.id || 'unknown'}_${Date.now()}`,
       keyword_text: item.ad_group_criterion?.keyword?.text || item.search_term_view?.search_term,
       match_type: matchType,
       type: type,
@@ -57,17 +58,17 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
       triggering_keyword_match_type: type === 'search_term' ? MatchTypeUtilities.getMatchTypeString(item.segments?.keyword?.info?.match_type) : null,
       impressions: Number(item.metrics?.impressions) || 0,
       clicks: Number(item.metrics?.clicks) || 0,
-      cost: item.metrics?.cost_micros ? Number(item.metrics.cost_micros) / 1000000 : 0,
+      cost: item.metrics?.cost_micros ? convertCostFromMicros(Number(item.metrics.cost_micros)) : 0,
       conversions: Number(item.metrics?.conversions) || 0,
       conversions_value: item.metrics?.conversions_value ? Number(item.metrics.conversions_value) : 0,
       cost_per_conversion: item.metrics?.cost_per_conversion ? Number(item.metrics.cost_per_conversion) / 1000000 : 0,
       ctr: item.metrics?.ctr ? Number(item.metrics.ctr) * 100 : 0,
       average_cpc: item.metrics?.average_cpc ? Number(item.metrics.average_cpc) / 1000000 : 0,
-      // Calculate CPC and ROAS safely
-      cpc: item.metrics?.clicks > 0 && item.metrics?.cost_micros ? 
-           (Number(item.metrics.cost_micros) / 1000000) / Number(item.metrics.clicks) : 0,
-      roas: item.metrics?.cost_micros > 0 && item.metrics?.conversions_value ? 
-            Number(item.metrics.conversions_value) / (Number(item.metrics.cost_micros) / 1000000) : 0,
+              // Calculate CPC and ROAS safely
+        cpc: item.metrics?.clicks > 0 && item.metrics?.cost_micros ? 
+             convertCostFromMicros(Number(item.metrics.cost_micros)) / Number(item.metrics.clicks) : 0,
+        roas: item.metrics?.cost_micros > 0 && item.metrics?.conversions_value ? 
+              Number(item.metrics.conversions_value) / convertCostFromMicros(Number(item.metrics.cost_micros)) : 0,
       impression_share: item.metrics?.search_impression_share || null,
       budget_lost_is: item.metrics?.search_budget_lost_impression_share || null,
       rank_lost_is: item.metrics?.search_rank_lost_impression_share || null
@@ -206,63 +207,63 @@ export async function GET(request: NextRequest) {
 
     if (dataType === 'keywords') {
       combinedData = normalizedKeywords;
-      // Calculate summary metrics for keywords only
-      const totalImpressions = combinedData.reduce((sum, item) => sum + item.impressions, 0);
-      const totalClicks = combinedData.reduce((sum, item) => sum + item.clicks, 0);
-      const totalCost = combinedData.reduce((sum, item) => sum + item.cost, 0);
-      const totalConversions = combinedData.reduce((sum, item) => sum + item.conversions, 0);
-      const totalConversionValue = combinedData.reduce((sum, item) => sum + item.conversions_value, 0);
+      // Calculate summary metrics for keywords only using shared utilities
+      const rawTotals = {
+        impressions: combinedData.reduce((sum, item) => sum + item.impressions, 0),
+        clicks: combinedData.reduce((sum, item) => sum + item.clicks, 0),
+        cost: combinedData.reduce((sum, item) => sum + item.cost, 0),
+        conversions: combinedData.reduce((sum, item) => sum + item.conversions, 0),
+        conversionsValue: combinedData.reduce((sum, item) => sum + item.conversions_value, 0)
+      };
+      
+      const derivedMetrics = calculateDerivedMetrics(rawTotals);
+      const zeroStats = calculateZeroPerformanceStats(combinedData);
 
       summary = {
         data_type: 'keywords',
         total_keywords: normalizedKeywords.length,
         total_search_terms: 0,
         total_combined: normalizedKeywords.length,
-        total_impressions: totalImpressions,
-        total_clicks: totalClicks,
-        total_cost: totalCost,
-        total_conversions: totalConversions,
-        total_conversion_value: totalConversionValue,
-        average_ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) : 0,
-        average_cpc: totalClicks > 0 ? totalCost / totalClicks : 0,
-        average_cpa: totalConversions > 0 ? totalCost / totalConversions : 0,
-        overall_roas: totalCost > 0 ? totalConversionValue / totalCost : 0,
-        // Zero-clicks statistics for maintenance metrics
-        zero_clicks_count: combinedData.filter(item => item.clicks === 0).length,
-        zero_clicks_percentage: combinedData.length > 0 ? (combinedData.filter(item => item.clicks === 0).length / combinedData.length) * 100 : 0,
-        // Zero-conversions statistics for maintenance metrics
-        zero_conversions_count: combinedData.filter(item => item.conversions === 0).length,
-        zero_conversions_percentage: combinedData.length > 0 ? (combinedData.filter(item => item.conversions === 0).length / combinedData.length) * 100 : 0,
+        total_impressions: derivedMetrics.impressions,
+        total_clicks: derivedMetrics.clicks,
+        total_cost: derivedMetrics.cost,
+        total_conversions: derivedMetrics.conversions,
+        total_conversion_value: derivedMetrics.conversionsValue,
+        average_ctr: derivedMetrics.ctr,
+        average_cpc: derivedMetrics.avgCpc,
+        average_cpa: derivedMetrics.cpa,
+        overall_roas: derivedMetrics.roas,
+        ...zeroStats
       };
     } else if (dataType === 'search_terms') {
       combinedData = normalizedSearchTerms;
-      // Calculate summary metrics for search terms only
-      const totalImpressions = combinedData.reduce((sum, item) => sum + item.impressions, 0);
-      const totalClicks = combinedData.reduce((sum, item) => sum + item.clicks, 0);
-      const totalCost = combinedData.reduce((sum, item) => sum + item.cost, 0);
-      const totalConversions = combinedData.reduce((sum, item) => sum + item.conversions, 0);
-      const totalConversionValue = combinedData.reduce((sum, item) => sum + item.conversions_value, 0);
+      // Calculate summary metrics for search terms only using shared utilities
+      const rawTotals = {
+        impressions: combinedData.reduce((sum, item) => sum + item.impressions, 0),
+        clicks: combinedData.reduce((sum, item) => sum + item.clicks, 0),
+        cost: combinedData.reduce((sum, item) => sum + item.cost, 0),
+        conversions: combinedData.reduce((sum, item) => sum + item.conversions, 0),
+        conversionsValue: combinedData.reduce((sum, item) => sum + item.conversions_value, 0)
+      };
+      
+      const derivedMetrics = calculateDerivedMetrics(rawTotals);
+      const zeroStats = calculateZeroPerformanceStats(combinedData);
 
       summary = {
         data_type: 'search_terms',
         total_keywords: 0,
         total_search_terms: normalizedSearchTerms.length,
         total_combined: normalizedSearchTerms.length,
-        total_impressions: totalImpressions,
-        total_clicks: totalClicks,
-        total_cost: totalCost,
-        total_conversions: totalConversions,
-        total_conversion_value: totalConversionValue,
-        average_ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) : 0,
-        average_cpc: totalClicks > 0 ? totalCost / totalClicks : 0,
-        average_cpa: totalConversions > 0 ? totalCost / totalConversions : 0,
-        overall_roas: totalCost > 0 ? totalConversionValue / totalCost : 0,
-        // Zero-clicks statistics for maintenance metrics (mainly for keywords)
-        zero_clicks_count: combinedData.filter(item => item.clicks === 0).length,
-        zero_clicks_percentage: combinedData.length > 0 ? (combinedData.filter(item => item.clicks === 0).length / combinedData.length) * 100 : 0,
-        // Zero-conversions statistics for search terms maintenance
-        zero_conversions_count: combinedData.filter(item => item.conversions === 0).length,
-        zero_conversions_percentage: combinedData.length > 0 ? (combinedData.filter(item => item.conversions === 0).length / combinedData.length) * 100 : 0,
+        total_impressions: derivedMetrics.impressions,
+        total_clicks: derivedMetrics.clicks,
+        total_cost: derivedMetrics.cost,
+        total_conversions: derivedMetrics.conversions,
+        total_conversion_value: derivedMetrics.conversionsValue,
+        average_ctr: derivedMetrics.ctr,
+        average_cpc: derivedMetrics.avgCpc,
+        average_cpa: derivedMetrics.cpa,
+        overall_roas: derivedMetrics.roas,
+        ...zeroStats
       };
     } else {
       // Return both datasets separately to avoid double-counting

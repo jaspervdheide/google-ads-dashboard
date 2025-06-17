@@ -21,15 +21,13 @@ export interface DerivedMetrics extends RawMetrics {
   poas?: number;         // Percentage of ad spend (ROAS as %)
 }
 
-/**
- * Calculates click-through rate as percentage
- * @param clicks - Number of clicks
- * @param impressions - Number of impressions
- * @returns CTR as percentage (0-100)
- */
-export const calculateCTR = (clicks: number, impressions: number): number => {
-  return impressions > 0 ? (clicks / impressions) * 100 : 0;
-};
+// Import centralized calculation functions to avoid duplication
+import { 
+  calculateCTR, 
+  calculateCPA, 
+  calculateROAS, 
+  calculatePOAS 
+} from './performanceCalculations';
 
 /**
  * Calculates average cost per click
@@ -37,7 +35,7 @@ export const calculateCTR = (clicks: number, impressions: number): number => {
  * @param clicks - Number of clicks
  * @returns Average CPC
  */
-export const calculateAvgCPC = (cost: number, clicks: number): number => {
+const calculateAvgCPC = (cost: number, clicks: number): number => {
   return clicks > 0 ? cost / clicks : 0;
 };
 
@@ -47,38 +45,8 @@ export const calculateAvgCPC = (cost: number, clicks: number): number => {
  * @param clicks - Number of clicks
  * @returns Conversion rate as percentage (0-100)
  */
-export const calculateConversionRate = (conversions: number, clicks: number): number => {
+const calculateConversionRate = (conversions: number, clicks: number): number => {
   return clicks > 0 ? (conversions / clicks) * 100 : 0;
-};
-
-/**
- * Calculates cost per acquisition
- * @param cost - Total cost
- * @param conversions - Number of conversions
- * @returns Cost per acquisition
- */
-export const calculateCPA = (cost: number, conversions: number): number => {
-  return conversions > 0 ? cost / conversions : 0;
-};
-
-/**
- * Calculates return on ad spend
- * @param conversionsValue - Total conversion value
- * @param cost - Total cost
- * @returns ROAS ratio
- */
-export const calculateROAS = (conversionsValue: number, cost: number): number => {
-  return cost > 0 ? conversionsValue / cost : 0;
-};
-
-/**
- * Calculates ROAS as percentage (POAS)
- * @param conversionsValue - Total conversion value
- * @param cost - Total cost
- * @returns POAS as percentage
- */
-export const calculatePOAS = (conversionsValue: number, cost: number): number => {
-  return cost > 0 ? (conversionsValue / cost) * 100 : 0;
 };
 
 /**
@@ -86,7 +54,7 @@ export const calculatePOAS = (conversionsValue: number, cost: number): number =>
  * @param rawMetrics - Object with raw metrics data
  * @returns Object with all calculated metrics
  */
-export const calculateAllMetrics = (rawMetrics: RawMetrics): DerivedMetrics => {
+const calculateAllMetrics = (rawMetrics: RawMetrics): DerivedMetrics => {
   const { impressions, clicks, cost, conversions, conversionsValue } = rawMetrics;
   
   return {
@@ -131,4 +99,7 @@ export const aggregateMetrics = (metricsList: RawMetrics[]): DerivedMetrics => {
   );
   
   return calculateAllMetrics(totals);
-}; 
+};
+
+// Export functions that don't conflict
+export { calculateAllMetrics, calculateAvgCPC, calculateConversionRate }; 

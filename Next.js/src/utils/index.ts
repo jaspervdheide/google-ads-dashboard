@@ -9,7 +9,16 @@ export * from './dashboardHelpers';
 // Data management
 export * from './cacheManager';
 export * from './emergencyCache'; // Now uses cacheManager internally
-export * from './metricsCalculator';
+
+// Calculations - Use performanceCalculations as primary
+export * from './performanceCalculations';
+// Export specific non-conflicting functions from metricsCalculator
+export { 
+  calculatePercentageChange, 
+  aggregateMetrics,
+  type RawMetrics,
+  type DerivedMetrics 
+} from './metricsCalculator';
 
 // Google Ads integration
 export * from './queryBuilder';

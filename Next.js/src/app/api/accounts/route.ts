@@ -2,22 +2,7 @@ import { NextRequest as _NextRequest } from 'next/server';
 import { createCustomer, createGoogleAdsClient } from '@/utils/googleAdsClient';
 import { handleApiError, createSuccessResponse } from '@/utils/errorHandler';
 import { logger } from '@/utils/logger';
-
-// Country mapping from the Streamlit implementation
-const COUNTRY_ACCOUNTS = {
-  "NL": "5756290882",
-  "BE": "5735473691", 
-  "DE": "1946606314",
-  "DK": "8921136631",
-  "ES": "4748902087",
-  "FI": "8470338623",
-  "FR (Ravann)": "2846016798",
-  "FR (Tapis)": "7539242704",
-  "IT": "8472162607",
-  "NO": "3581636329",
-  "PL": "8467590750",
-  "SE": "8463558543",
-};
+import { getCountryCodeFromCustomerId } from '@/utils/apiHelpers';
 
 export async function GET() {
   try {
@@ -50,9 +35,7 @@ export async function GET() {
       const fullCustomerId = row.customer_client.client_customer;
       const customerId = fullCustomerId.replace('customers/', '');
       
-      const countryCode = Object.keys(COUNTRY_ACCOUNTS).find(
-        key => COUNTRY_ACCOUNTS[key as keyof typeof COUNTRY_ACCOUNTS] === customerId
-      ) || 'Unknown';
+      const countryCode = getCountryCodeFromCustomerId(customerId);
       
       return {
         id: customerId, // Use clean customer ID without prefix

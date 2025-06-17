@@ -4,20 +4,7 @@ import { getFormattedDateRange } from '@/utils/dateUtils';
 import { handleApiError, createSuccessResponse } from '@/utils/errorHandler';
 import { logger } from '@/utils/logger';
 import { Account, Campaign as _Campaign, CampaignData, Anomaly, AnomalyData } from '@/types';
-
-// Country to account mapping
-const COUNTRY_ACCOUNTS = {
-  'Netherlands': '5756290882',
-  'Belgium': '1234567890',
-  'Germany': '9876543210',
-  'France': '5555555555',
-  'Spain': '7777777777',
-  'Italy': '8888888888',
-  'United Kingdom': '9999999999',
-  'Poland': '1111111111',
-  'Czech Republic': '2222222222',
-  'Austria': '3333333333'
-} as const;
+import { getCountryCodeFromCustomerId } from '@/utils/apiHelpers';
 
 // Helper function to fetch accounts directly (no HTTP call)
 async function fetchAccountsDirect(): Promise<Account[]> {
@@ -45,9 +32,7 @@ async function fetchAccountsDirect(): Promise<Account[]> {
       const fullCustomerId = row.customer_client.client_customer;
       const customerId = fullCustomerId.replace('customers/', '');
       
-      const countryCode = Object.keys(COUNTRY_ACCOUNTS).find(
-        key => COUNTRY_ACCOUNTS[key as keyof typeof COUNTRY_ACCOUNTS] === customerId
-      ) || 'Unknown';
+      const countryCode = getCountryCodeFromCustomerId(customerId);
       
       return {
         id: customerId,

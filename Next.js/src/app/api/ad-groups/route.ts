@@ -2,6 +2,7 @@ import { NextRequest as _NextRequest } from 'next/server';
 import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
 import { getFormattedDateRange } from '@/utils/dateUtils';
 import { handleValidationError, handleApiError, createSuccessResponse } from '@/utils/errorHandler';
+import { calculateDerivedMetrics, convertCostFromMicros } from '@/utils/apiHelpers';
 
 export async function GET(request: Request) {
   try {
@@ -232,9 +233,9 @@ export async function GET(request: Request) {
               costMicros: row.metrics?.cost_micros || 0,
               conversions: row.metrics?.conversions || 0,
               conversionsValueMicros: row.metrics?.conversions_value || 0,
-              // Mock Performance Max specific fields for now
-              adStrength: ['Poor', 'Good', 'Excellent'][Math.floor(Math.random() * 3)] as 'Poor' | 'Good' | 'Excellent',
-              assetCoverage: Math.floor(Math.random() * 40) + 60, // 60-100%
+              // TODO: Add real Performance Max specific fields when available from API
+              adStrength: null,
+              assetCoverage: null,
             });
           }
         });
@@ -248,37 +249,34 @@ export async function GET(request: Request) {
       }
     }
 
-    // Calculate derived metrics for all groups
-    const processedGroups = allGroups.map(group => ({
-      ...group,
-      cost: group.costMicros / 1_000_000,
-      conversionsValue: group.conversionsValueMicros,
-      ctr: group.impressions > 0 ? (group.clicks / group.impressions * 100) : 0,
-      avgCpc: group.clicks > 0 ? (group.costMicros / group.clicks / 1_000_000) : 0,
-      conversionRate: group.clicks > 0 ? (group.conversions / group.clicks * 100) : 0,
-      cpa: group.conversions > 0 ? (group.costMicros / group.conversions / 1_000_000) : 0,
-      roas: group.costMicros > 0 ? (group.conversionsValueMicros / group.costMicros * 1_000_000) : 0
-    }));
+    // Calculate derived metrics for all groups using shared utility
+    const processedGroups = allGroups.map(group => {
+      const cost = convertCostFromMicros(group.costMicros);
+      const derivedMetrics = calculateDerivedMetrics({
+        impressions: group.impressions,
+        clicks: group.clicks,
+        cost: cost,
+        conversions: group.conversions,
+        conversionsValue: group.conversionsValueMicros
+      });
+      
+      return {
+        ...group,
+        ...derivedMetrics,
+        conversionsValue: group.conversionsValueMicros // Keep original field name for compatibility
+      };
+    });
 
-    // Calculate totals
-    const totals = {
+    // Calculate totals using shared utility
+    const rawTotals = {
       impressions: processedGroups.reduce((sum, g) => sum + g.impressions, 0),
       clicks: processedGroups.reduce((sum, g) => sum + g.clicks, 0),
       cost: processedGroups.reduce((sum, g) => sum + g.cost, 0),
       conversions: processedGroups.reduce((sum, g) => sum + g.conversions, 0),
-      conversionsValue: processedGroups.reduce((sum, g) => sum + g.conversionsValue, 0),
-      ctr: 0,
-      avgCpc: 0,
-      conversionRate: 0,
-      cpa: 0,
-      roas: 0
+      conversionsValue: processedGroups.reduce((sum, g) => sum + g.conversionsValue, 0)
     };
     
-    totals.ctr = totals.impressions > 0 ? (totals.clicks / totals.impressions * 100) : 0;
-    totals.avgCpc = totals.clicks > 0 ? (totals.cost / totals.clicks) : 0;
-    totals.conversionRate = totals.clicks > 0 ? (totals.conversions / totals.clicks * 100) : 0;
-    totals.cpa = totals.conversions > 0 ? (totals.cost / totals.conversions) : 0;
-    totals.roas = totals.cost > 0 ? (totals.conversionsValue / totals.cost) : 0;
+    const totals = calculateDerivedMetrics(rawTotals);
 
     // Get type statistics
     const traditionalCount = processedGroups.filter(g => g.groupType === 'ad_group').length;

@@ -24,14 +24,12 @@ export function useKeywordData(
       // Build cache key
       const cacheKey = `keywords_${accountId}_${days}days_${dataType}`;
       
-      // Check cache first (30 min TTL) unless forcing refresh
-      if (!skipCache) {
-        const cachedData = getFromCache(cacheKey, 30);
-        
-        if (cachedData) {
-          setData(cachedData);
-          return;
-        }
+      // Check cache first
+      const cachedData = getFromCache<KeywordData>(cacheKey);
+      
+      if (cachedData) {
+        setData(cachedData);
+        return;
       }
       
       // Cache miss - fetch from API
@@ -57,8 +55,8 @@ export function useKeywordData(
         customerId: result.data?.customerId || accountId
       };
       
-      // Save to cache
-      saveToCache(cacheKey, keywordData);
+      // Save to cache with 30 minute TTL
+      saveToCache(cacheKey, keywordData, 30 * 60 * 1000);
       setData(keywordData);
       
     } catch (err) {

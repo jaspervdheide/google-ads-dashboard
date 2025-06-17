@@ -1,4 +1,5 @@
 import { Target, Users, Search, Zap } from 'lucide-react';
+import { calculatePOAS } from './performanceCalculations';
 
 // Configuration for Top Campaigns Performance
 export const topCampaignsConfig = {
@@ -9,13 +10,13 @@ export const topCampaignsConfig = {
     if (!data?.campaigns || !Array.isArray(data.campaigns)) return [];
     
     return data.campaigns
+      .filter((campaign: any) => campaign.conversions > 0 || campaign.conversionsValue > 0)
       .sort((a: any, b: any) => (b.conversions || 0) - (a.conversions || 0))
       .slice(0, 5)
       .map((campaign: any) => {
-        // Campaigns API returns conversionsValue and cost (already converted from micros)
         const conversionsValue = campaign.conversionsValue || 0;
         const cost = campaign.cost || 0;
-        const poas = cost > 0 ? Math.round((conversionsValue / cost) * 100) : 0;
+        const poas = calculatePOAS(conversionsValue, cost);
         
         return {
           id: campaign.id || campaign.campaign_id || '',
@@ -24,8 +25,8 @@ export const topCampaignsConfig = {
           cpa: campaign.cpa || 0,
           poas: poas,
           spend: Math.round(cost),
-          trend: Math.random() > 0.5 ? 'up' : 'down', // Mock trend data
-          trendValue: Math.round(Math.random() * 20 + 5)
+          trend: 'up', // Default to positive trend - TODO: Calculate from historical data
+          trendValue: 0 // Default to 0 - TODO: Calculate from historical data
         };
       });
   },
@@ -58,13 +59,13 @@ export const topAdGroupsConfig = {
     if (!data?.adGroups || !Array.isArray(data.adGroups)) return [];
     
     return data.adGroups
+      .filter((adGroup: any) => adGroup.conversions > 0 || adGroup.conversionsValue > 0)
       .sort((a: any, b: any) => (b.conversions || 0) - (a.conversions || 0))
       .slice(0, 5)
       .map((adGroup: any) => {
-        // Ad Groups API returns cost and conversionsValue (already converted from micros)
         const conversionsValue = adGroup.conversionsValue || 0;
         const cost = adGroup.cost || 0;
-        const poas = cost > 0 ? Math.round((conversionsValue / cost) * 100) : 0;
+        const poas = calculatePOAS(conversionsValue, cost);
         
         return {
           id: adGroup.id || adGroup.ad_group_id || '',
@@ -73,15 +74,14 @@ export const topAdGroupsConfig = {
           cpa: adGroup.cpa || 0,
           poas: poas,
           spend: Math.round(cost),
-          trend: Math.random() > 0.5 ? 'up' : 'down', // Mock trend data
-          trendValue: Math.round(Math.random() * 20 + 5),
+          trend: 'up', // Default to positive trend - TODO: Calculate from historical data
+          trendValue: 0, // Default to 0 - TODO: Calculate from historical data
           campaign_name: adGroup.campaignName || adGroup.campaign_name || 'Unknown Campaign',
-          groupType: adGroup.groupType || 'ad_group' // Include groupType for distinction
+          groupType: adGroup.groupType || 'ad_group'
         };
       });
   },
   getTypeInfo: (item: any) => {
-    // Distinguish between Ad Groups and Asset Groups based on groupType
     const isAssetGroup = item.groupType === 'asset_group';
     return {
       type: isAssetGroup ? 'Asset Group' : 'Ad Group',
@@ -106,9 +106,8 @@ export const topAdGroupsConfig = {
 export const topKeywordsConfig = {
   title: 'Top Keywords Performance',
   description: 'Best performing keywords by conversions',
-  dataKey: 'data', // Keywords API returns data in 'data' key
+  dataKey: 'data',
   getItems: (data: any) => {
-    // Handle both direct array and nested data structure
     let keywords = [];
     if (Array.isArray(data)) {
       keywords = data;
@@ -121,14 +120,13 @@ export const topKeywordsConfig = {
     if (!keywords.length) return [];
     
     return keywords
-      .filter((keyword: any) => keyword.type === 'keyword') // Filter out search terms
+      .filter((keyword: any) => keyword.type === 'keyword' && (keyword.conversions > 0 || keyword.conversions_value > 0))
       .sort((a: any, b: any) => (b.conversions || 0) - (a.conversions || 0))
       .slice(0, 5)
       .map((keyword: any) => {
-        // Keywords API returns conversions_value and cost (already converted from micros)
         const conversionsValue = keyword.conversions_value || 0;
         const cost = keyword.cost || 0;
-        const poas = cost > 0 ? Math.round((conversionsValue / cost) * 100) : 0;
+        const poas = calculatePOAS(conversionsValue, cost);
         
         return {
           id: keyword.id || keyword.keyword_id || keyword.text || '',
@@ -137,8 +135,8 @@ export const topKeywordsConfig = {
           cpa: keyword.cost_per_conversion || keyword.cpa || 0,
           poas: poas,
           spend: Math.round(cost),
-          trend: Math.random() > 0.5 ? 'up' : 'down', // Mock trend data
-          trendValue: Math.round(Math.random() * 20 + 5),
+          trend: 'up', // Default to positive trend - TODO: Calculate from historical data
+          trendValue: 0, // Default to 0 - TODO: Calculate from historical data
           matchType: keyword.matchType || keyword.match_type || 'Unknown',
           campaign_name: keyword.campaign_name || keyword.campaignName || 'Unknown Campaign'
         };

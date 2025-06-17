@@ -72,7 +72,7 @@ const useCampaignData = (
       let dataFromCache = false;
       
       if (!skipCache) {
-        const cachedData = getFromCache(cacheKey, 30);
+        const cachedData = getFromCache<CampaignData>(cacheKey);
         if (cachedData) {
           setData(cachedData);
           dataFromCache = true;
@@ -95,7 +95,7 @@ const useCampaignData = (
         
         if (result.success) {
           setData(result.data);
-          saveToCache(cacheKey, result.data);
+          saveToCache(cacheKey, result.data, 30 * 60 * 1000);
         } else {
           setError(result.message || 'Failed to fetch campaign data');
           return; // Don't fetch KPI comparison if main data failed
@@ -155,7 +155,7 @@ export const useExtendedCampaignData = (options: CampaignDataOptions) => {
       
       // Check cache first (30 min TTL) unless forcing refresh
       if (!skipCache) {
-        const cachedData = getFromCache(cacheKey, 30);
+        const cachedData = getFromCache<CampaignData>(cacheKey);
         
         if (cachedData) {
           setData(cachedData.campaigns || []);
@@ -177,12 +177,12 @@ export const useExtendedCampaignData = (options: CampaignDataOptions) => {
       const result: ExtendedApiResponse = await response.json();
 
       if (result.success) {
-        // Save to cache
+        // Save to cache with 30 minute TTL
         const cacheData = {
           campaigns: result.data.campaigns,
           totals: result.data.totals
         };
-        saveToCache(cacheKey, cacheData);
+        saveToCache(cacheKey, cacheData, 30 * 60 * 1000);
         
         setData(result.data.campaigns);
         setTotals(result.data.totals);

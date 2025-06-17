@@ -21,7 +21,7 @@ const useAnomalyData = (
       const cacheKey = `anomalies_${accountId}_${dateRange}days`;
       
       if (!skipCache) {
-        const cachedData = getFromCache(cacheKey, 5); // 5 min TTL for anomalies (fresher data)
+        const cachedData = getFromCache<AnomalyData>(cacheKey);
         if (cachedData) {
           setData(cachedData);
           setLoading(false);
@@ -34,7 +34,8 @@ const useAnomalyData = (
       
       if (result.success) {
         setData(result.data);
-        saveToCache(cacheKey, result.data);
+        // Save to cache with 5 minute TTL for fresher anomaly data
+        saveToCache(cacheKey, result.data, 5 * 60 * 1000);
       } else {
         setError(result.message || 'Failed to fetch anomaly data');
         setData(null);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
 import { calculateComparisonPeriods } from '@/utils/dateUtils';
 import { calculateAllMetrics, calculatePercentageChange } from '@/utils/metricsCalculator';
+import { convertCostFromMicros } from '@/utils/apiHelpers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
       response.forEach((row: any) => {
         totals.impressions += row.metrics?.impressions || 0;
         totals.clicks += row.metrics?.clicks || 0;
-        totals.cost += (row.metrics?.cost_micros || 0) / 1000000; // Convert micros to currency
+        totals.cost += convertCostFromMicros(row.metrics?.cost_micros || 0); // Convert micros to currency
         totals.conversions += row.metrics?.conversions || 0;
         totals.conversionsValue += row.metrics?.conversions_value || 0;
       });

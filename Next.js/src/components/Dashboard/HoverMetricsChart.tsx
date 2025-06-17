@@ -105,106 +105,15 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
           
           setDailyData(chartData);
         } else {
-          // Fallback to improved mock data
-          generateRealisticMockData();
+          // No data available - set empty array
+          setDailyData([]);
         }
       } catch (error) {
         console.error('Error fetching daily metrics:', error);
-        // Fallback to improved mock data
-        generateRealisticMockData();
+        // No data available - set empty array
+        setDailyData([]);
       }
       setLoading(false);
-    };
-
-    const generateRealisticMockData = () => {
-      const days = 30;
-      const mockData: DailyData[] = [];
-      const today = new Date();
-      
-      // Parse the current metric value for baseline
-      const currentValueStr = typeof metricValue === 'string' ? metricValue : String(metricValue);
-      const numericValue = parseFloat(currentValueStr.replace(/[€$,%]/g, ''));
-      const baseValue = isNaN(numericValue) ? 100 : numericValue;
-      
-      for (let i = days - 1; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i); // Go back i days from today
-        
-        let variationFactor = 0.3; // Default 30% variation
-        let trendFactor = 0;
-        
-        // Metric-specific patterns
-        switch (metricType) {
-          case 'clicks':
-            // Clicks: Moderate variation, slight improvement trend
-            variationFactor = 0.4;
-            trendFactor = (days - i) * 0.002; // Slight upward trend
-            break;
-            
-          case 'impressions':
-            // Impressions: Higher volume, more stable
-            variationFactor = 0.25;
-            trendFactor = Math.sin(i * 0.2) * 0.1; // Cyclical pattern
-            break;
-            
-          case 'cost':
-            // Cost: Correlates with clicks but with budget constraints
-            variationFactor = 0.35;
-            if (i < 5) trendFactor = -0.1; // Recent budget cuts
-            break;
-            
-          case 'ctr':
-            // CTR: Percentage, smaller values, optimization improvements
-            variationFactor = 0.15;
-            trendFactor = (days - i) * 0.001; // Gradual improvement
-            break;
-            
-          case 'avgCpc':
-            // Avg CPC: Currency, competitive fluctuations
-            variationFactor = 0.2;
-            trendFactor = Math.sin(i * 0.3) * 0.05; // Market fluctuations
-            break;
-            
-          case 'conversions':
-            // Conversions: Lower numbers, more volatile
-            variationFactor = 0.6;
-            trendFactor = (days - i) * 0.003; // Optimization improvements
-            break;
-            
-          case 'conversionsValue':
-            // Conversion Value: Higher variance, seasonal patterns
-            variationFactor = 0.5;
-            trendFactor = Math.cos(i * 0.15) * 0.1; // Seasonal pattern
-            break;
-            
-          case 'roas':
-            // ROAS: Ratio, optimization trend
-            variationFactor = 0.3;
-            trendFactor = (days - i) * 0.004; // Improving ROAS
-            break;
-            
-          case 'cpa':
-            // CPA: Cost metric, optimization trend
-            variationFactor = 0.4;
-            trendFactor = -(days - i) * 0.002; // Decreasing CPA is better
-            break;
-        }
-        
-        // Apply variation and trend
-        const randomVariation = (Math.random() - 0.5) * 2 * variationFactor;
-        const finalValue = Math.max(0, baseValue * (1 + randomVariation + trendFactor));
-        
-        mockData.push({
-          date: date.toISOString().split('T')[0],
-          value: Math.round(finalValue * 100) / 100, // Round to 2 decimals
-          formattedDate: date.toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric'
-          })
-        });
-      }
-      
-      setDailyData(mockData);
     };
 
     fetchDailyMetrics();

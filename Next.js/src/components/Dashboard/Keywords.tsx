@@ -1,13 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
-  Search, 
-  Target, 
-  MoreHorizontal,
-  Package,
-  Zap
-} from 'lucide-react';
+import { Target } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { getFromCache, saveToCache } from "../../utils/cacheManager";
 import { 
@@ -20,6 +14,12 @@ import { DateRange } from '../../types/common';
 import TopKeywordsPerformance from './TopKeywordsPerformance';
 import GenericPerformanceMatrix from './GenericPerformanceMatrix';
 import { keywordMatrixConfig } from '../../utils/matrixConfigs';
+import { 
+  getPerformanceLevel, 
+  PerformanceIndicator,
+  detectCampaignType,
+  getCampaignTypeIndicator
+} from './shared';
 
 // =============================================================================
 // TYPE DEFINITIONS
@@ -58,89 +58,7 @@ interface KeywordsProps {
   onSort: (column: string) => void;
 }
 
-// Performance indicator types
-type PerformanceLevel = 'high' | 'medium' | 'low';
 
-// Helper function to calculate performance percentiles
-const getPerformanceLevel = (
-  value: number, 
-  allValues: number[], 
-  metricType: string
-): PerformanceLevel => {
-  if (allValues.length < 3) return 'medium';
-  
-  // Filter out zero values for better percentile calculation
-  const nonZeroValues = allValues.filter(v => v > 0);
-  if (nonZeroValues.length === 0) return 'medium';
-  
-  // Sort values based on whether higher or lower is better
-  const isHigherBetter = ['clicks', 'impressions', 'ctr', 'conversions', 'conversions_value', 'roas', 'quality_score'].includes(metricType);
-  const sortedValues = [...nonZeroValues].sort((a, b) => isHigherBetter ? b - a : a - b);
-  
-  // If the current value is 0 and we're looking at a "higher is better" metric, it's low performance
-  if (value === 0 && isHigherBetter) return 'low';
-  
-  // Calculate percentile thresholds
-  const topThreshold = sortedValues[Math.floor(sortedValues.length * 0.33)];
-  const bottomThreshold = sortedValues[Math.floor(sortedValues.length * 0.67)];
-  
-  if (isHigherBetter) {
-    if (value >= topThreshold) return 'high';
-    if (value >= bottomThreshold) return 'medium';
-    return 'low';
-  } else {
-    // For metrics where lower is better (cost, cpc, cpa)
-    if (value <= topThreshold) return 'high';
-    if (value <= bottomThreshold) return 'medium';
-    return 'low';
-  }
-};
-
-// Helper function to get performance indicator color and glow
-const getPerformanceStyles = (level: PerformanceLevel): string => {
-  const baseStyles = 'inline-block w-1.5 h-1.5 rounded-full mr-2 shadow-sm ring-1 ring-white/20';
-  
-  switch (level) {
-    case 'high': return `${baseStyles} bg-emerald-400 shadow-emerald-200/50`;
-    case 'medium': return `${baseStyles} bg-amber-400 shadow-amber-200/50`;
-    case 'low': return `${baseStyles} bg-rose-400 shadow-rose-200/50`;
-    default: return `${baseStyles} bg-gray-400 shadow-gray-200/50`;
-  }
-};
-
-// Performance indicator component
-const PerformanceIndicator: React.FC<{ level: PerformanceLevel }> = ({ level }) => (
-  <div 
-    className={getPerformanceStyles(level)}
-    title={`Performance: ${level}`}
-  />
-);
-
-// Campaign type detection based on naming conventions
-const detectCampaignType = (campaignName: string): 'search' | 'shopping' | 'performance_max' | 'other' => {
-  const nameLower = campaignName.toLowerCase();
-  if (nameLower.includes('performance max') || nameLower.includes('pmax')) {
-    return 'performance_max';
-  }
-  if (nameLower.includes('shopping')) {
-    return 'shopping';
-  }
-  if (nameLower.includes('search')) {
-    return 'search';
-  }
-  return 'other';
-};
-
-// Get campaign type indicator
-const getCampaignTypeIndicator = (campaignType: 'search' | 'shopping' | 'performance_max' | 'other') => {
-  const indicators = {
-    'search': { icon: Search, color: 'text-blue-600', bg: 'bg-blue-100' },
-    'shopping': { icon: Package, color: 'text-green-600', bg: 'bg-green-100' },
-    'performance_max': { icon: Zap, color: 'text-purple-600', bg: 'bg-purple-100' },
-    'other': { icon: MoreHorizontal, color: 'text-gray-600', bg: 'bg-gray-100' }
-  };
-  return indicators[campaignType];
-};
 
 // Get keyword type badge styles
 const getKeywordTypeBadge = (type: 'keyword' | 'search_term') => {
@@ -372,8 +290,8 @@ const Keywords: React.FC<KeywordsProps> = ({
       
       console.log(`🔍 Keywords: Checking cache for key: ${cacheKey}`);
       
-      // Check cache first (30 min TTL)
-      const cachedData = getFromCache(cacheKey, 30);
+      // Check cache first
+      const cachedData = getFromCache<{keywords: KeywordData[], summary?: any}>(cacheKey);
       
       if (cachedData) {
         const cachedKeywords = Array.isArray(cachedData.keywords) ? cachedData.keywords : [];
@@ -419,7 +337,7 @@ const Keywords: React.FC<KeywordsProps> = ({
         summary: result.summary || null
       };
       console.log(`💾 Keywords: Saving to cache (${keywordsArray.length} items)`);
-      saveToCache(cacheKey, cacheData);
+      saveToCache(cacheKey, cacheData, 30 * 60 * 1000); // 30 minute TTL
       
       setKeywordData(keywordsArray);
 
@@ -740,8 +658,6 @@ const Keywords: React.FC<KeywordsProps> = ({
         <tbody className="bg-white divide-y divide-gray-200">
           {filteredKeywords.map((keyword, index) => {
             const campaignType = detectCampaignType(keyword.campaign_name);
-            const campaignIndicator = getCampaignTypeIndicator(campaignType);
-            const CampaignIcon = campaignIndicator.icon;
             
             return (
               <tr key={`${keyword.id || 'no-id'}-${keyword.keyword_text}-${keyword.type}-${index}`} className="hover:bg-gray-50 transition-colors duration-150">
@@ -749,9 +665,7 @@ const Keywords: React.FC<KeywordsProps> = ({
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-start space-x-3">
                     <div className="flex-shrink-0">
-                      <div className={`p-2 rounded-lg ${campaignIndicator.bg}`}>
-                        <CampaignIcon className={`h-4 w-4 ${campaignIndicator.color}`} />
-                      </div>
+                      {getCampaignTypeIndicator(campaignType)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-2 mb-1">

@@ -395,44 +395,9 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
 
   // Generate historical data for trend analysis based on actual date range
   const generateHistoricalData = (campaign: any) => {
-    // Calculate actual date range
-    const endDate = selectedDateRange?.endDate || new Date();
-    const startDate = selectedDateRange?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    
-    // Calculate number of days in the range
-    const timeDiff = endDate.getTime() - startDate.getTime();
-    const days = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-    
-    const data = [];
-    const currentShare = campaign.search_impression_share;
-    const volatility = Math.random() * 10 + 5; // 5-15% volatility
-    
-    for (let i = 0; i <= days; i++) {
-      const date = new Date(startDate);
-      date.setDate(startDate.getDate() + i);
-      
-      // Create realistic trend pattern
-      const trendFactor = campaign.trend === 'up' ? 0.3 : campaign.trend === 'down' ? -0.3 : 0;
-      const randomVariation = (Math.random() - 0.5) * volatility;
-      const progressRatio = i / days;
-      const baseValue = currentShare - (trendFactor * (1 - progressRatio) * 20);
-      const value = Math.max(0, Math.min(100, baseValue + randomVariation));
-      
-      // Generate realistic budget and rank lost data based on campaign
-      const baseBudgetLost = campaign.search_budget_lost_impression_share;
-      const baseRankLost = campaign.search_rank_lost_impression_share;
-      const budgetVariation = (Math.random() - 0.5) * 8; // ±4% variation
-      const rankVariation = (Math.random() - 0.5) * 10; // ±5% variation
-      
-      data.push({
-        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        fullDate: date.toISOString().split('T')[0],
-        impressionShare: Math.round(value * 10) / 10,
-        budgetLost: Math.max(0, Math.min(100, baseBudgetLost + budgetVariation)),
-        rankLost: Math.max(0, Math.min(100, baseRankLost + rankVariation))
-      });
-    }
-    return data;
+    // TODO: Replace with real historical API data
+    // For now, return empty array - historical trends will show when real data is available
+    return [];
   };
 
   // Set default selected campaign (first alphabetically)
@@ -461,9 +426,9 @@ const SearchImpressionShareWidget: React.FC<SearchImpressionShareWidgetProps> = 
     const historicalData = selectedCampaignData ? generateHistoricalData(selectedCampaignData) : [];
     
     const currentValue = selectedCampaignData?.search_impression_share || 0;
-    const previousValue = historicalData.length > 7 ? historicalData[historicalData.length - 8].impressionShare : currentValue;
-    const weeklyChange = currentValue - previousValue;
-    const monthlyAvg = historicalData.length > 0 ? historicalData.reduce((sum, d) => sum + d.impressionShare, 0) / historicalData.length : 0;
+    const previousValue = currentValue; // No historical data available yet
+    const weeklyChange = 0; // No historical data available yet
+    const monthlyAvg = currentValue; // Use current value as fallback
 
     return (
       <div className="space-y-6">

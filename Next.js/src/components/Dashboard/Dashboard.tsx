@@ -18,6 +18,7 @@ import {
   useHistoricalData,
   useAnomalyData,
   useAdGroupData,
+  useProductData,
   useHoverChart,
   useKeywordData,
   useAccountState,
@@ -26,6 +27,7 @@ import {
   useChartState,
   useDateRangeState,
   useAdGroupState,
+  useProductState,
   useKeywordState
 } from '../../hooks';
 
@@ -50,6 +52,7 @@ export default function Dashboard() {
   const chartState = useChartState();
   const dateState = useDateRangeState();
   const adGroupState = useAdGroupState();
+  const productState = useProductState();
   const keywordState = useKeywordState();
   
   // Hover chart hook
@@ -82,6 +85,11 @@ export default function Dashboard() {
     data: realAdGroupData, 
     loading: adGroupLoading
   } = useAdGroupData(accountState.selectedAccount, dateState.selectedDateRange, false, 'all');
+
+  const { 
+    data: realProductData, 
+    loading: productLoading
+  } = useProductData(accountState.selectedAccount, dateState.selectedDateRange, false);
 
   const { 
     data: keywordData, 
@@ -138,6 +146,14 @@ export default function Dashboard() {
 
   const handleAdGroupSort = (column: string) => {
     tableState.handleSort(column);
+  };
+
+  const handleProductClick = (product: any) => {
+    console.log('Product clicked:', product);
+  };
+
+  const handleProductSort = (column: string) => {
+    productState.handleProductSort(column);
   };
 
   // Props objects for components
@@ -244,6 +260,22 @@ export default function Dashboard() {
     onMetricLeave: handleMetricLeave
   };
 
+  const productsProps = {
+    realProductData,
+    productLoading,
+    campaignTypeFilter: productState.campaignTypeFilter,
+    productViewMode: productState.productViewMode,
+    productSort: productState.productSort,
+    currentPage: productState.currentPage,
+    onCampaignTypeFilterChange: productState.handleCampaignTypeFilterChange,
+    onProductViewModeChange: productState.handleProductViewModeChange,
+    onProductSort: handleProductSort,
+    onPageChange: productState.handlePageChange,
+    onProductClick: handleProductClick,
+    onMetricHover: handleMetricHover,
+    onMetricLeave: handleMetricLeave
+  };
+
   const analyticsProps = {
     campaignData,
     displayedCampaigns
@@ -294,6 +326,7 @@ export default function Dashboard() {
         currentPage={tableState.currentPage}
         dashboardProps={dashboardProps}
         adGroupsProps={adGroupsProps}
+        productsProps={productsProps}
         analyticsProps={analyticsProps}
         keywordsProps={keywordsProps}
         settingsProps={settingsProps}

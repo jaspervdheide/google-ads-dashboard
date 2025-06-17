@@ -24,7 +24,7 @@ const useHistoricalData = (
       const cacheKey = `historical_${accountId}_${apiDateRange.startDate}_${apiDateRange.endDate}`;
       
       if (!skipCache) {
-        const cachedData = getFromCache(cacheKey, 30);
+        const cachedData = getFromCache<any>(cacheKey);
         if (cachedData) {
           setData(cachedData);
           setLoading(false);
@@ -37,7 +37,7 @@ const useHistoricalData = (
       
       if (result.success) {
         setData(result.data);
-        saveToCache(cacheKey, result.data);
+        saveToCache(cacheKey, result.data, 30 * 60 * 1000);
       } else {
         setError(result.message || 'Failed to fetch historical data');
         setData([]);

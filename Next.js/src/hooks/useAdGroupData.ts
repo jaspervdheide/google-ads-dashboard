@@ -56,8 +56,8 @@ export const useAdGroupData = (
       // Build cache key with stable date values
       const cacheKey = `adgroups_${selectedAccount}_${apiDateRange.startDate}_${apiDateRange.endDate}_${groupType}`;
       
-      // Check cache first (30 min TTL)
-      const cachedData = getFromCache(cacheKey, 30);
+      // Check cache first
+      const cachedData = getFromCache<AdGroupData>(cacheKey);
       
       if (cachedData) {
         setData(cachedData);
@@ -108,8 +108,8 @@ export const useAdGroupData = (
           customerId: result.data.customerId
         };
         
-        // Save to cache
-        saveToCache(cacheKey, transformedData);
+        // Save to cache with 30 minute TTL
+        saveToCache(cacheKey, transformedData, 30 * 60 * 1000);
         
         setData(transformedData);
       } else {

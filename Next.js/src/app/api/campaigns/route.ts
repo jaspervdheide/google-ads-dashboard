@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
 import { getFormattedDateRange } from '@/utils/dateUtils';
+import { calculateDerivedMetrics, convertCostFromMicros } from '@/utils/apiHelpers';
 
 export async function GET(request: Request) {
   try {
@@ -127,15 +128,19 @@ export async function GET(request: Request) {
     
     // Convert map to array and calculate derived metrics
     const campaigns = Array.from(campaignMap.values()).map(campaign => {
+      const cost = convertCostFromMicros(campaign.costMicros);
+      const derivedMetrics = calculateDerivedMetrics({
+        impressions: campaign.impressions,
+        clicks: campaign.clicks,
+        cost: cost,
+        conversions: campaign.conversions,
+        conversionsValue: campaign.conversionsValueMicros
+      });
+      
       const processedCampaign: any = {
         ...campaign,
-        cost: campaign.costMicros / 1_000_000, // Convert micros to currency
-        conversionsValue: campaign.conversionsValueMicros, // conversions_value is already in currency format, not micros
-        ctr: campaign.impressions > 0 ? (campaign.clicks / campaign.impressions * 100) : 0,
-        avgCpc: campaign.clicks > 0 ? (campaign.costMicros / campaign.clicks / 1_000_000) : 0,
-        conversionRate: campaign.clicks > 0 ? (campaign.conversions / campaign.clicks * 100) : 0,
-        cpa: campaign.conversions > 0 ? (campaign.costMicros / campaign.conversions / 1_000_000) : 0,
-        roas: campaign.costMicros > 0 ? (campaign.conversionsValueMicros / campaign.costMicros * 1_000_000) : 0 // Multiply by 1M since cost is in micros but conversions_value is in currency
+        ...derivedMetrics,
+        conversionsValue: campaign.conversionsValueMicros // Keep original field name for compatibility
       };
 
       // Add formatted impression share data for widgets
@@ -157,8 +162,8 @@ export async function GET(request: Request) {
           search_rank_lost_impression_share: rankLostPercent,
           lost_budget_share: budgetLostPercent,
           lost_rank_share: rankLostPercent,
-          trend: Math.random() > 0.5 ? 'up' : Math.random() > 0.5 ? 'down' : 'stable', // TODO: Calculate actual trend
-          trend_value: Math.floor(Math.random() * 10) - 5, // TODO: Calculate actual trend value
+          trend: 'stable', // TODO: Calculate actual trend from historical data
+          trend_value: 0, // TODO: Calculate actual trend value from historical data
           competitive_strength: impressionSharePercent > 70 ? 'strong' : impressionSharePercent > 40 ? 'moderate' : 'weak'
         };
       }
@@ -196,25 +201,16 @@ export async function GET(request: Request) {
       return processedCampaign;
     });
     
-    // Calculate totals
-    const totals: any = {
+    // Calculate totals using shared utility
+    const rawTotals = {
       impressions: campaigns.reduce((sum, c) => sum + c.impressions, 0),
       clicks: campaigns.reduce((sum, c) => sum + c.clicks, 0),
       cost: campaigns.reduce((sum, c) => sum + c.cost, 0),
       conversions: campaigns.reduce((sum, c) => sum + c.conversions, 0),
-      conversionsValue: campaigns.reduce((sum, c) => sum + c.conversionsValue, 0),
-      ctr: 0,
-      avgCpc: 0,
-      conversionRate: 0,
-      cpa: 0,
-      roas: 0
+      conversionsValue: campaigns.reduce((sum, c) => sum + c.conversionsValue, 0)
     };
     
-    totals.ctr = totals.impressions > 0 ? (totals.clicks / totals.impressions * 100) : 0;
-    totals.avgCpc = totals.clicks > 0 ? (totals.cost / totals.clicks) : 0;
-    totals.conversionRate = totals.clicks > 0 ? (totals.conversions / totals.clicks * 100) : 0;
-    totals.cpa = totals.conversions > 0 ? (totals.cost / totals.conversions) : 0;
-    totals.roas = totals.cost > 0 ? (totals.conversionsValue / totals.cost) : 0;
+    const totals: any = calculateDerivedMetrics(rawTotals);
 
     // Add impression share totals if requested
     if (includeImpressionShare && campaigns.length > 0) {
