@@ -183,6 +183,8 @@ export async function GET(request: Request) {
           asset_group.id,
           asset_group.name,
           asset_group.status,
+          asset_group.ad_strength,
+          asset_group.asset_coverage.ad_strength_action_items,
           campaign.id,
           campaign.name,
           campaign.advertising_channel_type,
@@ -219,6 +221,13 @@ export async function GET(request: Request) {
             existing.costMicros += row.metrics?.cost_micros || 0;
             existing.conversions += row.metrics?.conversions || 0;
             existing.conversionsValueMicros += row.metrics?.conversions_value || 0;
+            // Update Performance Max fields if not already set
+            if (!existing.adStrength && row.asset_group?.ad_strength) {
+              existing.adStrength = row.asset_group.ad_strength;
+            }
+            if (!existing.assetCoverage && row.asset_group?.asset_coverage?.ad_strength_action_items) {
+              existing.assetCoverage = row.asset_group.asset_coverage.ad_strength_action_items;
+            }
           } else {
             assetGroupMap.set(groupId, {
               id: groupId,
@@ -233,9 +242,9 @@ export async function GET(request: Request) {
               costMicros: row.metrics?.cost_micros || 0,
               conversions: row.metrics?.conversions || 0,
               conversionsValueMicros: row.metrics?.conversions_value || 0,
-              // TODO: Add real Performance Max specific fields when available from API
-              adStrength: null,
-              assetCoverage: null,
+              // Performance Max specific fields from Google Ads API
+              adStrength: row.asset_group?.ad_strength || null,
+              assetCoverage: row.asset_group?.asset_coverage?.ad_strength_action_items || null,
             });
           }
         });

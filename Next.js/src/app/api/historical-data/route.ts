@@ -11,12 +11,15 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
     const dateRange = searchParams.get('dateRange') || '30';
+    const campaignId = searchParams.get('campaignId');
+    const adGroupId = searchParams.get('adGroupId');
+    const keywordId = searchParams.get('keywordId');
     
     if (!customerId) {
       return handleApiError(new Error('Customer ID is required'), 'Historical Data');
     }
 
-    logger.apiStart('Historical Data', { customerId, dateRange });
+    logger.apiStart('Historical Data', { customerId, dateRange, campaignId, adGroupId, keywordId });
 
     // Calculate date range
     const days = parseInt(dateRange);
@@ -33,24 +36,102 @@ export async function GET(request: NextRequest) {
     // Create Google Ads connection using utility
     const { customer } = createGoogleAdsConnection(customerId);
 
-    // Query for daily historical data
-    const query = `
-      SELECT
-        segments.date,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.ctr,
-        metrics.average_cpc,
-        metrics.conversions,
-        metrics.conversions_value
-      FROM campaign
-      WHERE campaign.status = 'ENABLED'
-        AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
-      ORDER BY segments.date ASC
-    `;
+    // Build query based on what data is requested
+    let query = '';
+    let entityType = 'account';
+    
+    if (keywordId) {
+      // Keyword-specific historical data
+      entityType = 'keyword';
+      query = `
+        SELECT
+          segments.date,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros,
+          metrics.ctr,
+          metrics.average_cpc,
+          metrics.conversions,
+          metrics.conversions_value,
+          ad_group_criterion.criterion_id,
+          ad_group_criterion.keyword.text,
+          campaign.id,
+          campaign.name,
+          ad_group.id,
+          ad_group.name
+        FROM keyword_view
+        WHERE ad_group_criterion.criterion_id = ${keywordId}
+          AND campaign.status = 'ENABLED'
+          AND ad_group.status = 'ENABLED'
+          AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
+        ORDER BY segments.date ASC
+      `;
+    } else if (adGroupId) {
+      // Ad Group-specific historical data
+      entityType = 'adGroup';
+      query = `
+        SELECT
+          segments.date,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros,
+          metrics.ctr,
+          metrics.average_cpc,
+          metrics.conversions,
+          metrics.conversions_value,
+          ad_group.id,
+          ad_group.name,
+          campaign.id,
+          campaign.name
+        FROM ad_group
+        WHERE ad_group.id = ${adGroupId}
+          AND campaign.status = 'ENABLED'
+          AND ad_group.status = 'ENABLED'
+          AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
+        ORDER BY segments.date ASC
+      `;
+    } else if (campaignId) {
+      // Campaign-specific historical data
+      entityType = 'campaign';
+      query = `
+        SELECT
+          segments.date,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros,
+          metrics.ctr,
+          metrics.average_cpc,
+          metrics.conversions,
+          metrics.conversions_value,
+          campaign.id,
+          campaign.name
+        FROM campaign
+        WHERE campaign.id = ${campaignId}
+          AND campaign.status = 'ENABLED'
+          AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
+        ORDER BY segments.date ASC
+      `;
+    } else {
+      // Account-level historical data (existing functionality)
+      entityType = 'account';
+      query = `
+        SELECT
+          segments.date,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros,
+          metrics.ctr,
+          metrics.average_cpc,
+          metrics.conversions,
+          metrics.conversions_value
+        FROM campaign
+        WHERE campaign.status = 'ENABLED'
+          AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
+        ORDER BY segments.date ASC
+      `;
+    }
 
-    console.log('Executing historical data query:', query);
+    console.log(`Executing ${entityType} historical data query:`, query);
 
     const response = await customer.query(query);
 

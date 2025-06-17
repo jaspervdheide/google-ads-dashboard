@@ -43,11 +43,11 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
 
     const fetchDailyMetrics = async () => {
       try {
-        // Use existing historical-data endpoint with the selected customer
+        // Get the selected customer ID from localStorage
         const selectedCustomerId = localStorage.getItem('selectedAccount') || '1946606314';
         
-        // Check if the endpoint exists by making a safe request
-        const response = await fetch(`/api/historical-data?customerId=${selectedCustomerId}&dateRange=30`);
+        // Use the extended historical-data API with campaign-specific filtering
+        const response = await fetch(`/api/historical-data?customerId=${selectedCustomerId}&campaignId=${campaignId}&dateRange=30`);
         
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -55,9 +55,12 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
         
         const result = await response.json();
         
-        if (result.success && result.data?.dailyBreakdown) {
+        if (result.success && result.data) {
+          // Handle the historical data array format
+          const historicalData = Array.isArray(result.data) ? result.data : [];
+          
           // Transform API data to chart format
-          const chartData = result.data.dailyBreakdown.map((day: any) => {
+          const chartData = historicalData.map((day: any) => {
             let value = 0;
             
             // Map metric types to API response fields
@@ -75,19 +78,22 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
                 value = day.ctr || 0;
                 break;
               case 'avgCpc':
-                value = day.avgCpc || 0;
+                value = day.avgCpc || day.average_cpc || 0;
                 break;
               case 'conversions':
                 value = day.conversions || 0;
                 break;
               case 'conversionsValue':
-                value = day.conversionsValue || 0;
+                value = day.conversionsValue || day.conversions_value || 0;
                 break;
               case 'roas':
                 value = day.roas || 0;
                 break;
               case 'cpa':
                 value = day.cpa || 0;
+                break;
+              case 'poas':
+                value = day.poas || 0;
                 break;
               default:
                 value = 0;
@@ -96,7 +102,7 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
             return {
               date: day.date,
               value: Math.round(value * 100) / 100, // Round to 2 decimals
-              formattedDate: new Date(day.date).toLocaleDateString('en-US', { 
+              formattedDate: day.dateFormatted || new Date(day.date).toLocaleDateString('en-US', { 
                 month: 'short', 
                 day: 'numeric' 
               })
@@ -109,7 +115,7 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
           setDailyData([]);
         }
       } catch (error) {
-        console.error('Error fetching daily metrics:', error);
+        console.error('Error fetching daily metrics for campaign:', campaignId, error);
         // No data available - set empty array
         setDailyData([]);
       }
@@ -132,6 +138,8 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
         return `${value.toFixed(2)}%`;
       case 'roas':
         return `${value.toFixed(2)}x`;
+      case 'poas':
+        return `${value.toFixed(1)}%`;
       case 'clicks':
       case 'impressions':
       case 'conversions':
@@ -162,7 +170,8 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
       conversions: 'Conversions',
       conversionsValue: 'Conv. Value',
       cpa: 'CPA',
-      roas: 'POAS',
+      roas: 'ROAS',
+      poas: 'POAS',
       conversionRate: 'Conv. Rate'
     };
     return labels[metric] || metric;
@@ -191,7 +200,7 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
   // Calculate position - show on left for last two columns to prevent off-screen
   const getChartPosition = () => {
     const chartWidth = 320;
-    const isLastTwoColumns = metricType === 'conversionsValue' || metricType === 'roas';
+    const isLastTwoColumns = metricType === 'conversionsValue' || metricType === 'roas' || metricType === 'poas';
     
     if (isLastTwoColumns) {
       // Position to the left of the cursor
@@ -257,6 +266,10 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
             {loading ? (
               <div className="flex items-center justify-center h-full mx-1">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              </div>
+            ) : dailyData.length === 0 ? (
+              <div className="flex items-center justify-center h-full mx-1 text-xs text-gray-400">
+                No historical data available
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
