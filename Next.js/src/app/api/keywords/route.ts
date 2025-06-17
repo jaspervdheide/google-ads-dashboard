@@ -18,17 +18,14 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
     if (type === 'keyword') {
       // Keywords have match types in ad_group_criterion.keyword.match_type
       const rawMatchType = item.ad_group_criterion?.keyword?.match_type;
-      console.log(`[Keywords API] Keyword "${item.ad_group_criterion?.keyword?.text}" - Raw match type: "${rawMatchType}" (${typeof rawMatchType})`);
       
       // Convert numeric enum to string enum for keywords
       matchType = MatchTypeUtilities.getMatchTypeString(rawMatchType) || 'BROAD';
     } else if (type === 'search_term') {
       // Search terms have match types from segments.keyword.info.match_type
       const rawMatchType = item.segments?.keyword?.info?.match_type;
-      const keywordText = item.segments?.keyword?.info?.text;
       
       if (rawMatchType) {
-        console.log(`[Keywords API] Search term "${item.search_term_view?.search_term}" - Raw match type: "${rawMatchType}" (${typeof rawMatchType}) from keyword: "${keywordText}"`);
         // Convert numeric enum to string enum for search terms
         matchType = MatchTypeUtilities.getMatchTypeString(rawMatchType) || 'SEARCH_TERM';
       } else {
@@ -64,11 +61,11 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
       cost_per_conversion: item.metrics?.cost_per_conversion ? Number(item.metrics.cost_per_conversion) / 1000000 : 0,
       ctr: item.metrics?.ctr ? Number(item.metrics.ctr) * 100 : 0,
       average_cpc: item.metrics?.average_cpc ? Number(item.metrics.average_cpc) / 1000000 : 0,
-              // Calculate CPC and ROAS safely
-        cpc: item.metrics?.clicks > 0 && item.metrics?.cost_micros ? 
-             convertCostFromMicros(Number(item.metrics.cost_micros)) / Number(item.metrics.clicks) : 0,
-        roas: item.metrics?.cost_micros > 0 && item.metrics?.conversions_value ? 
-              Number(item.metrics.conversions_value) / convertCostFromMicros(Number(item.metrics.cost_micros)) : 0,
+      // Calculate CPC and ROAS safely
+      cpc: item.metrics?.clicks > 0 && item.metrics?.cost_micros ? 
+           convertCostFromMicros(Number(item.metrics.cost_micros)) / Number(item.metrics.clicks) : 0,
+      roas: item.metrics?.cost_micros > 0 && item.metrics?.conversions_value ? 
+            Number(item.metrics.conversions_value) / convertCostFromMicros(Number(item.metrics.cost_micros)) : 0,
       impression_share: item.metrics?.search_impression_share || null,
       budget_lost_is: item.metrics?.search_budget_lost_impression_share || null,
       rank_lost_is: item.metrics?.search_rank_lost_impression_share || null
@@ -77,27 +74,24 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
 };
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const customerId = searchParams.get('customerId');
-  const dateRange = parseInt(searchParams.get('dateRange') || '30');
-  const dataType = searchParams.get('dataType') || 'keywords'; // keywords, search_terms, or both
-
-  console.log(`[Keywords API] Request received - customerId: ${customerId}, dateRange: ${dateRange}, dataType: ${dataType}`);
-
-  if (!customerId) {
-    return handleValidationError('Customer ID is required');
-  }
-
   try {
-    console.log(`[Keywords API] Fetching ${dataType} for customer ${customerId} with ${dateRange} days range...`);
+    const { searchParams } = new URL(request.url);
+    const customerId = searchParams.get('customerId');
+    const dateRange = searchParams.get('dateRange');
+    const dataType = searchParams.get('dataType') || 'both';
+
+    if (!customerId || !dateRange) {
+      return handleValidationError('Missing required parameters: customerId and dateRange');
+    }
+
+    // Single API summary log
+    logger.apiStart('keywords', { customerId, dateRange, dataType });
 
     // Create Google Ads connection using utility
     const { customer } = createGoogleAdsConnection(customerId);
 
     // Calculate date range using utility
-    const { startDateStr, endDateStr } = getFormattedDateRange(dateRange);
-
-    logger.apiStart('Keywords', { customerId, dateRange, dataType, startDate: startDateStr, endDate: endDateStr });
+    const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
 
     // Add date range filter to queries
     const dateFilter = `AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
@@ -170,35 +164,21 @@ export async function GET(request: NextRequest) {
     let normalizedSearchTerms: any[] = [];
 
     if (dataType === 'keywords' || dataType === 'both') {
-      logger.queryStart('Keywords', customerId);
       try {
         keywordsResponse = await customer.query(keywordsQuery);
-        logger.queryComplete('Keywords', keywordsResponse.length, customerId);
         normalizedKeywords = normalizeKeywordData(keywordsResponse, 'keyword');
       } catch (keywordError) {
-        logger.error('Error fetching keywords', keywordError, { customerId });
+        logger.error('Error fetching keywords', keywordError);
       }
     }
 
     if (dataType === 'search_terms' || dataType === 'both') {
-      logger.queryStart('Search Terms', customerId);
       try {
         searchTermsResponse = await customer.query(searchTermsQuery);
-        logger.queryComplete('Search Terms', searchTermsResponse.length, customerId);
         normalizedSearchTerms = normalizeKeywordData(searchTermsResponse, 'search_term');
       } catch (searchTermsError) {
-        logger.error('Error fetching search terms', searchTermsError, { customerId });
+        logger.error('Error fetching search terms', searchTermsError);
       }
-    }
-    
-    // Log sample of keywords with match types for debugging
-    if (normalizedKeywords.length > 0) {
-      const sampleKeywords = normalizedKeywords.slice(0, 5).map(k => ({
-        text: k.keyword_text,
-        matchType: k.match_type,
-        type: k.type
-      }));
-      logger.sampleData('keywords with match types', sampleKeywords);
     }
     
     // Determine what data to return based on dataType
@@ -311,14 +291,17 @@ export async function GET(request: NextRequest) {
       date_range: {
         start_date: startDateStr,
         end_date: endDateStr,
-        days: dateRange
+        days: parseInt(dateRange)
       }
     };
 
-    logger.apiComplete('Keywords', combinedData.length);
-    return createSuccessResponse(responseData, `✅ Retrieved ${combinedData.length} items (${normalizedKeywords.length} keywords, ${normalizedSearchTerms.length} search terms)`);
+    // Single API completion summary log
+    logger.apiComplete('keywords', combinedData.length);
+    
+    return createSuccessResponse(responseData, `Retrieved ${combinedData.length} items (${normalizedKeywords.length} keywords, ${normalizedSearchTerms.length} search terms)`);
 
-  } catch (error) {
+  } catch (error: any) {
+    logger.error('Keywords API failed', error);
     return handleApiError(error, 'Keywords Data');
   }
 } 

@@ -6,6 +6,11 @@
 import React from 'react';
 import { Campaign, CampaignData } from '../types';
 import { logger } from './logger';
+import { 
+  formatNumber, 
+  formatCurrency, 
+  formatPercentage 
+} from './index';
 
 // Helper function to get current High Spend threshold
 export const getHighSpendThreshold = (campaignData: CampaignData | null) => {
@@ -76,49 +81,38 @@ export const getFilteredAndSortedCampaigns = (
   if (!campaignData) return [];
   
   let campaigns = [...campaignData.campaigns];
-  
-  // Debug: Log all campaigns before filtering
-  console.log('📊 All campaigns before filtering:', campaigns.map(c => ({
-    name: c.name, 
-    status: c.status,
-    clicks: c.clicks,
-    impressions: c.impressions
-  })));
+  const originalCount = campaigns.length;
+
+  // Development-only summary logging
+  if (process.env.NODE_ENV === 'development') {
+    logger.debug('Campaign filtering started', { 
+      originalCount, 
+      statusFilter, 
+      searchTerm: campaignSearch ? 'provided' : 'none',
+      activeFilters: Array.from(activeFilters)
+    });
+  }
   
   // Status filter - "Active Only" means campaigns with actual activity
   if (statusFilter === 'active') {
-    console.log('📊 Applying ACTIVE filter - filtering for campaigns with activity...');
-    const beforeCount = campaigns.length;
     campaigns = campaigns.filter(c => {
       // Consider a campaign "active" if it has impressions OR clicks
-      // This filters out campaigns that are ENABLED but have no traffic
-      const hasActivity = c.impressions > 0 || c.clicks > 0;
-      console.log(`📊 Campaign "${c.name}": impressions=${c.impressions}, clicks=${c.clicks}, hasActivity=${hasActivity}`);
-      return hasActivity;
+      return c.impressions > 0 || c.clicks > 0;
     });
-    console.log(`📊 Active filter result: ${beforeCount} -> ${campaigns.length} campaigns (filtered out inactive campaigns)`);
-  } else {
-    console.log('📊 Showing ALL campaigns (including ENABLED campaigns with no activity)');
   }
-  
-  console.log(`📊 After status filter (${statusFilter}): ${campaigns.length} campaigns`);
   
   // Apply pre-filters
   if (activeFilters.size > 0) {
-    const beforeCount = campaigns.length;
     campaigns = applyPreFilters(campaigns, activeFilters);
-    console.log(`📊 Pre-filters applied (${Array.from(activeFilters).join(', ')}): ${beforeCount} -> ${campaigns.length} campaigns`);
   }
   
   // Search filter
   if (campaignSearch.trim()) {
     const searchTerm = campaignSearch.toLowerCase().trim();
-    const beforeCount = campaigns.length;
     campaigns = campaigns.filter(c => 
       c.name.toLowerCase().includes(searchTerm) ||
       c.id.toLowerCase().includes(searchTerm)
     );
-    console.log(`📊 Search filter "${searchTerm}": ${beforeCount} -> ${campaigns.length} campaigns`);
   }
   
   // Apply sorting
@@ -150,8 +144,15 @@ export const getFilteredAndSortedCampaigns = (
       return campaignSort.direction === 'asc' ? comparison : -comparison;
     });
   }
+
+  // Single summary log in development
+  if (process.env.NODE_ENV === 'development') {
+    logger.debug('Campaign filtering completed', { 
+      originalCount, 
+      filteredCount: campaigns.length
+    });
+  }
   
-  console.log('📊 Final filtered campaigns:', campaigns.length);
   return campaigns;
 };
 
@@ -259,4 +260,103 @@ export const getPerformanceLevel = (value: number, allValues: number[], metric: 
   const p25 = sorted[Math.floor(sorted.length * 0.25)];
   
   return value >= p75 ? 'high' : value <= p25 ? 'low' : 'medium';
+};
+
+export const filterAndSortCampaigns = (
+  campaigns: any[],
+  statusFilter: string,
+  searchTerm: string,
+  sortColumn: string,
+  sortDirection: 'asc' | 'desc',
+  pageSize: number,
+  activeFilters: Set<string> = new Set()
+) => {
+  if (!Array.isArray(campaigns)) {
+    logger.warn('Invalid campaigns data provided to filterAndSortCampaigns');
+    return [];
+  }
+
+  let filteredCampaigns = [...campaigns];
+  const originalCount = filteredCampaigns.length;
+
+  // Development-only detailed logging
+  if (process.env.NODE_ENV === 'development') {
+    logger.debug('Campaign filtering started', { 
+      originalCount, 
+      statusFilter, 
+      searchTerm: searchTerm ? 'provided' : 'none',
+      activeFilters: Array.from(activeFilters)
+    });
+  }
+
+  // Apply status filter
+  if (statusFilter === 'active') {
+    filteredCampaigns = filteredCampaigns.filter(c => {
+      const hasActivity = c.impressions > 0 || c.clicks > 0;
+      return hasActivity;
+    });
+  }
+
+  // Apply pre-filters (campaign type filters)
+  if (activeFilters.size > 0) {
+    const beforeCount = filteredCampaigns.length;
+    filteredCampaigns = filteredCampaigns.filter(campaign => {
+      return Array.from(activeFilters).some(filter => {
+        switch (filter) {
+          case 'Search':
+            return campaign.campaignType === 'SEARCH';
+          case 'Shopping':
+            return campaign.campaignType === 'SHOPPING';
+          case 'Performance Max':
+            return campaign.campaignType === 'PERFORMANCE_MAX';
+          case 'Display':
+            return campaign.campaignType === 'DISPLAY';
+          default:
+            return false;
+        }
+      });
+    });
+  }
+
+  // Apply search filter
+  if (searchTerm) {
+    const beforeCount = filteredCampaigns.length;
+    filteredCampaigns = filteredCampaigns.filter(campaign =>
+      campaign.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }
+
+  // Sort campaigns
+  filteredCampaigns.sort((a, b) => {
+    let aValue = a[sortColumn];
+    let bValue = b[sortColumn];
+    
+    if (aValue === undefined || aValue === null) return 1;
+    if (bValue === undefined || bValue === null) return -1;
+    
+    if (typeof aValue === 'string') {
+      aValue = aValue.toLowerCase();
+      bValue = bValue.toLowerCase();
+    }
+    
+    if (sortDirection === 'asc') {
+      return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    } else {
+      return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+    }
+  });
+
+  // Apply pagination
+  const paginatedCampaigns = filteredCampaigns.slice(0, pageSize);
+
+  // Single summary log in development
+  if (process.env.NODE_ENV === 'development') {
+    logger.debug('Campaign filtering completed', { 
+      originalCount, 
+      filteredCount: filteredCampaigns.length,
+      paginatedCount: paginatedCampaigns.length
+    });
+  }
+
+  return paginatedCampaigns;
 }; 

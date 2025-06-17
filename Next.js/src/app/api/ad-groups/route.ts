@@ -3,6 +3,7 @@ import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
 import { getFormattedDateRange } from '@/utils/dateUtils';
 import { handleValidationError, handleApiError, createSuccessResponse } from '@/utils/errorHandler';
 import { calculateDerivedMetrics, convertCostFromMicros } from '@/utils/apiHelpers';
+import { logger } from '@/utils/logger';
 
 // Helper function to convert complex asset coverage data to percentage
 function calculateAssetCoveragePercentage(actionItems: any): number {
@@ -55,7 +56,8 @@ export async function GET(request: Request) {
       return handleValidationError('Customer ID is required');
     }
 
-    console.log(`Fetching ad groups and asset groups for customer ${customerId} with ${dateRange} days range, type: ${groupType}...`);
+    // Single API summary log instead of verbose logging
+    logger.apiStart('ad-groups', { customerId, dateRange, groupType });
     
     // Calculate date range using utility
     const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
@@ -68,7 +70,7 @@ export async function GET(request: Request) {
     // Query for traditional ad groups (non-Performance Max)
     if (groupType === 'all' || groupType === 'traditional') {
       const traditionalAdGroupsQuery = `
-        SELECT 
+        SELECT
           ad_group.id,
           ad_group.name,
           ad_group.status,
@@ -83,15 +85,13 @@ export async function GET(request: Request) {
           metrics.conversions_value,
           metrics.ctr,
           metrics.average_cpc
-        FROM ad_group 
+        FROM ad_group
         WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
           AND campaign.advertising_channel_type != 'PERFORMANCE_MAX'
           AND ad_group.status IN ('ENABLED', 'PAUSED')
         ORDER BY metrics.cost_micros DESC
       `;
 
-      console.log('Executing traditional ad groups query:', traditionalAdGroupsQuery);
-      
       try {
         const traditionalResults = await customer.query(traditionalAdGroupsQuery);
         
@@ -127,14 +127,12 @@ export async function GET(request: Request) {
         });
         
         const traditionalGroups = Array.from(traditionalGroupMap.values());
-        
+
         // Fetch Quality Score data for traditional ad groups
         if (traditionalGroups.length > 0) {
-          console.log('Fetching Quality Score data for traditional ad groups...');
-          
           // Try a simpler Quality Score query without date filter first
           const qualityScoreQuery = `
-            SELECT 
+            SELECT
               ad_group_criterion.ad_group,
               ad_group_criterion.quality_info.quality_score,
               ad_group_criterion.keyword.text
@@ -145,11 +143,9 @@ export async function GET(request: Request) {
               AND campaign.advertising_channel_type != 'PERFORMANCE_MAX'
             LIMIT 1000
           `;
-          
+
           try {
-            console.log('Executing Quality Score query:', qualityScoreQuery);
             const qualityScoreResults = await customer.query(qualityScoreQuery);
-            console.log(`Quality Score query returned ${qualityScoreResults.length} results`);
             
             // Calculate average Quality Score per ad group
             const qualityScoreMap = new Map();
@@ -159,9 +155,9 @@ export async function GET(request: Request) {
               const qualityScore = row.ad_group_criterion?.quality_info?.quality_score;
               const keywordText = row.ad_group_criterion?.keyword?.text;
               
-              // Log first few results for debugging
-              if (index < 5) {
-                console.log(`Quality Score result ${index}:`, {
+              // Log first few results for debugging in development only
+              if (process.env.NODE_ENV === 'development' && index < 3) {
+                logger.debug('Quality Score sample', {
                   adGroupId,
                   qualityScore,
                   keywordText,
@@ -183,22 +179,17 @@ export async function GET(request: Request) {
                 data.count += 1;
               }
             });
-            
-            console.log(`Quality Score map has ${qualityScoreMap.size} ad groups with data`);
-            
+
             // Add Quality Score to traditional ad groups
             traditionalGroups.forEach(group => {
               const qualityData = qualityScoreMap.get(group.id);
               if (qualityData && qualityData.count > 0) {
                 group.avgQualityScore = Math.round((qualityData.totalScore / qualityData.count) * 10) / 10;
-                console.log(`Ad Group ${group.id} (${group.name}) - Quality Score: ${group.avgQualityScore} (from ${qualityData.count} keywords)`);
               } else {
                 group.avgQualityScore = null; // No Quality Score data available
-                console.log(`Ad Group ${group.id} (${group.name}) - No Quality Score data`);
               }
             });
             
-            console.log(`Successfully calculated Quality Score for ${qualityScoreMap.size} ad groups`);
           } catch (error) {
             console.error('Error fetching Quality Score data:', error);
             // Add null Quality Score to all groups if query fails
@@ -210,7 +201,6 @@ export async function GET(request: Request) {
         
         allGroups.push(...traditionalGroups);
         
-        console.log(`Successfully retrieved ${traditionalGroups.length} traditional ad groups`);
       } catch (error) {
         console.error('Error fetching traditional ad groups:', error);
       }
@@ -219,7 +209,7 @@ export async function GET(request: Request) {
     // Query for Performance Max asset groups
     if (groupType === 'all' || groupType === 'asset') {
       const assetGroupsQuery = `
-        SELECT 
+        SELECT
           asset_group.id,
           asset_group.name,
           asset_group.status,
@@ -236,18 +226,16 @@ export async function GET(request: Request) {
           metrics.conversions_value,
           metrics.ctr,
           metrics.average_cpc
-        FROM asset_group 
+        FROM asset_group
         WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
           AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'
           AND asset_group.status IN ('ENABLED', 'PAUSED')
         ORDER BY metrics.cost_micros DESC
       `;
 
-      console.log('Executing Performance Max asset groups query:', assetGroupsQuery);
-      
       try {
         const assetResults = await customer.query(assetGroupsQuery);
-        
+
         // Process asset groups
         const assetGroupMap = new Map();
         
@@ -292,7 +280,6 @@ export async function GET(request: Request) {
         const assetGroups = Array.from(assetGroupMap.values());
         allGroups.push(...assetGroups);
         
-        console.log(`Successfully retrieved ${assetGroups.length} Performance Max asset groups`);
       } catch (error) {
         console.error('Error fetching Performance Max asset groups:', error);
       }
@@ -308,7 +295,7 @@ export async function GET(request: Request) {
         conversions: group.conversions,
         conversionsValue: group.conversionsValueMicros
       });
-      
+
       return {
         ...group,
         ...derivedMetrics,
@@ -331,7 +318,8 @@ export async function GET(request: Request) {
     const traditionalCount = processedGroups.filter(g => g.groupType === 'ad_group').length;
     const assetCount = processedGroups.filter(g => g.groupType === 'asset_group').length;
 
-    console.log(`Successfully retrieved ${processedGroups.length} total groups (${traditionalCount} traditional, ${assetCount} asset groups)`);
+    // Single API completion summary log
+    logger.apiComplete('ad-groups', processedGroups.length);
     
     const responseData = {
       groups: processedGroups,
@@ -350,7 +338,7 @@ export async function GET(request: Request) {
       groupType
     };
 
-    return createSuccessResponse(responseData, `✅ Retrieved ${processedGroups.length} groups (${traditionalCount} traditional, ${assetCount} asset) for ${dateRange} days`);
+    return createSuccessResponse(responseData, `Retrieved ${processedGroups.length} groups (${traditionalCount} traditional, ${assetCount} asset)`);
 
   } catch (error) {
     return handleApiError(error, 'Ad Groups Data');
