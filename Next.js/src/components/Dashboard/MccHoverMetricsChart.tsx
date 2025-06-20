@@ -35,7 +35,7 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!isVisible || !metricType || !data?.accounts || !data?.dateRange) return;
+    if (!isVisible || !metricType || !data?.accounts) return;
 
     setLoading(true);
     setDailyData([]);
@@ -43,16 +43,14 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
     const fetchMccHistoricalMetrics = async () => {
       try {
         const accounts = data.accounts;
-        const dateRange = data.dateRange;
-        const days = dateRange.days || 30;
+        // Use the same approach as HoverMetricsChart - hardcode 30 days for now
+        const days = 30;
         
         console.log('MccHoverMetricsChart: Starting historical data fetch', { 
           metricType, 
           accountCount: accounts.length, 
           days,
-          dateRange,
-          'data.dateRange': data.dateRange,
-          'data.dateRange.days': data.dateRange?.days
+          'data.dateRange': data.dateRange
         });
         
         // Fetch historical data for each account in parallel
@@ -307,15 +305,6 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
 
   const chartPosition = getChartPosition();
   const { trend, change } = getTrendData();
-  
-  // Debug logging for render
-  console.log('MccHoverMetricsChart render:', {
-    metricType,
-    'data?.dateRange': data?.dateRange,
-    'data?.dateRange?.days': data?.dateRange?.days,
-    'dailyData.length': dailyData.length,
-    loading
-  });
 
   return (
     <div
@@ -367,7 +356,7 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
               <div className="text-sm mb-2">No historical data available</div>
               <div className="w-full h-16 bg-gray-100 rounded flex items-center justify-center">
                 <div className="text-xs text-gray-500">
-                  {data?.dateRange?.days || 30}-day trend
+                  30-day trend
                 </div>
               </div>
             </div>
@@ -411,7 +400,7 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
         {/* Footer */}
         <div className="flex justify-between items-center text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
           <span>Start</span>
-          <span>{data?.dateRange?.days || 30}-day trend</span>
+          <span>30-day trend</span>
           <span>End</span>
         </div>
       </div>
