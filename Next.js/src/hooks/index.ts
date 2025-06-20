@@ -8,6 +8,7 @@ export { default as useAnomalyData } from './useAnomalyData';
 export { useAdGroupData } from './useAdGroupData';
 export { useProductData } from './useProductData';
 export { useKeywordData } from './useKeywordData';
+export { useMccOverviewData } from './useMccOverviewData';
 
 // State management hooks
 export { useAccountState } from './useAccountState';

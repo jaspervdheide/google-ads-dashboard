@@ -94,7 +94,7 @@ export default function Dashboard() {
   const { 
     data: keywordData, 
     loading: keywordLoading
-  } = useKeywordData(accountState.selectedAccount, '30', false);
+  } = useKeywordData(accountState.selectedAccount, dateState.selectedDateRange, false);
 
   // Computed values
   const displayedCampaigns = useMemo(() => {
@@ -178,6 +178,7 @@ export default function Dashboard() {
     onDateRangeSelect: dropdownState.handleDateRangeSelect(dateState.handleDateRangeSelect),
     onRefresh: handleRefresh,
     onAnomalyAccountSelect: dropdownState.handleAnomalyAccountSelect(accountState.handleAccountSelect),
+    onMccOverviewClick: () => tableState.handlePageChange('mcc-overview'),
     formatDateRangeDisplay: dateState.formatDateRangeDisplay,
     formatTimeAgo,
     formatNumber,
@@ -291,6 +292,17 @@ export default function Dashboard() {
     setChartType: chartState.handleChartTypeChange
   };
 
+  const mccOverviewProps = {
+    selectedDateRange: dateState.selectedDateRange,
+    onAccountClick: (account: any) => {
+      // When an account is clicked in MCC overview, switch to that account and go to dashboard
+      accountState.handleAccountSelect(account.id);
+      tableState.handlePageChange('dashboard');
+    },
+    onMetricHover: handleMetricHover,
+    onMetricLeave: handleMetricLeave
+  };
+
   // Loading and error states
   if (accountState.loading && !campaignData) {
     return (
@@ -330,6 +342,7 @@ export default function Dashboard() {
         analyticsProps={analyticsProps}
         keywordsProps={keywordsProps}
         settingsProps={settingsProps}
+        mccOverviewProps={mccOverviewProps}
       />
     </DashboardLayout>
   );

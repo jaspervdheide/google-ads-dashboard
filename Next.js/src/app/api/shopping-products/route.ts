@@ -124,7 +124,8 @@ export async function GET(request: Request) {
             metrics.ctr,
             metrics.average_cpc,
             metrics.conversions,
-            metrics.conversions_value
+            metrics.conversions_value,
+            metrics.cost_of_goods_sold_micros
           FROM shopping_performance_view
           WHERE campaign.id = ${campaignId}
             AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
@@ -162,6 +163,7 @@ export async function GET(request: Request) {
             costMicros: row.metrics?.cost_micros || 0,
             conversions: row.metrics?.conversions || 0,
             conversionsValue: row.metrics?.conversions_value || 0,
+            cogsMicros: row.metrics?.cost_of_goods_sold_micros || 0,
           };
           
           // Convert campaign type to numeric value
@@ -177,6 +179,7 @@ export async function GET(request: Request) {
             existing.rawMetrics.costMicros += rawMetrics.costMicros;
             existing.rawMetrics.conversions += rawMetrics.conversions;
             existing.rawMetrics.conversionsValue += rawMetrics.conversionsValue;
+            existing.rawMetrics.cogsMicros += rawMetrics.cogsMicros;
           } else {
             // New product entry
             allProducts.set(productKey, {
@@ -211,6 +214,7 @@ export async function GET(request: Request) {
     const processedProducts = Array.from(allProducts.values()).map(product => {
       const cost = convertCostFromMicros(product.rawMetrics.costMicros);
       const price = convertCostFromMicros(product.priceMicros);
+      const cogs = convertCostFromMicros(product.rawMetrics.cogsMicros);
       
       // Use shared utility for metrics calculations
       const derivedMetrics = calculateDerivedMetrics({
@@ -221,13 +225,19 @@ export async function GET(request: Request) {
         conversionsValue: product.rawMetrics.conversionsValue
       });
       
+      // Calculate profitability metrics
+      const margin = product.rawMetrics.conversionsValue - cogs;
+      const marginPercent = product.rawMetrics.conversionsValue > 0 ? (margin / product.rawMetrics.conversionsValue) * 100 : 0;
+      const poas = cost > 0 ? margin / cost : 0;
+      
       return {
         ...product,
         ...derivedMetrics,
         price: price,
-        // Add shopping-specific POAS calculation
-        poas: cost > 0 && product.rawMetrics.conversionsValue > 0 ? 
-              ((product.rawMetrics.conversionsValue - cost) / cost) * 100 : 0,
+        cogs: cogs,
+        margin: margin,
+        marginPercent: marginPercent,
+        poas: poas,
         // Remove rawMetrics from final output
         rawMetrics: undefined,
       };
@@ -244,9 +254,16 @@ export async function GET(request: Request) {
     
     const totals: any = calculateDerivedMetrics(rawTotals);
     
-    // Add shopping-specific totals
-    totals.averagePoas = totals.cost > 0 && totals.conversionsValue > 0 ? 
-                        ((totals.conversionsValue - totals.cost) / totals.cost) * 100 : 0;
+    // Add shopping-specific totals with COGS
+    const totalCogs = processedProducts.reduce((sum, p) => sum + p.cogs, 0);
+    const totalMargin = totals.conversionsValue - totalCogs;
+    const avgMarginPercent = totals.conversionsValue > 0 ? (totalMargin / totals.conversionsValue) * 100 : 0;
+    const averagePoas = totals.cost > 0 ? totalMargin / totals.cost : 0;
+    
+    totals.totalCogs = totalCogs;
+    totals.totalMargin = totalMargin;
+    totals.avgMarginPercent = avgMarginPercent;
+    totals.averagePoas = averagePoas;
 
     // Get campaign type statistics
     const shoppingCount = processedProducts.filter(p => p.campaignType === 4).length;

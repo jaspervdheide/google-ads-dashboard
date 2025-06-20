@@ -11,7 +11,8 @@ import {
   AlertTriangle,
   AlertCircle,
   Info,
-  ExternalLink
+  ExternalLink,
+  Globe
 } from 'lucide-react';
 import { DateRange, Account, AnomalyData } from '../../types';
 
@@ -48,6 +49,7 @@ interface HeaderProps {
   onDateRangeSelect: (range: DateRange) => void;
   onRefresh: () => void;
   onAnomalyAccountSelect: (accountId: string) => void;
+  onMccOverviewClick?: () => void;
   formatDateRangeDisplay: (range: DateRange) => string;
   formatTimeAgo: (dateString: string) => string;
   formatNumber: (num: number) => string;
@@ -77,6 +79,7 @@ const Header: React.FC<HeaderProps> = ({
   onDateRangeSelect,
   onRefresh,
   onAnomalyAccountSelect,
+  onMccOverviewClick,
   formatDateRangeDisplay,
   formatTimeAgo,
   formatNumber,
@@ -304,6 +307,15 @@ const Header: React.FC<HeaderProps> = ({
               </div>
             )}
           </div>
+
+          {/* MCC Overview Button */}
+          <button
+            onClick={onMccOverviewClick || (() => window.location.href = '/mcc-overview')}
+            className="p-2 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
+            title="MCC Overview - All Accounts"
+          >
+            <Globe className="h-4 w-4" />
+          </button>
 
           {/* Refresh Button */}
           <button
