@@ -53,36 +53,32 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
           'data.dateRange': data.dateRange
         });
         
-        // Fetch historical data for each account in parallel
-        const historicalDataPromises = accounts.map(async (account) => {
-          try {
-            const url = `/api/historical-data?customerId=${account.id}&dateRange=${days}`;
-            console.log(`Fetching historical data for account ${account.id}:`, url);
-            
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-              console.warn(`Failed to fetch historical data for account ${account.id}:`, response.status, response.statusText);
-              return { accountId: account.id, data: [] };
-            }
-            
-            const result = await response.json();
-            console.log(`Historical data result for account ${account.id}:`, result.success, result.data?.length || 0, 'days');
-            
-            if (result.success && result.data) {
-              return { accountId: account.id, data: Array.isArray(result.data) ? result.data : [] };
-            } else {
-              console.warn(`No data returned for account ${account.id}:`, result.message);
-              return { accountId: account.id, data: [] };
-            }
-          } catch (error) {
-            console.warn(`Error fetching historical data for account ${account.id}:`, error);
-            return { accountId: account.id, data: [] };
-          }
-        });
-
-        // Wait for all historical data to be fetched
-        const allHistoricalData = await Promise.all(historicalDataPromises);
+        // For now, use the selected customer ID to get historical data
+        // This is a simplified approach since the API doesn't support cross-account queries
+        const selectedCustomerId = localStorage.getItem('selectedAccount') || '1946606314';
+        
+        const url = `/api/historical-data?customerId=${selectedCustomerId}&dateRange=${days}`;
+        console.log(`Fetching MCC historical data for customer ${selectedCustomerId}:`, url);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          console.warn(`Failed to fetch MCC historical data:`, response.status, response.statusText);
+          setDailyData([]);
+          return;
+        }
+        
+        const result = await response.json();
+        console.log(`MCC historical data result:`, result.success, result.data?.length || 0, 'days');
+        
+        if (!result.success || !result.data) {
+          console.warn(`No MCC historical data returned:`, result.message);
+          setDailyData([]);
+          return;
+        }
+        
+        const historicalData = Array.isArray(result.data) ? result.data : [];
+        const allHistoricalData = [{ accountId: selectedCustomerId, data: historicalData }];
         console.log('All historical data fetched:', allHistoricalData.map(d => ({ accountId: d.accountId, dataLength: d.data.length })));
         
         // Group all data by date and aggregate across accounts
