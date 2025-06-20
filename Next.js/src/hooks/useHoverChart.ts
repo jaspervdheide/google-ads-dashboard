@@ -5,8 +5,9 @@ interface HoverChartState {
   position: { x: number; y: number };
   metricType: string;
   metricValue: string;
-  campaignName: string;
-  campaignId: string;
+  entityName: string;
+  entityId: string;
+  entityType?: 'campaign' | 'adGroup' | 'keyword' | 'product';
 }
 
 interface UseHoverChartReturn {
@@ -15,8 +16,9 @@ interface UseHoverChartReturn {
     event: React.MouseEvent,
     metricType: string,
     metricValue: string | number,
-    campaignName: string,
-    campaignId: string
+    entityName: string,
+    entityId: string,
+    entityType?: 'campaign' | 'adGroup' | 'keyword' | 'product'
   ) => void;
   handleMetricLeave: (metricType?: string) => void;
   handleChartHover: () => void;
@@ -29,8 +31,9 @@ export const useHoverChart = (): UseHoverChartReturn => {
     position: { x: 0, y: 0 },
     metricType: '',
     metricValue: '',
-    campaignName: '',
-    campaignId: ''
+    entityName: '',
+    entityId: '',
+    entityType: 'campaign'
   });
 
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -39,8 +42,9 @@ export const useHoverChart = (): UseHoverChartReturn => {
     event: React.MouseEvent,
     metricType: string,
     metricValue: string | number,
-    campaignName: string,
-    campaignId: string
+    entityName: string,
+    entityId: string,
+    entityType: 'campaign' | 'adGroup' | 'keyword' | 'product' = 'campaign'
   ) => {
     const rect = event.currentTarget.getBoundingClientRect();
     setHoverChart({
@@ -48,8 +52,9 @@ export const useHoverChart = (): UseHoverChartReturn => {
       position: { x: rect.right + 10, y: rect.top },
       metricType,
       metricValue: metricValue.toString(),
-      campaignName,
-      campaignId
+      entityName,
+      entityId,
+      entityType
     });
   }, []);
 

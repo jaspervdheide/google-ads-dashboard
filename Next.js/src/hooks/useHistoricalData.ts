@@ -6,7 +6,10 @@ import { DateRange, getApiDateRange } from '../utils/dateHelpers';
 const useHistoricalData = (
   accountId: string | null, 
   dateRange: DateRange | null, 
-  forceRefresh = false
+  forceRefresh = false,
+  campaignId?: string | null,
+  adGroupId?: string | null,
+  keywordId?: string | null
 ) => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -20,8 +23,12 @@ const useHistoricalData = (
       setError('');
       
       const apiDateRange = getApiDateRange(dateRange);
-      // Use a more stable cache key based on actual date values
-      const cacheKey = `historical_${accountId}_${apiDateRange.startDate}_${apiDateRange.endDate}`;
+      
+      // Build cache key based on all parameters
+      let cacheKey = `historical_${accountId}_${apiDateRange.startDate}_${apiDateRange.endDate}`;
+      if (campaignId) cacheKey += `_campaign_${campaignId}`;
+      if (adGroupId) cacheKey += `_adgroup_${adGroupId}`;
+      if (keywordId) cacheKey += `_keyword_${keywordId}`;
       
       if (!skipCache) {
         const cachedData = getFromCache<any>(cacheKey);
@@ -32,7 +39,13 @@ const useHistoricalData = (
         }
       }
       
-      const response = await fetch(`/api/historical-data?customerId=${accountId}&dateRange=${apiDateRange.days}`);
+      // Build API URL with optional parameters
+      let apiUrl = `/api/historical-data?customerId=${accountId}&dateRange=${apiDateRange.days}`;
+      if (campaignId) apiUrl += `&campaignId=${campaignId}`;
+      if (adGroupId) apiUrl += `&adGroupId=${adGroupId}`;
+      if (keywordId) apiUrl += `&keywordId=${keywordId}`;
+      
+      const response = await fetch(apiUrl);
       const result = await response.json();
       
       if (result.success) {
@@ -48,7 +61,7 @@ const useHistoricalData = (
     } finally {
       setLoading(false);
     }
-  }, [accountId, dateRange?.id, dateRange?.startDate?.getTime(), dateRange?.endDate?.getTime()]);
+  }, [accountId, dateRange?.id, dateRange?.startDate?.getTime(), dateRange?.endDate?.getTime(), campaignId, adGroupId, keywordId]);
 
   useEffect(() => {
     fetchData(forceRefresh);

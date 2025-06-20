@@ -9,8 +9,9 @@ interface HoverMetricsChartProps {
   position: { x: number; y: number };
   metricType: string;
   metricValue: string | number;
-  campaignName: string;
-  campaignId: string;
+  entityName: string;
+  entityId: string;
+  entityType?: 'campaign' | 'adGroup' | 'keyword' | 'product';
   onChartHover?: () => void;
   onChartLeave?: () => void;
 }
@@ -47,8 +48,9 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
   position,
   metricType,
   metricValue,
-  campaignName,
-  campaignId,
+  entityName,
+  entityId,
+  entityType = 'campaign',
   onChartHover,
   onChartLeave
 }) => {
@@ -56,10 +58,10 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
   const [loading, setLoading] = useState(false);
 
   // Don't show chart for invalid IDs (like product IDs)
-  const shouldShowChart = isValidMetricsId(campaignId);
+  const shouldShowChart = isValidMetricsId(entityId);
 
   useEffect(() => {
-    if (!isVisible || !campaignId || !metricType || !shouldShowChart) return;
+    if (!isVisible || !entityId || !metricType || !shouldShowChart) return;
 
     setLoading(true);
     setDailyData([]);
@@ -69,8 +71,17 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
         // Get the selected customer ID from localStorage
         const selectedCustomerId = localStorage.getItem('selectedAccount') || '1946606314';
         
-        // Use the extended historical-data API with campaign-specific filtering
-        const response = await fetch(`/api/historical-data?customerId=${selectedCustomerId}&campaignId=${campaignId}&dateRange=30`);
+        // Use the extended historical-data API with entity-specific filtering
+        let apiUrl = `/api/historical-data?customerId=${selectedCustomerId}&dateRange=30`;
+        if (entityType === 'campaign') {
+          apiUrl += `&campaignId=${entityId}`;
+        } else if (entityType === 'adGroup') {
+          apiUrl += `&adGroupId=${entityId}`;
+        } else if (entityType === 'keyword') {
+          apiUrl += `&keywordId=${entityId}`;
+        }
+        
+        const response = await fetch(apiUrl);
         
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -138,7 +149,7 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
           setDailyData([]);
         }
       } catch (error) {
-        console.error('Error fetching daily metrics for campaign:', campaignId, error);
+        console.error(`Error fetching daily metrics for ${entityType}:`, entityId, error);
         // No data available - set empty array
         setDailyData([]);
       }
@@ -146,7 +157,7 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
     };
 
     fetchDailyMetrics();
-  }, [isVisible, campaignId, metricType, metricValue, shouldShowChart]);
+  }, [isVisible, entityId, metricType, metricValue, shouldShowChart, entityType]);
 
   const formatMetricValue = (value: number, metric: string): string => {
     switch (metric) {
@@ -275,7 +286,7 @@ const HoverMetricsChart: React.FC<HoverMetricsChartProps> = ({
       <div className="p-3 flex flex-col" style={{ height: 'calc(100% - 45px)' }}>
         {/* Campaign name and current value */}
         <div className="mb-2">
-          <p className="text-xs text-gray-500 truncate">{campaignName}</p>
+                      <p className="text-xs text-gray-500 truncate">{entityName}</p>
           <p className="text-2xl font-bold text-gray-900 leading-tight">
             {formatMainValue(metricValue, metricType)}
           </p>

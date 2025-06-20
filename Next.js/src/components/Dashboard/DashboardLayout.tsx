@@ -93,8 +93,9 @@ export default function DashboardLayout({
         position={hoverProps.hoverChart.position}
         metricType={hoverProps.hoverChart.metricType}
         metricValue={hoverProps.hoverChart.metricValue}
-        campaignName={hoverProps.hoverChart.campaignName}
-        campaignId={hoverProps.hoverChart.campaignId}
+        entityName={hoverProps.hoverChart.entityName}
+        entityId={hoverProps.hoverChart.entityId}
+        entityType={hoverProps.hoverChart.entityType}
         onChartHover={hoverProps.onChartHover}
         onChartLeave={hoverProps.onChartLeave}
       />

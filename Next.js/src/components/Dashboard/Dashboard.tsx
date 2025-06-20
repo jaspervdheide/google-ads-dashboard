@@ -156,6 +156,47 @@ export default function Dashboard() {
     productState.handleProductSort(column);
   };
 
+  // Entity-specific hover handlers
+  const handleCampaignMetricHover = (
+    event: React.MouseEvent,
+    metricType: string,
+    metricValue: string | number,
+    entityName: string,
+    entityId: string
+  ) => {
+    handleMetricHover(event, metricType, metricValue, entityName, entityId, 'campaign');
+  };
+
+  const handleAdGroupMetricHover = (
+    event: React.MouseEvent,
+    metricType: string,
+    metricValue: string | number,
+    entityName: string,
+    entityId: string
+  ) => {
+    handleMetricHover(event, metricType, metricValue, entityName, entityId, 'adGroup');
+  };
+
+  const handleKeywordMetricHover = (
+    event: React.MouseEvent,
+    metricType: string,
+    metricValue: string | number,
+    entityName: string,
+    entityId: string
+  ) => {
+    handleMetricHover(event, metricType, metricValue, entityName, entityId, 'keyword');
+  };
+
+  const handleProductMetricHover = (
+    event: React.MouseEvent,
+    metricType: string,
+    metricValue: string | number,
+    entityName: string,
+    entityId: string
+  ) => {
+    handleMetricHover(event, metricType, metricValue, entityName, entityId, 'product');
+  };
+
   // Props objects for components
   const headerProps = {
     selectedAccount: accountState.selectedAccount,
@@ -243,7 +284,7 @@ export default function Dashboard() {
     onCampaignViewModeChange: tableState.handleViewModeChange,
     onTableSort: handleTableSort,
     onCampaignClick: handleCampaignClick,
-    onMetricHover: handleMetricHover,
+    onMetricHover: handleCampaignMetricHover,
     onMetricLeave: handleMetricLeave
   };
 
@@ -257,7 +298,7 @@ export default function Dashboard() {
     onAdGroupViewModeChange: adGroupState.handleAdGroupViewModeChange,
     onAdGroupSort: adGroupState.handleAdGroupSort,
     onAdGroupClick: handleAdGroupClick,
-    onMetricHover: handleMetricHover,
+    onMetricHover: handleAdGroupMetricHover,
     onMetricLeave: handleMetricLeave
   };
 
@@ -273,7 +314,7 @@ export default function Dashboard() {
     onProductSort: handleProductSort,
     onPageChange: productState.handlePageChange,
     onProductClick: handleProductClick,
-    onMetricHover: handleMetricHover,
+    onMetricHover: handleProductMetricHover,
     onMetricLeave: handleMetricLeave
   };
 
