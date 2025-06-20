@@ -35,82 +35,168 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!isVisible || !metricType || !data?.accounts) return;
+    if (!isVisible || !metricType || !data?.accounts || !data?.dateRange) return;
 
     setLoading(true);
     setDailyData([]);
 
-    const generateMccHistoricalMetrics = () => {
+    const fetchMccHistoricalMetrics = async () => {
       try {
-        // Use the provided data instead of fetching
         const accounts = data.accounts;
         const dateRange = data.dateRange;
-        const days = dateRange?.days || 30;
+        const days = dateRange.days || 30;
         
-        const totalValue = accounts.reduce((sum: number, account: any) => {
-          switch (metricType) {
-            case 'clicks':
-              return sum + (account.metrics.clicks || 0);
-            case 'impressions':
-              return sum + (account.metrics.impressions || 0);
-            case 'cost':
-              return sum + (account.metrics.cost || 0);
-            case 'conversions':
-              return sum + (account.metrics.conversions || 0);
-            case 'conversionsValue':
-              return sum + (account.metrics.conversionsValue || 0);
-            case 'ctr':
-              return sum + (account.metrics.ctr || 0);
-            case 'avgCpc':
-              return sum + (account.metrics.avgCpc || 0);
-            case 'roas':
-              return sum + (account.metrics.roas || 0);
-            case 'cpa':
-              return sum + (account.metrics.cpa || 0);
-            default:
-              return sum;
+        console.log('MccHoverMetricsChart: Starting historical data fetch', { 
+          metricType, 
+          accountCount: accounts.length, 
+          days,
+          dateRange,
+          'data.dateRange': data.dateRange,
+          'data.dateRange.days': data.dateRange?.days
+        });
+        
+        // Fetch historical data for each account in parallel
+        const historicalDataPromises = accounts.map(async (account) => {
+          try {
+            const url = `/api/historical-data?customerId=${account.id}&dateRange=${days}`;
+            console.log(`Fetching historical data for account ${account.id}:`, url);
+            
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+              console.warn(`Failed to fetch historical data for account ${account.id}:`, response.status, response.statusText);
+              return { accountId: account.id, data: [] };
+            }
+            
+            const result = await response.json();
+            console.log(`Historical data result for account ${account.id}:`, result.success, result.data?.length || 0, 'days');
+            
+            if (result.success && result.data) {
+              return { accountId: account.id, data: Array.isArray(result.data) ? result.data : [] };
+            } else {
+              console.warn(`No data returned for account ${account.id}:`, result.message);
+              return { accountId: account.id, data: [] };
+            }
+          } catch (error) {
+            console.warn(`Error fetching historical data for account ${account.id}:`, error);
+            return { accountId: account.id, data: [] };
           }
-        }, 0);
+        });
+
+        // Wait for all historical data to be fetched
+        const allHistoricalData = await Promise.all(historicalDataPromises);
+        console.log('All historical data fetched:', allHistoricalData.map(d => ({ accountId: d.accountId, dataLength: d.data.length })));
         
-        // For aggregated metrics like CTR, ROAS, CPA, use weighted averages
-        let displayValue = totalValue;
-        if (['ctr', 'avgCpc', 'roas', 'cpa'].includes(metricType)) {
-          displayValue = totalValue / accounts.length; // Simple average for now
-        }
+        // Group all data by date and aggregate across accounts
+        const dailyAggregates: { [key: string]: any } = {};
+        let totalDataPoints = 0;
         
-        // Generate simulated daily trend for the dynamic date range
-        const chartData: DailyMccData[] = [];
-        const today = new Date();
-        
-        for (let i = days - 1; i >= 0; i--) {
-          const date = new Date(today);
-          date.setDate(date.getDate() - i);
-          
-          // Simulate daily variation (±15% around average)
-          const dailyAverage = displayValue / days;
-          const variation = (Math.random() - 0.5) * 0.3; // ±15%
-          const dailyValue = Math.max(0, dailyAverage * (1 + variation));
-          
-          chartData.push({
-            date: date.toISOString().split('T')[0],
-            value: Math.round(dailyValue * 100) / 100,
-            formattedDate: date.toLocaleDateString('en-US', { 
-              month: 'short', 
-              day: 'numeric' 
-            }),
-            accountsCount: accounts.length
+        allHistoricalData.forEach(({ accountId, data: accountData }) => {
+          accountData.forEach((day: any) => {
+            const date = day.date;
+            if (!date) return;
+            
+            totalDataPoints++;
+            
+            if (!dailyAggregates[date]) {
+              dailyAggregates[date] = {
+                date,
+                formattedDate: day.formattedDate || new Date(date).toLocaleDateString('en-US', { 
+                  month: 'short', 
+                  day: 'numeric' 
+                }),
+                clicks: 0,
+                impressions: 0,
+                cost: 0,
+                conversions: 0,
+                conversionsValue: 0,
+                ctr: 0,
+                avgCpc: 0,
+                roas: 0,
+                cpa: 0,
+                accountsWithData: 0
+              };
+            }
+            
+            // Aggregate metrics across accounts
+            dailyAggregates[date].clicks += day.clicks || 0;
+            dailyAggregates[date].impressions += day.impressions || 0;
+            dailyAggregates[date].cost += day.cost || 0;
+            dailyAggregates[date].conversions += day.conversions || 0;
+            dailyAggregates[date].conversionsValue += day.conversionsValue || 0;
+            
+            // For percentage/ratio metrics, we'll calculate weighted averages
+            if (day.clicks > 0 || day.impressions > 0 || day.cost > 0) {
+              dailyAggregates[date].accountsWithData += 1;
+            }
           });
-        }
+        });
+
+        console.log('Daily aggregates created:', Object.keys(dailyAggregates).length, 'days, total data points:', totalDataPoints);
+
+        // Calculate derived metrics and extract the specific metric values
+        const chartData: DailyMccData[] = Object.values(dailyAggregates)
+          .map((day: any) => {
+            // Calculate derived metrics
+            const ctr = day.impressions > 0 ? (day.clicks / day.impressions) * 100 : 0;
+            const avgCpc = day.clicks > 0 ? day.cost / day.clicks : 0;
+            const roas = day.cost > 0 ? day.conversionsValue / day.cost : 0;
+            const cpa = day.conversions > 0 ? day.cost / day.conversions : 0;
+            
+            // Get the value for the specific metric type
+            let value = 0;
+            switch (metricType) {
+              case 'clicks':
+                value = day.clicks;
+                break;
+              case 'impressions':
+                value = day.impressions;
+                break;
+              case 'cost':
+                value = day.cost;
+                break;
+              case 'conversions':
+                value = day.conversions;
+                break;
+              case 'conversionsValue':
+                value = day.conversionsValue;
+                break;
+              case 'ctr':
+                value = ctr;
+                break;
+              case 'avgCpc':
+                value = avgCpc;
+                break;
+              case 'roas':
+                value = roas;
+                break;
+              case 'cpa':
+                value = cpa;
+                break;
+              default:
+                value = 0;
+            }
+            
+            return {
+              date: day.date,
+              value: Math.round(value * 100) / 100, // Round to 2 decimals
+              formattedDate: day.formattedDate,
+              accountsCount: accounts.length
+            };
+          })
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Sort by date
         
+        console.log('Chart data prepared:', chartData.length, 'days for metric:', metricType);
+        console.log('Sample chart data:', chartData.slice(0, 3));
         setDailyData(chartData);
       } catch (error) {
-        console.error('Error generating MCC historical metrics:', error);
+        console.error('Error fetching MCC historical metrics:', error);
         setDailyData([]);
       }
       setLoading(false);
     };
 
-    generateMccHistoricalMetrics();
+    fetchMccHistoricalMetrics();
   }, [isVisible, metricType, metricValue, data]);
 
   const formatMetricValue = (value: number, metric: string): string => {
@@ -198,133 +284,136 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
   const getChartPosition = () => {
     const chartWidth = 320;
     const chartHeight = 280;
-    const padding = 20;
+    const buffer = 20;
     
-    let left = position.x + 15;
-    let top = position.y - chartHeight - 10;
+    let x = position.x + 15;
+    let y = position.y - chartHeight - 10;
     
-    // Adjust if chart would go off-screen
-    if (left + chartWidth > window.innerWidth - padding) {
-      left = position.x - chartWidth - 15;
+    // Adjust if chart would go off screen
+    if (x + chartWidth > window.innerWidth) {
+      x = position.x - chartWidth - 15;
     }
-    if (top < padding) {
-      top = position.y + 25;
+    if (y < buffer) {
+      y = position.y + 25;
+    }
+    if (y + chartHeight > window.innerHeight) {
+      y = window.innerHeight - chartHeight - buffer;
     }
     
-    return { left, top };
+    return { x: Math.max(buffer, x), y: Math.max(buffer, y) };
   };
 
-  if (!isVisible || loading) return null;
+  if (!isVisible) return null;
 
-  const { left, top } = getChartPosition();
+  const chartPosition = getChartPosition();
   const { trend, change } = getTrendData();
+  
+  // Debug logging for render
+  console.log('MccHoverMetricsChart render:', {
+    metricType,
+    'data?.dateRange': data?.dateRange,
+    'data?.dateRange?.days': data?.dateRange?.days,
+    'dailyData.length': dailyData.length,
+    loading
+  });
 
   return (
     <div
-      className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4"
-      style={{ left, top, width: '320px' }}
+      className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 pointer-events-auto"
+      style={{
+        left: `${chartPosition.x}px`,
+        top: `${chartPosition.y}px`,
+        width: '320px',
+        height: '280px'
+      }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center space-x-2">
+      <div className="p-4 border-b border-gray-100">
+        <div className="flex items-center space-x-2 mb-2">
           <Globe className="w-4 h-4 text-teal-600" />
-          <h4 className="font-semibold text-gray-900 text-sm">
-            {getMetricLabel(metricType)}
-          </h4>
+          <span className="text-sm font-medium text-gray-700">MCC Overview</span>
         </div>
-        <div className="flex items-center space-x-1">
-          {getTrendIcon()}
-          <span className={`text-xs font-medium ${getTrendColor()}`}>
-            {trend !== 'neutral' ? `${change.toFixed(1)}%` : 'Stable'}
-          </span>
-        </div>
-      </div>
-
-      {/* Current Value */}
-      <div className="mb-3">
-        <div className="text-2xl font-bold text-gray-900">
-          {formatMainValue(metricValue, metricType)}
-        </div>
-        <div className="text-xs text-gray-500">
-          Across {dailyData[0]?.accountsCount || 0} accounts • Last 30 days
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-lg font-semibold text-gray-900">
+              {formatMainValue(metricValue, metricType)}
+            </div>
+            <div className="text-xs text-gray-500">
+              {getMetricLabel(metricType)}
+            </div>
+          </div>
+          {trend !== 'neutral' && (
+            <div className="flex items-center space-x-1">
+              {getTrendIcon()}
+              <span className={`text-xs font-medium ${getTrendColor()}`}>
+                {change.toFixed(1)}%
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Chart */}
-      <div className="h-32 mb-3">
-        <ResponsiveContainer width="100%" height="100%">
-          {['cost', 'conversionsValue', 'conversions'].includes(metricType) ? (
-            <BarChart data={dailyData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-              <XAxis 
-                dataKey="formattedDate" 
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 10, fill: '#9ca3af' }}
-                interval="preserveStartEnd"
-              />
-              <YAxis hide />
-              <Tooltip
-                content={({ active, payload, label }) => {
-                  if (active && payload && payload[0]) {
-                    return (
-                      <div className="bg-gray-900 text-white px-2 py-1 rounded text-xs">
-                        <div>{label}</div>
-                        <div>{formatMetricValue(payload[0].value as number, metricType)}</div>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Bar 
-                dataKey="value" 
-                fill="#0d9488" 
-                radius={[2, 2, 0, 0]}
-                stroke="#0d9488"
-                strokeWidth={0.5}
-              />
-            </BarChart>
+      <div className="p-4">
+        <div className="h-[180px]">
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600"></div>
+            </div>
+          ) : dailyData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-gray-400">
+              <div className="text-sm mb-2">No historical data available</div>
+              <div className="w-full h-16 bg-gray-100 rounded flex items-center justify-center">
+                <div className="text-xs text-gray-500">
+                  {data?.dateRange?.days || 30}-day trend
+                </div>
+              </div>
+            </div>
           ) : (
-            <LineChart data={dailyData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-              <XAxis 
-                dataKey="formattedDate" 
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 10, fill: '#9ca3af' }}
-                interval="preserveStartEnd"
-              />
-              <YAxis hide />
-              <Tooltip
-                content={({ active, payload, label }) => {
-                  if (active && payload && payload[0]) {
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={dailyData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                <XAxis 
+                  dataKey="formattedDate" 
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10, fill: '#6b7280' }}
+                  interval="preserveStartEnd"
+                />
+                <YAxis hide />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload || !payload.length) return null;
                     return (
-                      <div className="bg-gray-900 text-white px-2 py-1 rounded text-xs">
-                        <div>{label}</div>
-                        <div>{formatMetricValue(payload[0].value as number, metricType)}</div>
+                      <div className="bg-gray-900 text-white px-3 py-2 rounded shadow-lg text-xs">
+                        <div className="font-medium">{label}</div>
+                        <div className="text-gray-300">
+                          {formatMetricValue(payload[0].value as number, metricType)}
+                        </div>
                       </div>
                     );
-                  }
-                  return null;
-                }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="value" 
-                stroke="#0d9488" 
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 3, fill: '#0d9488' }}
-              />
-            </LineChart>
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#0d9488"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 3, fill: '#0d9488' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           )}
-        </ResponsiveContainer>
-      </div>
-
-      {/* Footer */}
-      <div className="text-xs text-gray-500 border-t pt-2">
-        MCC-level aggregated performance • Hover to see daily breakdown
+        </div>
+        
+        {/* Footer */}
+        <div className="flex justify-between items-center text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
+          <span>Start</span>
+          <span>{data?.dateRange?.days || 30}-day trend</span>
+          <span>End</span>
+        </div>
       </div>
     </div>
   );
