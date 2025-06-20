@@ -50,7 +50,9 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
           metricType, 
           accountCount: accounts.length, 
           days,
-          'data.dateRange': data.dateRange
+          'data.dateRange': data.dateRange,
+          isVisible,
+          'data?.accounts': !!data?.accounts
         });
         
         // For now, use the selected customer ID to get historical data
@@ -78,82 +80,36 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
         }
         
         const historicalData = Array.isArray(result.data) ? result.data : [];
-        const allHistoricalData = [{ accountId: selectedCustomerId, data: historicalData }];
-        console.log('All historical data fetched:', allHistoricalData.map(d => ({ accountId: d.accountId, dataLength: d.data.length })));
+        console.log('Raw historical data received:', historicalData.length, 'days');
+        console.log('Sample raw data:', historicalData.slice(0, 2));
         
-        // Group all data by date and aggregate across accounts
-        const dailyAggregates: { [key: string]: any } = {};
-        let totalDataPoints = 0;
-        
-        allHistoricalData.forEach(({ accountId, data: accountData }) => {
-          accountData.forEach((day: any) => {
-            const date = day.date;
-            if (!date) return;
-            
-            totalDataPoints++;
-            
-            if (!dailyAggregates[date]) {
-              dailyAggregates[date] = {
-                date,
-                formattedDate: day.formattedDate || new Date(date).toLocaleDateString('en-US', { 
-                  month: 'short', 
-                  day: 'numeric' 
-                }),
-                clicks: 0,
-                impressions: 0,
-                cost: 0,
-                conversions: 0,
-                conversionsValue: 0,
-                ctr: 0,
-                avgCpc: 0,
-                roas: 0,
-                cpa: 0,
-                accountsWithData: 0
-              };
-            }
-            
-            // Aggregate metrics across accounts
-            dailyAggregates[date].clicks += day.clicks || 0;
-            dailyAggregates[date].impressions += day.impressions || 0;
-            dailyAggregates[date].cost += day.cost || 0;
-            dailyAggregates[date].conversions += day.conversions || 0;
-            dailyAggregates[date].conversionsValue += day.conversionsValue || 0;
-            
-            // For percentage/ratio metrics, we'll calculate weighted averages
-            if (day.clicks > 0 || day.impressions > 0 || day.cost > 0) {
-              dailyAggregates[date].accountsWithData += 1;
-            }
-          });
-        });
-
-        console.log('Daily aggregates created:', Object.keys(dailyAggregates).length, 'days, total data points:', totalDataPoints);
-
-        // Calculate derived metrics and extract the specific metric values
-        const chartData: DailyMccData[] = Object.values(dailyAggregates)
+        // Transform the account-level historical data directly to chart format
+        // The API already returns aggregated data for the selected account
+        const chartData: DailyMccData[] = historicalData
           .map((day: any) => {
-            // Calculate derived metrics
-            const ctr = day.impressions > 0 ? (day.clicks / day.impressions) * 100 : 0;
-            const avgCpc = day.clicks > 0 ? day.cost / day.clicks : 0;
-            const roas = day.cost > 0 ? day.conversionsValue / day.cost : 0;
-            const cpa = day.conversions > 0 ? day.cost / day.conversions : 0;
+            // Calculate derived metrics from the raw data
+            const ctr = day.ctr || (day.impressions > 0 ? (day.clicks / day.impressions) * 100 : 0);
+            const avgCpc = day.avgCpc || day.average_cpc || (day.clicks > 0 ? day.cost / day.clicks : 0);
+            const roas = day.roas || (day.cost > 0 ? day.conversionsValue / day.cost : 0);
+            const cpa = day.cpa || (day.conversions > 0 ? day.cost / day.conversions : 0);
             
             // Get the value for the specific metric type
             let value = 0;
             switch (metricType) {
               case 'clicks':
-                value = day.clicks;
+                value = day.clicks || 0;
                 break;
               case 'impressions':
-                value = day.impressions;
+                value = day.impressions || 0;
                 break;
               case 'cost':
-                value = day.cost;
+                value = day.cost || 0;
                 break;
               case 'conversions':
-                value = day.conversions;
+                value = day.conversions || 0;
                 break;
               case 'conversionsValue':
-                value = day.conversionsValue;
+                value = day.conversionsValue || day.conversions_value || 0;
                 break;
               case 'ctr':
                 value = ctr;
@@ -174,14 +130,19 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
             return {
               date: day.date,
               value: Math.round(value * 100) / 100, // Round to 2 decimals
-              formattedDate: day.formattedDate,
+              formattedDate: day.dateFormatted || new Date(day.date).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric' 
+              }),
               accountsCount: accounts.length
             };
           })
-          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Sort by date
+          .filter((item: DailyMccData) => item.date) // Filter out any items without dates
+          .sort((a: DailyMccData, b: DailyMccData) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Sort by date
         
         console.log('Chart data prepared:', chartData.length, 'days for metric:', metricType);
         console.log('Sample chart data:', chartData.slice(0, 3));
+        console.log('Setting dailyData with length:', chartData.length);
         setDailyData(chartData);
       } catch (error) {
         console.error('Error fetching MCC historical metrics:', error);
