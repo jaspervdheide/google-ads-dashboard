@@ -15,6 +15,7 @@ export { default as Charts } from './Charts';
 export { default as KPICards } from './KPICards';
 export { default as HoverMetricsChart } from './HoverMetricsChart';
 export { default as CustomDateModal } from './CustomDateModal';
+export { default as FilterBar } from './FilterBar';
 export { default as SettingsView } from './SettingsView';
 export { default as MccOverviewView } from './MccOverviewView';
 export { default as MccHoverMetricsChart } from './MccHoverMetricsChart';

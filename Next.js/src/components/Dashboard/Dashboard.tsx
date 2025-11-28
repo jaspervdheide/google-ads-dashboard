@@ -26,7 +26,8 @@ import {
   useChartState,
   useDateRangeState,
   useAdGroupState,
-  useKeywordState
+  useKeywordState,
+  useFilterState
 } from '../../hooks';
 
 import { DashboardLayout, PageRouter } from './';
@@ -51,6 +52,7 @@ export default function Dashboard() {
   const dateState = useDateRangeState();
   const adGroupState = useAdGroupState();
   const keywordState = useKeywordState();
+  const filterState = useFilterState();
   
   // Hover chart hook
   const { 
@@ -88,28 +90,103 @@ export default function Dashboard() {
     loading: keywordLoading
   } = useKeywordData(accountState.selectedAccount, dateState.selectedDateRange, false);
 
-  // Computed values
+  // Computed values - campaigns list for filter dropdown
+  const campaignsForFilter = useMemo(() => {
+    if (!campaignData?.campaigns) return [];
+    return campaignData.campaigns.map(c => ({
+      id: c.id,
+      name: c.name
+    }));
+  }, [campaignData]);
+
+  // Filtered campaign data for KPIs and charts
+  const filteredCampaignData = useMemo(() => {
+    if (!campaignData) return null;
+    if (filterState.selectedCampaigns.length === 0) return campaignData;
+    
+    const filteredCampaigns = campaignData.campaigns.filter(c => 
+      filterState.selectedCampaigns.includes(c.id)
+    );
+    
+    // Recalculate totals for filtered campaigns
+    const totals = filteredCampaigns.reduce((acc, c) => ({
+      impressions: acc.impressions + c.impressions,
+      clicks: acc.clicks + c.clicks,
+      cost: acc.cost + c.cost,
+      conversions: acc.conversions + c.conversions,
+      conversionsValue: acc.conversionsValue + c.conversionsValue,
+    }), { impressions: 0, clicks: 0, cost: 0, conversions: 0, conversionsValue: 0 });
+    
+    return {
+      ...campaignData,
+      campaigns: filteredCampaigns,
+      totals: {
+        ...totals,
+        ctr: totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0,
+        avgCpc: totals.clicks > 0 ? totals.cost / totals.clicks : 0,
+        conversionRate: totals.clicks > 0 ? (totals.conversions / totals.clicks) * 100 : 0,
+        cpa: totals.conversions > 0 ? totals.cost / totals.conversions : 0,
+        roas: totals.cost > 0 ? totals.conversionsValue / totals.cost : 0,
+      }
+    };
+  }, [campaignData, filterState.selectedCampaigns]);
+
+  // Ad groups list for filter dropdown
+  const adGroupsForFilter = useMemo(() => {
+    if (!realAdGroupData?.adGroups) return [];
+    return realAdGroupData.adGroups.map((ag: any) => ({
+      id: ag.id,
+      name: ag.name,
+      campaignId: ag.campaignId || '',
+      campaignName: ag.campaignName || ''
+    }));
+  }, [realAdGroupData]);
+
   const displayedCampaigns = useMemo(() => {
     if (!campaignData) return [];
+    
+    // First apply the campaign filter if any campaigns are selected
+    let filteredData = campaignData;
+    if (filterState.selectedCampaigns.length > 0) {
+      filteredData = {
+        ...campaignData,
+        campaigns: campaignData.campaigns.filter(c => 
+          filterState.selectedCampaigns.includes(c.id)
+        )
+      };
+    }
+    
     return getFilteredAndSortedCampaigns(
-      campaignData,
+      filteredData,
       tableState.statusFilter,
       new Set(), // activeFilters - empty for now
       tableState.campaignSearch,
       { field: tableState.sortBy, direction: tableState.sortOrder }
     );
-  }, [campaignData, tableState.campaignSearch, tableState.statusFilter, tableState.sortBy, tableState.sortOrder]);
+  }, [campaignData, tableState.campaignSearch, tableState.statusFilter, tableState.sortBy, tableState.sortOrder, filterState.selectedCampaigns]);
 
   const tableTotals = useMemo(() => {
     if (!campaignData) return { campaignCount: 0, clicks: 0, impressions: 0, cost: 0, conversions: 0, conversionsValue: 0, ctr: 0, avgCpc: 0, cpa: 0, roas: 0 };
+    
+    // Apply the campaign filter if any campaigns are selected
+    let filteredData = campaignData;
+    if (filterState.selectedCampaigns.length > 0) {
+      filteredData = {
+        ...campaignData,
+        campaigns: campaignData.campaigns.filter(c => 
+          filterState.selectedCampaigns.includes(c.id)
+        )
+      };
+    }
+    
     return calculateTableTotals(
-      campaignData,
+      filteredData,
       tableState.statusFilter,
       new Set(), // activeFilters - empty for now
       tableState.campaignSearch,
       { field: tableState.sortBy, direction: tableState.sortOrder }
     );
-  }, [campaignData, tableState.campaignSearch, tableState.statusFilter, tableState.sortBy, tableState.sortOrder]);
+  }, [campaignData, tableState.campaignSearch, tableState.statusFilter, tableState.sortBy, tableState.sortOrder, filterState.selectedCampaigns]);
 
   // Event handlers
   const handleRefresh = () => {
@@ -200,7 +277,30 @@ export default function Dashboard() {
     cleanCountryCode,
     getDisplayName,
     getSeverityIcon: getSeverityIconString,
-    getSeverityColor: getSeverityColorString
+    getSeverityColor: getSeverityColorString,
+    // Filter props
+    campaigns: campaignsForFilter,
+    adGroups: adGroupsForFilter,
+    filterState: {
+      selectedCampaigns: filterState.selectedCampaigns,
+      selectedAdGroups: filterState.selectedAdGroups,
+      deviceFilter: filterState.deviceFilter,
+      campaignDropdownOpen: filterState.campaignDropdownOpen,
+      adGroupDropdownOpen: filterState.adGroupDropdownOpen,
+      deviceDropdownOpen: filterState.deviceDropdownOpen,
+      hasActiveFilters: filterState.hasActiveFilters,
+    },
+    filterActions: {
+      onToggleCampaign: filterState.toggleCampaign,
+      onClearCampaigns: () => filterState.setSelectedCampaigns([]),
+      onToggleCampaignDropdown: filterState.toggleCampaignDropdown,
+      onToggleAdGroup: filterState.toggleAdGroup,
+      onClearAdGroups: () => filterState.setSelectedAdGroups([]),
+      onToggleAdGroupDropdown: filterState.toggleAdGroupDropdown,
+      onDeviceFilterChange: filterState.setDeviceFilter,
+      onToggleDeviceDropdown: filterState.toggleDeviceDropdown,
+      onClearAllFilters: filterState.clearAllFilters,
+    },
   };
 
   const sidebarProps = {
@@ -235,7 +335,7 @@ export default function Dashboard() {
     selectedAccount: accountState.selectedAccount,
     filteredAccounts: accountState.filteredAccounts,
     selectedDateRange: dateState.selectedDateRange,
-    campaignData,
+    campaignData: filteredCampaignData, // Use filtered data for KPIs
     campaignLoading,
     historicalData,
     historicalLoading,

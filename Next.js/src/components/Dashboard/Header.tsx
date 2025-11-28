@@ -15,6 +15,8 @@ import {
   Globe
 } from 'lucide-react';
 import { DateRange, Account, AnomalyData } from '../../types';
+import { DeviceFilter } from '../../hooks/useFilterState';
+import FilterBar from './FilterBar';
 
 // Custom Kovvar Icon Component
 const KovvarIcon = ({ className }: { className?: string }) => (
@@ -27,6 +29,18 @@ const KovvarIcon = ({ className }: { className?: string }) => (
     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
   </svg>
 );
+
+interface Campaign {
+  id: string;
+  name: string;
+}
+
+interface AdGroup {
+  id: string;
+  name: string;
+  campaignId: string;
+  campaignName: string;
+}
 
 interface HeaderProps {
   selectedAccount: string;
@@ -57,6 +71,29 @@ interface HeaderProps {
   getDisplayName: (account: Account) => string;
   getSeverityIcon: (severity: 'high' | 'medium' | 'low') => React.ReactNode;
   getSeverityColor: (severity: 'high' | 'medium' | 'low') => string;
+  // Filter props
+  campaigns?: Campaign[];
+  adGroups?: AdGroup[];
+  filterState?: {
+    selectedCampaigns: string[];
+    selectedAdGroups: string[];
+    deviceFilter: DeviceFilter;
+    campaignDropdownOpen: boolean;
+    adGroupDropdownOpen: boolean;
+    deviceDropdownOpen: boolean;
+    hasActiveFilters: boolean;
+  };
+  filterActions?: {
+    onToggleCampaign: (campaignId: string) => void;
+    onClearCampaigns: () => void;
+    onToggleCampaignDropdown: () => void;
+    onToggleAdGroup: (adGroupId: string) => void;
+    onClearAdGroups: () => void;
+    onToggleAdGroupDropdown: () => void;
+    onDeviceFilterChange: (device: DeviceFilter) => void;
+    onToggleDeviceDropdown: () => void;
+    onClearAllFilters: () => void;
+  };
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -86,7 +123,11 @@ const Header: React.FC<HeaderProps> = ({
   cleanCountryCode,
   getDisplayName,
   getSeverityIcon,
-  getSeverityColor
+  getSeverityColor,
+  campaigns = [],
+  adGroups = [],
+  filterState,
+  filterActions,
 }) => {
   return (
     <header className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 shadow-sm z-50">
@@ -208,6 +249,30 @@ const Header: React.FC<HeaderProps> = ({
               </div>
             )}
           </div>
+
+          {/* Filter Bar - Campaign, Ad Group, Device filters */}
+          {filterState && filterActions && (
+            <FilterBar
+              campaigns={campaigns}
+              selectedCampaigns={filterState.selectedCampaigns}
+              onToggleCampaign={filterActions.onToggleCampaign}
+              onClearCampaigns={filterActions.onClearCampaigns}
+              campaignDropdownOpen={filterState.campaignDropdownOpen}
+              onToggleCampaignDropdown={filterActions.onToggleCampaignDropdown}
+              adGroups={adGroups}
+              selectedAdGroups={filterState.selectedAdGroups}
+              onToggleAdGroup={filterActions.onToggleAdGroup}
+              onClearAdGroups={filterActions.onClearAdGroups}
+              adGroupDropdownOpen={filterState.adGroupDropdownOpen}
+              onToggleAdGroupDropdown={filterActions.onToggleAdGroupDropdown}
+              deviceFilter={filterState.deviceFilter}
+              onDeviceFilterChange={filterActions.onDeviceFilterChange}
+              deviceDropdownOpen={filterState.deviceDropdownOpen}
+              onToggleDeviceDropdown={filterActions.onToggleDeviceDropdown}
+              hasActiveFilters={filterState.hasActiveFilters}
+              onClearAllFilters={filterActions.onClearAllFilters}
+            />
+          )}
 
           {/* Notifications */}
           <div className="relative">

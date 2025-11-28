@@ -17,6 +17,7 @@ export { useProductState } from './useProductState';
 export { useChartState } from './useChartState';
 export { useDateRangeState } from './useDateRangeState';
 export { useDropdownState } from './useDropdownState';
+export { useFilterState } from './useFilterState';
 export { useKeywordState } from './useKeywordState';
 export { useTableState } from './useTableState';
 
