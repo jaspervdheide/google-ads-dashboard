@@ -18,7 +18,6 @@ import {
   useHistoricalData,
   useAnomalyData,
   useAdGroupData,
-  useProductData,
   useHoverChart,
   useKeywordData,
   useAccountState,
@@ -27,7 +26,6 @@ import {
   useChartState,
   useDateRangeState,
   useAdGroupState,
-  useProductState,
   useKeywordState
 } from '../../hooks';
 
@@ -52,7 +50,6 @@ export default function Dashboard() {
   const chartState = useChartState();
   const dateState = useDateRangeState();
   const adGroupState = useAdGroupState();
-  const productState = useProductState();
   const keywordState = useKeywordState();
   
   // Hover chart hook
@@ -85,11 +82,6 @@ export default function Dashboard() {
     data: realAdGroupData, 
     loading: adGroupLoading
   } = useAdGroupData(accountState.selectedAccount, dateState.selectedDateRange, false, 'all');
-
-  const { 
-    data: realProductData, 
-    loading: productLoading
-  } = useProductData(accountState.selectedAccount, dateState.selectedDateRange, false);
 
   const { 
     data: keywordData, 
@@ -148,14 +140,6 @@ export default function Dashboard() {
     tableState.handleSort(column);
   };
 
-  const handleProductClick = (product: any) => {
-    console.log('Product clicked:', product);
-  };
-
-  const handleProductSort = (column: string) => {
-    productState.handleProductSort(column);
-  };
-
   // Entity-specific hover handlers
   const handleCampaignMetricHover = (
     event: React.MouseEvent,
@@ -185,16 +169,6 @@ export default function Dashboard() {
     entityId: string
   ) => {
     handleMetricHover(event, metricType, metricValue, entityName, entityId, 'keyword');
-  };
-
-  const handleProductMetricHover = (
-    event: React.MouseEvent,
-    metricType: string,
-    metricValue: string | number,
-    entityName: string,
-    entityId: string
-  ) => {
-    handleMetricHover(event, metricType, metricValue, entityName, entityId, 'product');
   };
 
   // Props objects for components
@@ -271,7 +245,6 @@ export default function Dashboard() {
     chartType: chartState.chartType,
     dateGranularity: chartState.dateGranularity,
     statusFilter: tableState.statusFilter,
-    campaignViewMode: tableState.viewMode,
     tableSortColumn: tableState.sortBy,
     tableSortDirection: tableState.sortOrder,
     tableTotals,
@@ -281,7 +254,6 @@ export default function Dashboard() {
     onDateGranularityChange: chartState.handleDateGranularityChange,
     onManualGranularityOverride: () => {},
     onStatusFilterChange: tableState.handleStatusFilterChange,
-    onCampaignViewModeChange: tableState.handleViewModeChange,
     onTableSort: handleTableSort,
     onCampaignClick: handleCampaignClick,
     onMetricHover: handleCampaignMetricHover,
@@ -292,35 +264,12 @@ export default function Dashboard() {
     realAdGroupData,
     adGroupLoading,
     adGroupTypeFilter: adGroupState.adGroupTypeFilter,
-    adGroupViewMode: adGroupState.adGroupViewMode,
     adGroupSort: adGroupState.adGroupSort,
     onAdGroupTypeFilterChange: adGroupState.handleAdGroupTypeFilterChange,
-    onAdGroupViewModeChange: adGroupState.handleAdGroupViewModeChange,
     onAdGroupSort: adGroupState.handleAdGroupSort,
     onAdGroupClick: handleAdGroupClick,
     onMetricHover: handleAdGroupMetricHover,
     onMetricLeave: handleMetricLeave
-  };
-
-  const productsProps = {
-    realProductData,
-    productLoading,
-    campaignTypeFilter: productState.campaignTypeFilter,
-    productViewMode: productState.productViewMode,
-    productSort: productState.productSort,
-    currentPage: productState.currentPage,
-    onCampaignTypeFilterChange: productState.handleCampaignTypeFilterChange,
-    onProductViewModeChange: productState.handleProductViewModeChange,
-    onProductSort: handleProductSort,
-    onPageChange: productState.handlePageChange,
-    onProductClick: handleProductClick,
-    onMetricHover: handleProductMetricHover,
-    onMetricLeave: handleMetricLeave
-  };
-
-  const analyticsProps = {
-    campaignData,
-    displayedCampaigns
   };
 
   const keywordsProps = {
@@ -379,8 +328,6 @@ export default function Dashboard() {
         currentPage={tableState.currentPage}
         dashboardProps={dashboardProps}
         adGroupsProps={adGroupsProps}
-        productsProps={productsProps}
-        analyticsProps={analyticsProps}
         keywordsProps={keywordsProps}
         settingsProps={settingsProps}
         mccOverviewProps={mccOverviewProps}

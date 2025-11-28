@@ -1,8 +1,6 @@
 import React from 'react';
 import DashboardView from './DashboardView';
 import AdGroupsView from './AdGroupsView';
-import ProductsView from './ProductsView';
-import AnalyticsView from './AnalyticsView';
 import KeywordsWrapper from './KeywordsWrapper';
 import SettingsView from './SettingsView';
 import MccOverviewView from './MccOverviewView';
@@ -11,8 +9,6 @@ interface PageRouterProps {
   currentPage: string;
   dashboardProps: any;
   adGroupsProps: any;
-  productsProps: any;
-  analyticsProps: any;
   keywordsProps: any;
   settingsProps: any;
   mccOverviewProps: any;
@@ -22,8 +18,6 @@ export default function PageRouter({
   currentPage,
   dashboardProps,
   adGroupsProps,
-  productsProps,
-  analyticsProps,
   keywordsProps,
   settingsProps,
   mccOverviewProps
@@ -34,12 +28,6 @@ export default function PageRouter({
     
     case 'campaigns':
       return <AdGroupsView {...adGroupsProps} />;
-    
-    case 'products':
-      return <ProductsView {...productsProps} />;
-    
-    case 'analytics':
-      return <AnalyticsView {...analyticsProps} />;
     
     case 'keywords':
       return <KeywordsWrapper {...keywordsProps} />;
@@ -53,4 +41,4 @@ export default function PageRouter({
     default:
       return <DashboardView {...dashboardProps} />;
   }
-} 
+}

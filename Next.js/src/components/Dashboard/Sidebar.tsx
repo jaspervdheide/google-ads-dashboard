@@ -5,9 +5,6 @@ import {
   LayoutDashboard, 
   Target, 
   Search, 
-  Award,
-  Package,
-  TrendingUp,
   User
 } from 'lucide-react';
 
@@ -32,14 +29,11 @@ interface SidebarProps {
   onPageChange: (pageId: string) => void;
 }
 
-// Premium navigation structure
+// Navigation structure
 const navigationItems: NavigationItem[] = [
   { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
   { id: 'campaigns', name: 'Ad Groups', icon: Target },
   { id: 'keywords', name: 'Keywords', icon: Search },
-  { id: 'brands', name: 'Brands', icon: Award },
-  { id: 'products', name: 'Products', icon: Package },
-  { id: 'poas', name: 'POAS', icon: TrendingUp },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({
