@@ -14,6 +14,7 @@ export { default as Keywords } from './Keywords';
 export { default as KeywordsWrapper } from './KeywordsWrapper';
 export { default as Charts } from './Charts';
 export { default as KPICards } from './KPICards';
+export { default as PerformanceTab } from './PerformanceTab';
 export { default as TopPerformanceComponent } from './TopPerformanceComponent';
 export { default as TopCampaignsPerformance } from './TopCampaignsPerformance';
 export { default as TopAdGroupsPerformance } from './TopAdGroupsPerformance';

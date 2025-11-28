@@ -21,7 +21,7 @@ export const createGoogleAdsClient = (): GoogleAdsApi => {
 export const createCustomer = (client: GoogleAdsApi, customerId: string) => {
   return client.Customer({
     customer_id: customerId,
-    refresh_token: process.env.REFRESH_TOKEN!,
+    refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN!,
     login_customer_id: process.env.MCC_CUSTOMER_ID!,
   });
 };

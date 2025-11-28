@@ -9,7 +9,7 @@ A modern, real-time Google Ads campaign performance dashboard built with Next.js
 npm install
 
 # Set up environment variables
-cp .env.local.example .env.local
+cp .env.example .env.local
 # Edit .env.local with your Google Ads API credentials
 
 # Run development server
@@ -20,16 +20,41 @@ Visit `http://localhost:3000` to view the dashboard.
 
 ## 🔧 Environment Variables
 
-Create a `.env.local` file with your Google Ads API credentials:
+**Important**: The `.env.local` file is **NOT** committed to Git for security reasons. When cloning this repository, you must create it yourself.
+
+### Setup Steps:
+
+1. Copy the example file:
+   ```bash
+   cp .env.example .env.local
+   ```
+
+2. Fill in your actual Google Ads API credentials in `.env.local`:
 
 ```env
 # Google Ads API Configuration
-DEVELOPER_TOKEN=your_developer_token_here
-CLIENT_ID=your_client_id_here.apps.googleusercontent.com
+CLIENT_ID=your_client_id_here
 CLIENT_SECRET=your_client_secret_here
-REFRESH_TOKEN=your_refresh_token_here
-MCC_CUSTOMER_ID=123-456-7890
+DEVELOPER_TOKEN=your_developer_token_here
+MCC_CUSTOMER_ID=1234567890
 ```
+
+### Where to Get Credentials:
+
+- **CLIENT_ID & CLIENT_SECRET**: [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+  - Create OAuth 2.0 credentials
+  - Application type: Web application
+  
+- **DEVELOPER_TOKEN**: [Google Ads API Center](https://ads.google.com/aw/apicenter)
+  - Apply for API access
+  - Get your developer token
+  
+- **MCC_CUSTOMER_ID**: Your Google Ads Manager account ID (10 digits, no dashes)
+
+### Files in This Repo:
+
+- ✅ `.env.example` - **Committed to Git** - Template showing required variables
+- ❌ `.env.local` - **NOT committed** - Your actual secrets (listed in `.gitignore`)
 
 ## 🎯 Features
 

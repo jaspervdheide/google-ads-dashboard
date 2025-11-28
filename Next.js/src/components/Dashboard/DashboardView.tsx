@@ -4,6 +4,7 @@ import KPICards from './KPICards';
 import Charts from './Charts';
 import CampaignTable from './CampaignTable';
 import DashboardHeader from './DashboardHeader';
+import PerformanceTab from './PerformanceTab';
 import ConversionsByTypeChart from './ConversionsByTypeChart';
 import TopCampaignsPerformance from './TopCampaignsPerformance';
 import GenericPerformanceMatrix from './GenericPerformanceMatrix';
@@ -235,19 +236,12 @@ export default function DashboardView({
 
             {/* Chart Content */}
             {currentChartPage === 1 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="flex flex-col h-full">
-                <TopCampaignsPerformance campaignData={campaignData} />
-              </div>
-              
-              <div className="flex flex-col space-y-8 h-full">
-                <ConversionsByTypeChart campaignData={campaignData} />
-                <GenericPerformanceMatrix 
-                  data={campaignData} 
-                  config={campaignMatrixConfig} 
-                />
-              </div>
-            </div>
+              <PerformanceTab
+                campaignData={campaignData}
+                historicalData={historicalData}
+                dateRange={selectedDateRange}
+                loading={campaignLoading}
+              />
             )}
 
             {currentChartPage === 2 && (
