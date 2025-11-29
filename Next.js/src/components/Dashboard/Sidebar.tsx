@@ -3,8 +3,8 @@
 import React from 'react';
 import { 
   LayoutDashboard, 
-  Target, 
-  Search, 
+  Building2,
+  Settings,
   User
 } from 'lucide-react';
 
@@ -29,11 +29,11 @@ interface SidebarProps {
   onPageChange: (pageId: string) => void;
 }
 
-// Navigation structure
+// Navigation structure - simplified with drill-down in Dashboard
 const navigationItems: NavigationItem[] = [
   { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
-  { id: 'campaigns', name: 'Ad Groups', icon: Target },
-  { id: 'keywords', name: 'Keywords', icon: Search },
+  { id: 'mcc-overview', name: 'MCC Overview', icon: Building2 },
+  { id: 'settings', name: 'Settings', icon: Settings },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({

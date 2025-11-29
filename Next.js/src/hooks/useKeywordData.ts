@@ -16,7 +16,9 @@ export interface KeywordItem {
   conversions_value: number;
   roas: number;
   quality_score?: number;
+  ad_group_id: string;
   ad_group_name: string;
+  campaign_id: string;
   campaign_name: string;
   triggering_keyword?: string;
   status: string;

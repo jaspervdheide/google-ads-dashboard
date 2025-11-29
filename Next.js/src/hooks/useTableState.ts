@@ -3,8 +3,8 @@ import { useState } from 'react';
 export function useTableState() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
-  const [sortBy, setSortBy] = useState<string>('impressions');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortBy, setSortBy] = useState<string>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState<string>('dashboard');
   const [campaignSearch, setCampaignSearch] = useState<string>('');
 
@@ -41,8 +41,8 @@ export function useTableState() {
   const resetFilters = () => {
     setStatusFilter('all');
     setCampaignSearch('');
-    setSortBy('impressions');
-    setSortOrder('desc');
+    setSortBy('name');
+    setSortOrder('asc');
   };
 
   return {

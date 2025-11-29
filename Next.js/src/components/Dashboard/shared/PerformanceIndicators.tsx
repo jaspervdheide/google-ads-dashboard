@@ -63,5 +63,5 @@ export const getPerformanceStyles = (level: PerformanceLevel): string => {
 
 // Performance indicator component
 export const PerformanceIndicator: React.FC<{ level: PerformanceLevel }> = ({ level }) => (
-  <div className={`w-2 h-2 rounded-full mr-2 ${getPerformanceStyles(level)}`} />
+  <div className={`w-2 h-2 rounded-full mr-2 flex-shrink-0 ${getPerformanceStyles(level)}`} />
 ); 

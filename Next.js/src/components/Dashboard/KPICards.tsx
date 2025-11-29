@@ -19,6 +19,7 @@ import { formatKPIValue, calculatePOAS, getKpiChartColor } from '../../utils';
 interface KPICardsProps {
   campaignData: CampaignData | null;
   campaignLoading: boolean;
+  isRefreshing?: boolean; // Subtle indicator when refreshing data
   kpiPercentageChanges: Record<string, number>;
   selectedChartMetrics: string[];
   onKpiSelection: (kpiId: string) => void;
@@ -27,6 +28,7 @@ interface KPICardsProps {
 const KPICards: React.FC<KPICardsProps> = ({
   campaignData,
   campaignLoading,
+  isRefreshing = false,
   kpiPercentageChanges,
   selectedChartMetrics,
   onKpiSelection
@@ -179,12 +181,18 @@ const KPICards: React.FC<KPICardsProps> = ({
     return value;
   };
 
-  if (!campaignData || campaignLoading) {
+  // Only return null if no data and still loading for the first time
+  if (!campaignData && campaignLoading) {
+    return null;
+  }
+
+  // If we have no data at all, don't render
+  if (!campaignData) {
     return null;
   }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
+    <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8 transition-opacity duration-300 ${isRefreshing ? 'opacity-70' : 'opacity-100'}`}>
       {kpiConfig.map((kpi) => {
         const IconComponent = kpi.icon;
         const value = getKPIValue(kpi.id, campaignData);

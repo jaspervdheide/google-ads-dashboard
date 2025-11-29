@@ -19,6 +19,7 @@ interface ChartsProps {
   campaignData: CampaignData | null;
   historicalData: any;
   historicalLoading: boolean;
+  isRefreshing?: boolean;
   selectedChartMetrics: string[];
   chartType: 'line' | 'bar';
   setChartType: (type: 'line' | 'bar') => void;
@@ -32,6 +33,7 @@ const Charts: React.FC<ChartsProps> = ({
   campaignData,
   historicalData,
   historicalLoading,
+  isRefreshing = false,
   selectedChartMetrics,
   chartType,
   setChartType,
@@ -184,7 +186,7 @@ const Charts: React.FC<ChartsProps> = ({
   );
 
   return (
-    <div className="bg-white rounded-lg p-6">
+    <div className={`bg-white rounded-lg p-6 transition-opacity duration-300 ${isRefreshing ? 'opacity-50' : 'opacity-100'}`}>
       <div className="mb-6">
         <div className="flex items-center justify-between mb-5">
           <div>

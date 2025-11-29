@@ -9,6 +9,7 @@ export { useAdGroupData } from './useAdGroupData';
 export { useProductData } from './useProductData';
 export { useKeywordData } from './useKeywordData';
 export { useMccOverviewData } from './useMccOverviewData';
+export { useAdsData } from './useAdsData';
 
 // State management hooks
 export { useAccountState } from './useAccountState';

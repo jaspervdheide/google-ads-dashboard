@@ -14,12 +14,21 @@ export async function GET(request: NextRequest) {
     const campaignId = searchParams.get('campaignId');
     const adGroupId = searchParams.get('adGroupId');
     const keywordId = searchParams.get('keywordId');
+    const device = searchParams.get('device');
+    
+    // Map device filter values to Google Ads API enum names
+    const deviceMap: { [key: string]: string } = {
+      'desktop': 'DESKTOP',
+      'mobile': 'MOBILE',
+      'tablet': 'TABLET'
+    };
+    const deviceApiValue = device ? deviceMap[device] : null;
     
     if (!customerId) {
       return handleApiError(new Error('Customer ID is required'), 'Historical Data');
     }
 
-    logger.apiStart('Historical Data', { customerId, dateRange, campaignId, adGroupId, keywordId });
+    logger.apiStart('Historical Data', { customerId, dateRange, campaignId, adGroupId, keywordId, device });
 
     // Calculate date range
     const days = parseInt(dateRange);
@@ -43,6 +52,8 @@ export async function GET(request: NextRequest) {
     if (keywordId) {
       // Keyword-specific historical data
       entityType = 'keyword';
+      const deviceSelect = deviceApiValue ? ', segments.device' : '';
+      const deviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       query = `
         SELECT
           segments.date,
@@ -59,16 +70,20 @@ export async function GET(request: NextRequest) {
           campaign.name,
           ad_group.id,
           ad_group.name
+          ${deviceSelect}
         FROM keyword_view
         WHERE ad_group_criterion.criterion_id = ${keywordId}
           AND campaign.status = 'ENABLED'
           AND ad_group.status = 'ENABLED'
           AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
+          ${deviceWhere}
         ORDER BY segments.date ASC
       `;
     } else if (adGroupId) {
       // Ad Group-specific historical data
       entityType = 'adGroup';
+      const deviceSelect = deviceApiValue ? ', segments.device' : '';
+      const deviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       query = `
         SELECT
           segments.date,
@@ -83,16 +98,20 @@ export async function GET(request: NextRequest) {
           ad_group.name,
           campaign.id,
           campaign.name
+          ${deviceSelect}
         FROM ad_group
         WHERE ad_group.id = ${adGroupId}
           AND campaign.status = 'ENABLED'
           AND ad_group.status = 'ENABLED'
           AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
+          ${deviceWhere}
         ORDER BY segments.date ASC
       `;
     } else if (campaignId) {
       // Campaign-specific historical data
       entityType = 'campaign';
+      const deviceSelect = deviceApiValue ? ', segments.device' : '';
+      const deviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       query = `
         SELECT
           segments.date,
@@ -105,15 +124,19 @@ export async function GET(request: NextRequest) {
           metrics.conversions_value,
           campaign.id,
           campaign.name
+          ${deviceSelect}
         FROM campaign
         WHERE campaign.id = ${campaignId}
           AND campaign.status = 'ENABLED'
           AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
+          ${deviceWhere}
         ORDER BY segments.date ASC
       `;
     } else {
       // Account-level historical data (existing functionality)
       entityType = 'account';
+      const deviceSelect = deviceApiValue ? ', segments.device' : '';
+      const deviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       query = `
         SELECT
           segments.date,
@@ -124,9 +147,11 @@ export async function GET(request: NextRequest) {
           metrics.average_cpc,
           metrics.conversions,
           metrics.conversions_value
+          ${deviceSelect}
         FROM campaign
         WHERE campaign.status = 'ENABLED'
           AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
+          ${deviceWhere}
         ORDER BY segments.date ASC
       `;
     }

@@ -3,9 +3,12 @@ import { AdGroupData, DateRange } from '../types';
 import { getFromCache, saveToCache } from '../utils/cacheManager';
 import { getApiDateRange } from '../utils/dateHelpers';
 
+export type DeviceFilter = 'all' | 'desktop' | 'mobile' | 'tablet';
+
 interface UseAdGroupDataResult {
   data: AdGroupData | null;
   loading: boolean;
+  isRefreshing: boolean;
   error: string;
   refetch: () => void;
 }
@@ -35,10 +38,12 @@ export const useAdGroupData = (
   selectedAccount: string | null,
   selectedDateRange: DateRange | null,
   refreshTrigger?: boolean,
-  groupType: 'all' | 'traditional' | 'asset' = 'all'
+  groupType: 'all' | 'traditional' | 'asset' = 'all',
+  deviceFilter: DeviceFilter = 'all'
 ): UseAdGroupDataResult => {
   const [data, setData] = useState<AdGroupData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string>('');
 
   const fetchAdGroupData = useCallback(async () => {
@@ -48,13 +53,18 @@ export const useAdGroupData = (
     }
 
     try {
-      setLoading(true);
+      // If we already have data, show refreshing state instead of full loading
+      if (data) {
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError('');
 
       const apiDateRange = getApiDateRange(selectedDateRange);
       
-      // Build cache key with stable date values
-      const cacheKey = `adgroups_${selectedAccount}_${apiDateRange.startDate}_${apiDateRange.endDate}_${groupType}`;
+      // Build cache key with stable date values including device
+      const cacheKey = `adgroups_${selectedAccount}_${apiDateRange.startDate}_${apiDateRange.endDate}_${groupType}${deviceFilter !== 'all' ? `_device_${deviceFilter}` : ''}`;
       
       // Check cache first
       const cachedData = getFromCache<AdGroupData>(cacheKey);
@@ -62,13 +72,17 @@ export const useAdGroupData = (
       if (cachedData) {
         setData(cachedData);
         setLoading(false);
+        setIsRefreshing(false);
         return;
       }
       
       // Cache miss - fetch from API
-      const response = await fetch(
-        `/api/ad-groups?customerId=${selectedAccount}&dateRange=${apiDateRange.days}&groupType=${groupType}`
-      );
+      let apiUrl = `/api/ad-groups?customerId=${selectedAccount}&dateRange=${apiDateRange.days}&groupType=${groupType}`;
+      if (deviceFilter !== 'all') {
+        apiUrl += `&device=${deviceFilter}`;
+      }
+      
+      const response = await fetch(apiUrl);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -123,20 +137,21 @@ export const useAdGroupData = (
       setError(errorMessage);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  }, [selectedAccount, selectedDateRange?.id, selectedDateRange?.startDate?.getTime(), selectedDateRange?.endDate?.getTime(), groupType]);
+  }, [selectedAccount, selectedDateRange?.id, selectedDateRange?.startDate?.getTime(), selectedDateRange?.endDate?.getTime(), groupType, deviceFilter, data]);
 
   const refetch = useCallback(() => {
     if (selectedAccount && selectedDateRange) {
       const apiDateRange = getApiDateRange(selectedDateRange);
-      const cacheKey = `adgroups_${selectedAccount}_${apiDateRange.startDate}_${apiDateRange.endDate}_${groupType}`;
+      const cacheKey = `adgroups_${selectedAccount}_${apiDateRange.startDate}_${apiDateRange.endDate}_${groupType}${deviceFilter !== 'all' ? `_device_${deviceFilter}` : ''}`;
       
       // Clear cache for this key to force fresh fetch
       localStorage.removeItem(cacheKey);
       
       fetchAdGroupData();
     }
-  }, [fetchAdGroupData, selectedAccount, selectedDateRange?.id, selectedDateRange?.startDate?.getTime(), selectedDateRange?.endDate?.getTime(), groupType]);
+  }, [fetchAdGroupData, selectedAccount, selectedDateRange?.id, selectedDateRange?.startDate?.getTime(), selectedDateRange?.endDate?.getTime(), groupType, deviceFilter]);
 
   useEffect(() => {
     fetchAdGroupData();
@@ -145,6 +160,7 @@ export const useAdGroupData = (
   return {
     data,
     loading,
+    isRefreshing,
     error,
     refetch
   };

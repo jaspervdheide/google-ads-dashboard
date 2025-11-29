@@ -11,6 +11,7 @@ interface DashboardHeaderProps {
   campaignData: CampaignData | null;
   campaignLoading: boolean;
   error: string;
+  selectedAdGroupsCount?: number;
 }
 
 const DashboardHeader: React.FC<DashboardHeaderProps> = ({
@@ -19,7 +20,8 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   selectedDateRange,
   campaignData,
   campaignLoading,
-  error
+  error,
+  selectedAdGroupsCount = 0
 }) => {
   return (
     <div className="flex items-center justify-between">
@@ -69,12 +71,15 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           </span>
         </div>
 
-        {/* Dot Separator and Campaign Count */}
-        {campaignData?.campaigns && (
+        {/* Dot Separator and Campaign/Ad Group Count */}
+        {(campaignData?.campaigns || selectedAdGroupsCount > 0) && (
           <>
             <div className="text-gray-400">•</div>
             <span className="text-gray-600">
-              {campaignData.campaigns.length} campaign{campaignData.campaigns.length !== 1 ? 's' : ''}
+              {selectedAdGroupsCount > 0 
+                ? `${selectedAdGroupsCount} ad group${selectedAdGroupsCount !== 1 ? 's' : ''}`
+                : `${campaignData?.campaigns?.length || 0} campaign${(campaignData?.campaigns?.length || 0) !== 1 ? 's' : ''}`
+              }
             </span>
           </>
         )}

@@ -47,15 +47,20 @@ interface ExtendedApiResponse {
   error?: string;
 }
 
+// Device filter type
+export type DeviceFilter = 'all' | 'desktop' | 'mobile' | 'tablet';
+
 // Original hook for campaign data with cache-first strategy and KPI percentage changes
 const useCampaignData = (
   accountId: string | null, 
   dateRange: DateRange | null, 
   forceRefresh = false,
-  includeBiddingStrategy = false
+  includeBiddingStrategy = false,
+  deviceFilter: DeviceFilter = 'all'
 ) => {
   const [data, setData] = useState<CampaignData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false); // For subtle refresh indicator
   const [error, setError] = useState<string>('');
   const [kpiPercentageChanges, setKpiPercentageChanges] = useState<{[key: string]: number}>({});
 
@@ -63,11 +68,17 @@ const useCampaignData = (
     if (!accountId || !dateRange) return;
 
     try {
-      setLoading(true);
+      // If we already have data, show refreshing state instead of full loading
+      if (data) {
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError('');
       
       const apiDateRange = getApiDateRange(dateRange);
-      const cacheKey = `campaigns_${accountId}_${apiDateRange.startDate}_${apiDateRange.endDate}${includeBiddingStrategy ? '_bidding' : ''}`;
+      const deviceSuffix = deviceFilter !== 'all' ? `_${deviceFilter}` : '';
+      const cacheKey = `campaigns_${accountId}_${apiDateRange.startDate}_${apiDateRange.endDate}${includeBiddingStrategy ? '_bidding' : ''}${deviceSuffix}`;
       
       let dataFromCache = false;
       
@@ -88,6 +99,11 @@ const useCampaignData = (
         
         if (includeBiddingStrategy) {
           params.append('includeBiddingStrategy', 'true');
+        }
+        
+        // Add device filter if not 'all'
+        if (deviceFilter !== 'all') {
+          params.append('device', deviceFilter);
         }
         
         const response = await fetch(`/api/campaigns?${params}`);
@@ -119,14 +135,15 @@ const useCampaignData = (
       setError('Error fetching campaign data');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  }, [accountId, dateRange?.id, dateRange?.startDate?.getTime(), dateRange?.endDate?.getTime(), includeBiddingStrategy]);
+  }, [accountId, dateRange?.id, dateRange?.startDate?.getTime(), dateRange?.endDate?.getTime(), includeBiddingStrategy, deviceFilter]);
 
   useEffect(() => {
     fetchData(forceRefresh);
   }, [fetchData, forceRefresh]);
 
-  return { data, loading, error, kpiPercentageChanges };
+  return { data, loading, isRefreshing, error, kpiPercentageChanges };
 };
 
 export default useCampaignData;

@@ -10,6 +10,7 @@ export async function GET(request: Request) {
     const dateRange = searchParams.get('dateRange') || '30'; // Default to 30 days
     const includeImpressionShare = searchParams.get('includeImpressionShare') === 'true';
     const includeBiddingStrategy = searchParams.get('includeBiddingStrategy') === 'true';
+    const device = searchParams.get('device'); // 'desktop', 'mobile', 'tablet', or null for all
     
     if (!customerId) {
       return NextResponse.json({
@@ -17,6 +18,13 @@ export async function GET(request: Request) {
         message: "❌ Customer ID is required"
       }, { status: 400 });
     }
+    
+    // Map device filter to Google Ads device enum names
+    const deviceMap: Record<string, string> = {
+      'desktop': 'DESKTOP',
+      'mobile': 'MOBILE',
+      'tablet': 'TABLET',
+    };
 
 
     
@@ -59,12 +67,32 @@ export async function GET(request: Request) {
         campaign.maximize_conversion_value.target_roas`;
     }
 
-    query += `
+    // Add device segment to SELECT clause if device filter is specified
+    if (device && deviceMap[device]) {
+      query += `,
+        segments.device`;
+    }
+
+    // Build WHERE clause with optional device filter
+    // Fetch both ENABLED and PAUSED campaigns (not REMOVED)
+    // Exclude experiments and drafts - only get BASE campaigns
+    let whereClause = `
       FROM campaign
-      WHERE campaign.status = 'ENABLED'
-        AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
+      WHERE campaign.status IN ('ENABLED', 'PAUSED')
+        AND campaign.experiment_type = 'BASE'
+        AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
+    
+    // Add device filter if specified
+    if (device && deviceMap[device]) {
+      whereClause += `
+        AND segments.device = '${deviceMap[device]}'`;
+    }
+    
+    whereClause += `
       ORDER BY metrics.impressions DESC
     `;
+    
+    query += whereClause;
 
 
     const results = await customer.query(query);
@@ -97,7 +125,7 @@ export async function GET(request: Request) {
         const campaignData: any = {
           id: campaignId,
           name: row.campaign.name,
-          status: row.campaign.status === 2 ? 'ENABLED' : 'PAUSED', // Convert status number to string
+          status: row.campaign.status === 2 || row.campaign.status === 'ENABLED' ? 'ENABLED' : 'PAUSED', // Convert status to string (handles both numeric and string values)
           impressions: row.metrics.impressions || 0,
           clicks: row.metrics.clicks || 0,
           costMicros: row.metrics.cost_micros || 0,

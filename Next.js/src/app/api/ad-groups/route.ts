@@ -51,13 +51,22 @@ export async function GET(request: Request) {
     const customerId = searchParams.get('customerId');
     const dateRange = searchParams.get('dateRange') || '30';
     const groupType = searchParams.get('groupType') || 'all'; // 'all', 'traditional', 'asset'
+    const device = searchParams.get('device');
+    
+    // Map device filter values to Google Ads API enum names
+    const deviceMap: { [key: string]: string } = {
+      'desktop': 'DESKTOP',
+      'mobile': 'MOBILE',
+      'tablet': 'TABLET'
+    };
+    const deviceApiValue = device ? deviceMap[device] : null;
     
     if (!customerId) {
       return handleValidationError('Customer ID is required');
     }
 
     // Single API summary log instead of verbose logging
-    logger.apiStart('ad-groups', { customerId, dateRange, groupType });
+    logger.apiStart('ad-groups', { customerId, dateRange, groupType, device });
     
     // Calculate date range using utility
     const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
@@ -69,6 +78,8 @@ export async function GET(request: Request) {
 
     // Query for traditional ad groups (non-Performance Max)
     if (groupType === 'all' || groupType === 'traditional') {
+      const deviceSelect = deviceApiValue ? ', segments.device' : '';
+      const deviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       const traditionalAdGroupsQuery = `
         SELECT
           ad_group.id,
@@ -85,10 +96,12 @@ export async function GET(request: Request) {
           metrics.conversions_value,
           metrics.ctr,
           metrics.average_cpc
+          ${deviceSelect}
         FROM ad_group
         WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
           AND campaign.advertising_channel_type != 'PERFORMANCE_MAX'
           AND ad_group.status IN ('ENABLED', 'PAUSED')
+          ${deviceWhere}
         ORDER BY metrics.cost_micros DESC
       `;
 
@@ -112,7 +125,7 @@ export async function GET(request: Request) {
             traditionalGroupMap.set(groupId, {
               id: groupId,
               name: row.ad_group.name,
-              status: row.ad_group.status,
+              status: row.ad_group.status === 2 || row.ad_group.status === 'ENABLED' ? 'ENABLED' : 'PAUSED',
               campaignId: row.campaign.id.toString(),
               campaignName: row.campaign.name,
               campaignType: row.campaign.advertising_channel_type,
@@ -208,6 +221,8 @@ export async function GET(request: Request) {
 
     // Query for Performance Max asset groups
     if (groupType === 'all' || groupType === 'asset') {
+      const assetDeviceSelect = deviceApiValue ? ', segments.device' : '';
+      const assetDeviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       const assetGroupsQuery = `
         SELECT
           asset_group.id,
@@ -226,10 +241,12 @@ export async function GET(request: Request) {
           metrics.conversions_value,
           metrics.ctr,
           metrics.average_cpc
+          ${assetDeviceSelect}
         FROM asset_group
         WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
           AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'
           AND asset_group.status IN ('ENABLED', 'PAUSED')
+          ${assetDeviceWhere}
         ORDER BY metrics.cost_micros DESC
       `;
 
@@ -260,7 +277,7 @@ export async function GET(request: Request) {
             assetGroupMap.set(groupId, {
               id: groupId,
               name: row.asset_group.name,
-              status: row.asset_group.status,
+              status: row.asset_group.status === 2 || row.asset_group.status === 'ENABLED' ? 'ENABLED' : 'PAUSED',
               campaignId: row.campaign.id.toString(),
               campaignName: row.campaign.name,
               campaignType: row.campaign.advertising_channel_type,
