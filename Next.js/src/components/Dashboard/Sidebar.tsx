@@ -3,7 +3,7 @@
 import React from 'react';
 import { 
   LayoutDashboard, 
-  Building2,
+  Package,
   Settings,
   User
 } from 'lucide-react';
@@ -32,7 +32,7 @@ interface SidebarProps {
 // Navigation structure - simplified with drill-down in Dashboard
 const navigationItems: NavigationItem[] = [
   { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
-  { id: 'mcc-overview', name: 'MCC Overview', icon: Building2 },
+  { id: 'products', name: 'Products', icon: Package },
   { id: 'settings', name: 'Settings', icon: Settings },
 ];
 

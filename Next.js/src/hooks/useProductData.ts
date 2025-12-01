@@ -1,165 +1,197 @@
-import { useState, useEffect, useCallback } from 'react';
-import { DateRange } from '../types';
-import { getFromCache, saveToCache } from '../utils/cacheManager';
-import { getApiDateRange } from '../utils/dateHelpers';
+'use client';
 
-export interface ShoppingProduct {
-  id: string;
-  itemId: string;
-  productTypeLevel2: string; // Material
-  productTypeLevel3: string; // Make
-  productTypeLevel4: string; // Model
-  productTypeLevel5: string; // Type
-  price: number;
-  campaignId: string;
-  campaignName: string;
-  campaignType: number; // 4 = Shopping, 13 = Performance Max
-  campaignTypeDisplay: string;
-  impressions: number;
-  clicks: number;
-  cost: number;
-  conversions: number;
-  conversionsValue: number;
-  leadCostOfGoodsSold: number;
-  ctr: number;
-  avgCpc: number;
-  conversionRate: number;
-  cpa: number;
-  roas: number;
-  poas: number; // Profit on Ad Spend
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { ProductData, GroupedProductData, ProductViewState } from '@/types/products';
+import { DateRange } from '@/types';
+import { getFromCache, saveToCache } from '@/utils/cacheManager';
+
+interface UseProductDataProps {
+  selectedAccount: string | null;
+  selectedDateRange: DateRange | null;
 }
 
-export interface ProductDataResponse {
-  products: ShoppingProduct[];
+interface ProductDataResponse {
+  products: ProductData[];
   totals: {
     impressions: number;
     clicks: number;
     cost: number;
     conversions: number;
     conversionsValue: number;
-    ctr: number;
-    avgCpc: number;
-    conversionRate: number;
-    cpa: number;
+    cogsTotal: number;
+    grossProfit: number;
+    netProfit: number;
+    grossMargin: number;
+    netMargin: number;
     roas: number;
-    totalLeadCogs: number;
-    averagePoas: number;
+    poas: number;
   };
-  statistics: {
-    total: number;
-    shopping: number;
-    performanceMax: number;
-  };
-  dateRange: {
-    days: number;
-    startDate: string;
-    endDate: string;
-  };
-  customerId: string;
-}
-
-interface UseProductDataResult {
-  data: ProductDataResponse | null;
   loading: boolean;
-  error: string;
+  error: string | null;
   refetch: () => void;
 }
 
-export const useProductData = (
-  selectedAccount: string | null,
-  selectedDateRange: DateRange | null,
-  refreshTrigger?: boolean
-): UseProductDataResult => {
-  const [data, setData] = useState<ProductDataResponse | null>(null);
+export function useProductData({ selectedAccount, selectedDateRange }: UseProductDataProps): ProductDataResponse {
+  const [products, setProducts] = useState<ProductData[]>([]);
+  const [totals, setTotals] = useState<ProductDataResponse['totals']>({
+    impressions: 0,
+    clicks: 0,
+    cost: 0,
+    conversions: 0,
+    conversionsValue: 0,
+    cogsTotal: 0,
+    grossProfit: 0,
+    netProfit: 0,
+    grossMargin: 0,
+    netMargin: 0,
+    roas: 0,
+    poas: 0
+  });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchProductData = useCallback(async () => {
-    if (!selectedAccount || !selectedDateRange) {
-      setData(null);
+  const fetchProducts = useCallback(async () => {
+    if (!selectedAccount) {
+      setProducts([]);
       return;
     }
 
-    try {
-      setLoading(true);
-      setError('');
+    const dateRange = selectedDateRange?.apiDays || 30;
+    const cacheKey = `products-${selectedAccount}-${dateRange}`;
 
-      const apiDateRange = getApiDateRange(selectedDateRange);
-      
-      // Build cache key with stable date values
-      const cacheKey = `products_${selectedAccount}_${apiDateRange.startDate}_${apiDateRange.endDate}`;
-      
-      // Check cache first
-      const cachedData = getFromCache<ProductDataResponse>(cacheKey);
-      
-      if (cachedData) {
-        setData(cachedData);
-        setLoading(false);
-        return;
-      }
-      
-      console.log(`🛍️ Fetching shopping products for account ${selectedAccount} with ${apiDateRange.days} days range...`);
-      
-      // Cache miss - fetch from API
+    // Check client-side cache
+    const cached = getFromCache(cacheKey);
+    if (cached) {
+      setProducts(cached.products);
+      setTotals(cached.totals);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
       const response = await fetch(
-        `/api/shopping-products?customerId=${selectedAccount}&dateRange=${apiDateRange.days}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
+        `/api/products?customerId=${selectedAccount}&dateRange=${dateRange}`
       );
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`Failed to fetch products: ${response.status}`);
       }
 
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        console.log(`✅ Successfully loaded ${result.data.products.length} shopping products`);
-        
-        // Save to cache with 30 minute TTL
-        saveToCache(cacheKey, result.data, 30 * 60 * 1000);
-        
-        setData(result.data);
+      const data = await response.json();
+
+      if (data.success) {
+        setProducts(data.data.products);
+        setTotals(data.data.totals);
+
+        // Cache the response
+        saveToCache(cacheKey, data.data, 5 * 60 * 1000); // 5 minutes
       } else {
-        const errorMessage = result.message || 'Failed to fetch shopping products';
-        console.error('Failed to fetch shopping products:', errorMessage);
-        setError(errorMessage);
+        throw new Error(data.message || 'Failed to fetch product data');
       }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Error fetching shopping products';
-      console.error('Error fetching shopping products:', err);
-      setError(errorMessage);
+    } catch (err: any) {
+      console.error('Error fetching products:', err);
+      setError(err.message);
+      setProducts([]);
     } finally {
       setLoading(false);
     }
-  }, [selectedAccount, selectedDateRange?.id, selectedDateRange?.startDate?.getTime(), selectedDateRange?.endDate?.getTime()]);
-
-  const refetch = useCallback(() => {
-    if (selectedAccount && selectedDateRange) {
-      const apiDateRange = getApiDateRange(selectedDateRange);
-      const cacheKey = `products_${selectedAccount}_${apiDateRange.startDate}_${apiDateRange.endDate}`;
-      
-      // Clear cache for this key to force fresh fetch
-      import('../utils/cacheManager').then(({ cacheManager }) => {
-        cacheManager.delete(cacheKey);
-      });
-      
-      fetchProductData();
-    }
-  }, [fetchProductData, selectedAccount, selectedDateRange?.id, selectedDateRange?.startDate?.getTime(), selectedDateRange?.endDate?.getTime()]);
+  }, [selectedAccount, selectedDateRange]);
 
   useEffect(() => {
-    fetchProductData();
-  }, [fetchProductData, refreshTrigger]);
+    fetchProducts();
+  }, [fetchProducts]);
 
   return {
-    data,
+    products,
+    totals,
     loading,
     error,
-    refetch
+    refetch: fetchProducts
   };
-}; 
+}
+
+/**
+ * Hook to group product data by various dimensions
+ */
+export function useGroupedProducts(
+  products: ProductData[],
+  groupBy: ProductViewState['groupBy']
+): GroupedProductData[] {
+  return useMemo(() => {
+    if (!products.length) return [];
+
+    const groupMap = new Map<string, GroupedProductData>();
+
+    for (const product of products) {
+      let groupName: string;
+
+      switch (groupBy) {
+        case 'category':
+          groupName = product.categoryName || 'Unknown';
+          break;
+        case 'make':
+          groupName = product.make || 'Unknown Make';
+          break;
+        case 'model':
+          groupName = product.makeModel || product.model || 'Unknown Model';
+          break;
+        case 'material':
+          groupName = product.materialName || 'Unknown Material';
+          break;
+        case 'sku':
+        default:
+          groupName = product.sku;
+          break;
+      }
+
+      if (groupMap.has(groupName)) {
+        const group = groupMap.get(groupName)!;
+        group.itemCount++;
+        group.impressions += product.impressions;
+        group.clicks += product.clicks;
+        group.cost += product.cost;
+        group.conversions += product.conversions;
+        group.conversionsValue += product.conversionsValue;
+        group.cogsTotal += product.cogsTotal;
+        group.grossProfit += product.grossProfit;
+        group.netProfit += product.netProfit;
+      } else {
+        groupMap.set(groupName, {
+          groupName,
+          groupType: groupBy,
+          itemCount: 1,
+          impressions: product.impressions,
+          clicks: product.clicks,
+          cost: product.cost,
+          conversions: product.conversions,
+          conversionsValue: product.conversionsValue,
+          ctr: 0,
+          avgCpc: 0,
+          cogsTotal: product.cogsTotal,
+          grossProfit: product.grossProfit,
+          netProfit: product.netProfit,
+          grossMargin: 0,
+          netMargin: 0,
+          roas: 0,
+          poas: 0
+        });
+      }
+    }
+
+    // Calculate derived metrics for each group
+    const groups = Array.from(groupMap.values());
+    for (const group of groups) {
+      group.ctr = group.impressions > 0 ? (group.clicks / group.impressions) * 100 : 0;
+      group.avgCpc = group.clicks > 0 ? group.cost / group.clicks : 0;
+      group.grossMargin = group.conversionsValue > 0 ? (group.grossProfit / group.conversionsValue) * 100 : 0;
+      group.netMargin = group.conversionsValue > 0 ? (group.netProfit / group.conversionsValue) * 100 : 0;
+      group.roas = group.cost > 0 ? group.conversionsValue / group.cost : 0;
+      group.poas = group.cost > 0 ? group.grossProfit / group.cost : 0;
+    }
+
+    // Sort by revenue descending
+    return groups.sort((a, b) => b.conversionsValue - a.conversionsValue);
+  }, [products, groupBy]);
+}

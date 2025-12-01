@@ -252,7 +252,7 @@ export const PerformanceIndicator: React.FC<{ level: 'high' | 'medium' | 'low' }
   return <div className={`w-2 h-2 rounded-full ${colors[level]} mr-2`} />;
 };
 
-export const getPerformanceLevel = (value: number, allValues: number[], metric: string): 'high' | 'medium' | 'low' => {
+export const getPerformanceLevel = (value: number, allValues: number[], _metric: string): 'high' | 'medium' | 'low' => {
   if (allValues.length === 0) return 'medium';
   
   const sorted = [...allValues].sort((a, b) => a - b);
@@ -299,7 +299,6 @@ export const filterAndSortCampaigns = (
 
   // Apply pre-filters (campaign type filters)
   if (activeFilters.size > 0) {
-    const beforeCount = filteredCampaigns.length;
     filteredCampaigns = filteredCampaigns.filter(campaign => {
       return Array.from(activeFilters).some(filter => {
         switch (filter) {
@@ -320,7 +319,6 @@ export const filterAndSortCampaigns = (
 
   // Apply search filter
   if (searchTerm) {
-    const beforeCount = filteredCampaigns.length;
     filteredCampaigns = filteredCampaigns.filter(campaign =>
       campaign.name.toLowerCase().includes(searchTerm.toLowerCase())
     );

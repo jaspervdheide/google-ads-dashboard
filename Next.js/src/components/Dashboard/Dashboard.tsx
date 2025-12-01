@@ -511,6 +511,15 @@ export default function Dashboard() {
     onMetricLeave: handleMetricLeave
   };
 
+  const productsProps = {
+    selectedAccount: accountState.selectedAccount,
+    selectedDateRange: dateState.selectedDateRange,
+    chartType: chartState.chartType,
+    setChartType: chartState.handleChartTypeChange,
+    dateGranularity: chartState.dateGranularity,
+    setDateGranularity: chartState.handleDateGranularityChange
+  };
+
   // Loading and error states
   if (accountState.loading && !campaignData) {
     return (
@@ -547,6 +556,7 @@ export default function Dashboard() {
         dashboardProps={dashboardProps}
         settingsProps={settingsProps}
         mccOverviewProps={mccOverviewProps}
+        productsProps={productsProps}
       />
     </DashboardLayout>
   );

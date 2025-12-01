@@ -61,11 +61,11 @@ export async function GET(request: NextRequest) {
 
     // Build query based on what data is requested
     let query = '';
-    let entityType = 'account';
+    let _entityType = 'account';
     
     if (keywordId) {
       // Keyword-specific historical data
-      entityType = 'keyword';
+      _entityType = 'keyword';
       const deviceSelect = deviceApiValue ? ', segments.device' : '';
       const deviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       query = `
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
       `;
     } else if (adGroupId) {
       // Ad Group-specific historical data
-      entityType = 'adGroup';
+      _entityType = 'adGroup';
       const deviceSelect = deviceApiValue ? ', segments.device' : '';
       const deviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       query = `
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
       `;
     } else if (campaignId) {
       // Campaign-specific historical data
-      entityType = 'campaign';
+      _entityType = 'campaign';
       const deviceSelect = deviceApiValue ? ', segments.device' : '';
       const deviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       query = `
@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
       `;
     } else {
       // Account-level historical data (existing functionality)
-      entityType = 'account';
+      _entityType = 'account';
       const deviceSelect = deviceApiValue ? ', segments.device' : '';
       const deviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       query = `
