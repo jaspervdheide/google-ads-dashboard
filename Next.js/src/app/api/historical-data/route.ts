@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
-import { getFormattedDateRange, formatDateForGoogleAds } from '@/utils/dateUtils';
+import { getFormattedDateRange } from '@/utils/dateUtils';
 import { calculateAllMetrics } from '@/utils/metricsCalculator';
-import { formatDateForAPI } from '@/utils/dateHelpers';
-import { handleApiError, createSuccessResponse } from '@/utils/errorHandler';
-import { logger } from '@/utils/logger';
+import { serverCache, ServerCache } from '@/utils/serverCache';
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,22 +23,38 @@ export async function GET(request: NextRequest) {
     const deviceApiValue = device ? deviceMap[device] : null;
     
     if (!customerId) {
-      return handleApiError(new Error('Customer ID is required'), 'Historical Data');
+      return NextResponse.json({
+        success: false,
+        message: 'Customer ID is required'
+      }, { status: 400 });
     }
 
-    logger.apiStart('Historical Data', { customerId, dateRange, campaignId, adGroupId, keywordId, device });
-
-    // Calculate date range
-    const days = parseInt(dateRange);
-    const endDate = new Date();
-    const _startDate = new Date(endDate);
-    _startDate.setDate(endDate.getDate() - days);
-    const _endDateFormatted = formatDateForAPI(endDate);
-
-    console.log(`Fetching historical data for customer ${customerId} with ${dateRange} days range...`);
-
     // Calculate date range using utility
-    const { startDate, endDate: utilEndDate, startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
+    const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
+
+    // Generate cache key
+    const cacheKey = serverCache.generateKey('historical', {
+      customerId,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      campaignId,
+      adGroupId,
+      keywordId,
+      device
+    });
+
+    // Check cache first - this is critical for hover chart performance
+    const cachedData = serverCache.get<any[]>(cacheKey);
+    if (cachedData) {
+      const response = NextResponse.json({
+        success: true,
+        data: cachedData,
+        cached: true
+      });
+      // Historical data can be cached longer - it doesn't change
+      response.headers.set('Cache-Control', 'private, max-age=1800, stale-while-revalidate=3600');
+      return response;
+    }
 
     // Create Google Ads connection using utility
     const { customer } = createGoogleAdsConnection(customerId);
@@ -156,14 +170,12 @@ export async function GET(request: NextRequest) {
       `;
     }
 
-    console.log(`Executing ${entityType} historical data query:`, query);
-
-    const response = await customer.query(query);
+    const queryResult = await customer.query(query);
 
     // Group data by date and aggregate metrics
     const dailyData: { [key: string]: any } = {};
 
-    response.forEach((row: any) => {
+    queryResult.forEach((row: any) => {
       const date = row.segments?.date;
       if (!date) return;
 
@@ -172,26 +184,21 @@ export async function GET(request: NextRequest) {
       
       if (typeof date === 'string') {
         if (date.includes('-') && date.length === 10) {
-          // Already in YYYY-MM-DD format
           formattedDate = date;
         } else if (date.length === 8) {
-          // YYYYMMDD format
           const year = date.slice(0, 4);
           const month = date.slice(4, 6);
           const day = date.slice(6, 8);
           formattedDate = `${year}-${month}-${day}`;
         } else {
-          console.warn('⚠️ Unexpected date format:', date);
           return;
         }
       } else if (typeof date === 'object' && date.year && date.month && date.day) {
-        // Date object format {year: 2025, month: 5, day: 29}
         const year = date.year.toString();
         const month = date.month.toString().padStart(2, '0');
         const day = date.day.toString().padStart(2, '0');
         formattedDate = `${year}-${month}-${day}`;
       } else {
-        console.warn('⚠️ Could not parse date:', date);
         return;
       }
       
@@ -219,9 +226,8 @@ export async function GET(request: NextRequest) {
 
     // Calculate derived metrics for each day using utility
     const historicalData = Object.values(dailyData).map((day: any) => {
-      const cost = day.costMicros / 1000000; // Convert micros to actual currency
+      const cost = day.costMicros / 1000000;
       
-      // Use metrics calculator utility
       const calculatedMetrics = calculateAllMetrics({
         impressions: day.impressions,
         clicks: day.clicks,
@@ -240,12 +246,17 @@ export async function GET(request: NextRequest) {
     // Sort by date
     historicalData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    console.log(`Successfully retrieved ${historicalData.length} days of historical data`);
+    // Cache with smart TTL - historical data that doesn't include today can be cached longer
+    const ttl = serverCache.getSmartTTL(endDateStr, ServerCache.TTL.METRICS);
+    serverCache.set(cacheKey, historicalData, ttl);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      data: historicalData
+      data: historicalData,
+      cached: false
     });
+    response.headers.set('Cache-Control', 'private, max-age=1800, stale-while-revalidate=3600');
+    return response;
 
   } catch (error) {
     console.error('Error fetching historical data:', error);
@@ -255,4 +266,4 @@ export async function GET(request: NextRequest) {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}

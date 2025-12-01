@@ -1,35 +1,26 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
 import { getFormattedDateRange } from '@/utils/dateUtils';
-import { handleValidationError, handleApiError, createSuccessResponse } from '@/utils/errorHandler';
+import { handleValidationError, handleApiError } from '@/utils/errorHandler';
 import { CampaignTypeDetector, MatchTypeUtilities } from '@/utils/queryBuilder';
 import { logger } from '@/utils/logger';
 import { calculateDerivedMetrics, calculateZeroPerformanceStats, convertCostFromMicros } from '@/utils/apiHelpers';
-
-// Using centralized campaign type detection utility
-
-// Using centralized match type utilities
+import { serverCache, ServerCache } from '@/utils/serverCache';
 
 // Data normalization function
 const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
   return data.map(item => {
-    let matchType = 'SEARCH_TERM';  // Default for search terms
+    let matchType = 'SEARCH_TERM';
     
     if (type === 'keyword') {
-      // Keywords have match types in ad_group_criterion.keyword.match_type
       const rawMatchType = item.ad_group_criterion?.keyword?.match_type;
-      
-      // Convert numeric enum to string enum for keywords
       matchType = MatchTypeUtilities.getMatchTypeString(rawMatchType) || 'BROAD';
     } else if (type === 'search_term') {
-      // Search terms have match types from segments.keyword.info.match_type
       const rawMatchType = item.segments?.keyword?.info?.match_type;
-      
       if (rawMatchType) {
-        // Convert numeric enum to string enum for search terms
         matchType = MatchTypeUtilities.getMatchTypeString(rawMatchType) || 'SEARCH_TERM';
       } else {
-        matchType = 'SEARCH_TERM'; // Keep as search term if no match type found
+        matchType = 'SEARCH_TERM';
       }
     }
     
@@ -50,7 +41,6 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
       campaign_name: item.campaign?.name,
       campaign_type: item.campaign?.advertising_channel_type,
       detected_campaign_type: CampaignTypeDetector.detectCampaignType(item.campaign?.name || ''),
-      // Triggering keyword information (for search terms)
       triggering_keyword: type === 'search_term' ? item.segments?.keyword?.info?.text : null,
       triggering_keyword_match_type: type === 'search_term' ? MatchTypeUtilities.getMatchTypeString(item.segments?.keyword?.info?.match_type) : null,
       impressions: Number(item.metrics?.impressions) || 0,
@@ -61,7 +51,6 @@ const normalizeKeywordData = (data: any[], type: 'keyword' | 'search_term') => {
       cost_per_conversion: item.metrics?.cost_per_conversion ? Number(item.metrics.cost_per_conversion) / 1000000 : 0,
       ctr: item.metrics?.ctr ? Number(item.metrics.ctr) * 100 : 0,
       average_cpc: item.metrics?.average_cpc ? Number(item.metrics.average_cpc) / 1000000 : 0,
-      // Calculate CPC and ROAS safely
       cpc: item.metrics?.clicks > 0 && item.metrics?.cost_micros ? 
            convertCostFromMicros(Number(item.metrics.cost_micros)) / Number(item.metrics.clicks) : 0,
       roas: item.metrics?.cost_micros > 0 && item.metrics?.conversions_value ? 
@@ -84,102 +73,128 @@ export async function GET(request: NextRequest) {
       return handleValidationError('Missing required parameters: customerId and dateRange');
     }
 
-    // Single API summary log
-    logger.apiStart('keywords', { customerId, dateRange, dataType });
-
-    // Create Google Ads connection using utility
-    const { customer } = createGoogleAdsConnection(customerId);
-
     // Calculate date range using utility
     const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
 
-    // Add date range filter to queries
+    // Generate cache key
+    const cacheKey = serverCache.generateKey('keywords', {
+      customerId,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      dataType
+    });
+
+    // Check cache first
+    const cachedData = serverCache.get<any>(cacheKey);
+    if (cachedData) {
+      return NextResponse.json({
+        success: true,
+        message: `Retrieved ${cachedData.keywords.length} items (cached)`,
+        data: cachedData,
+        cached: true
+      });
+    }
+
+    logger.apiStart('keywords', { customerId, dateRange, dataType });
+
+    const { customer } = createGoogleAdsConnection(customerId);
+
     const dateFilter = `AND segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'`;
 
-    // Get active keywords with performance data from active campaigns
-    const keywordsQuery = `
-      SELECT 
-        ad_group_criterion.keyword.text,
-        ad_group_criterion.keyword.match_type,
-        ad_group_criterion.criterion_id,
-        ad_group_criterion.status,
-        ad_group_criterion.quality_info.quality_score,
-        ad_group.id,
-        ad_group.name,
-        campaign.id,
-        campaign.name,
-        campaign.advertising_channel_type,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value,
-        metrics.cost_per_conversion,
-        metrics.ctr,
-        metrics.average_cpc
-      FROM keyword_view 
-      WHERE campaign.advertising_channel_type IN ('SEARCH', 'SHOPPING')
-        AND campaign.status = 'ENABLED'
-        AND ad_group.status = 'ENABLED'
-        AND ad_group_criterion.type = 'KEYWORD'
-        AND ad_group_criterion.status = 'ENABLED'
-        ${dateFilter}
-      ORDER BY metrics.impressions DESC
-      LIMIT 1000
-    `;
-
-    // Get search terms with performance data from active campaigns  
-    const searchTermsQuery = `
-      SELECT 
-        search_term_view.search_term,
-        search_term_view.status,
-        segments.keyword.info.text,
-        segments.keyword.info.match_type,
-        ad_group.id,
-        ad_group.name,
-        campaign.id,
-        campaign.name,
-        campaign.advertising_channel_type,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros,
-        metrics.conversions,
-        metrics.conversions_value,
-        metrics.cost_per_conversion,
-        metrics.ctr,
-        metrics.average_cpc
-      FROM search_term_view 
-      WHERE campaign.advertising_channel_type IN ('SEARCH', 'SHOPPING', 'PERFORMANCE_MAX')
-        AND campaign.status = 'ENABLED'
-        AND ad_group.status = 'ENABLED'
-        AND search_term_view.status = 'NONE'
-        ${dateFilter}
-      ORDER BY metrics.impressions DESC
-      LIMIT 500
-    `;
-
-    let keywordsResponse: any[] = [];
-    let searchTermsResponse: any[] = [];
-    let normalizedKeywords: any[] = [];
-    let normalizedSearchTerms: any[] = [];
+    // Prepare queries to run in parallel
+    const queries: Promise<any>[] = [];
+    const queryTypes: string[] = [];
 
     if (dataType === 'keywords' || dataType === 'both') {
-      try {
-        keywordsResponse = await customer.query(keywordsQuery);
-        normalizedKeywords = normalizeKeywordData(keywordsResponse, 'keyword');
-      } catch (keywordError) {
-        logger.error('Error fetching keywords', keywordError);
-      }
+      const keywordsQuery = `
+        SELECT 
+          ad_group_criterion.keyword.text,
+          ad_group_criterion.keyword.match_type,
+          ad_group_criterion.criterion_id,
+          ad_group_criterion.status,
+          ad_group_criterion.quality_info.quality_score,
+          ad_group.id,
+          ad_group.name,
+          campaign.id,
+          campaign.name,
+          campaign.advertising_channel_type,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros,
+          metrics.conversions,
+          metrics.conversions_value,
+          metrics.cost_per_conversion,
+          metrics.ctr,
+          metrics.average_cpc
+        FROM keyword_view 
+        WHERE campaign.advertising_channel_type IN ('SEARCH', 'SHOPPING')
+          AND campaign.status = 'ENABLED'
+          AND ad_group.status = 'ENABLED'
+          AND ad_group_criterion.type = 'KEYWORD'
+          AND ad_group_criterion.status = 'ENABLED'
+          ${dateFilter}
+        ORDER BY metrics.impressions DESC
+        LIMIT 1000
+      `;
+      queries.push(customer.query(keywordsQuery).catch((e: Error) => {
+        logger.error('Error fetching keywords', e);
+        return [];
+      }));
+      queryTypes.push('keywords');
     }
 
     if (dataType === 'search_terms' || dataType === 'both') {
-      try {
-        searchTermsResponse = await customer.query(searchTermsQuery);
-        normalizedSearchTerms = normalizeKeywordData(searchTermsResponse, 'search_term');
-      } catch (searchTermsError) {
-        logger.error('Error fetching search terms', searchTermsError);
-      }
+      const searchTermsQuery = `
+        SELECT 
+          search_term_view.search_term,
+          search_term_view.status,
+          segments.keyword.info.text,
+          segments.keyword.info.match_type,
+          ad_group.id,
+          ad_group.name,
+          campaign.id,
+          campaign.name,
+          campaign.advertising_channel_type,
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros,
+          metrics.conversions,
+          metrics.conversions_value,
+          metrics.cost_per_conversion,
+          metrics.ctr,
+          metrics.average_cpc
+        FROM search_term_view 
+        WHERE campaign.advertising_channel_type IN ('SEARCH', 'SHOPPING', 'PERFORMANCE_MAX')
+          AND campaign.status = 'ENABLED'
+          AND ad_group.status = 'ENABLED'
+          AND search_term_view.status = 'NONE'
+          ${dateFilter}
+        ORDER BY metrics.impressions DESC
+        LIMIT 500
+      `;
+      queries.push(customer.query(searchTermsQuery).catch((e: Error) => {
+        logger.error('Error fetching search terms', e);
+        return [];
+      }));
+      queryTypes.push('search_terms');
     }
+
+    // Execute queries in parallel
+    const results = await Promise.all(queries);
+
+    let keywordsResponse: any[] = [];
+    let searchTermsResponse: any[] = [];
+
+    results.forEach((result, index) => {
+      if (queryTypes[index] === 'keywords') {
+        keywordsResponse = result;
+      } else if (queryTypes[index] === 'search_terms') {
+        searchTermsResponse = result;
+      }
+    });
+
+    const normalizedKeywords = keywordsResponse.length > 0 ? normalizeKeywordData(keywordsResponse, 'keyword') : [];
+    const normalizedSearchTerms = searchTermsResponse.length > 0 ? normalizeKeywordData(searchTermsResponse, 'search_term') : [];
     
     // Determine what data to return based on dataType
     let combinedData: any[] = [];
@@ -187,7 +202,6 @@ export async function GET(request: NextRequest) {
 
     if (dataType === 'keywords') {
       combinedData = normalizedKeywords;
-      // Calculate summary metrics for keywords only using shared utilities
       const rawTotals = {
         impressions: combinedData.reduce((sum, item) => sum + item.impressions, 0),
         clicks: combinedData.reduce((sum, item) => sum + item.clicks, 0),
@@ -217,7 +231,6 @@ export async function GET(request: NextRequest) {
       };
     } else if (dataType === 'search_terms') {
       combinedData = normalizedSearchTerms;
-      // Calculate summary metrics for search terms only using shared utilities
       const rawTotals = {
         impressions: combinedData.reduce((sum, item) => sum + item.impressions, 0),
         clicks: combinedData.reduce((sum, item) => sum + item.clicks, 0),
@@ -246,10 +259,8 @@ export async function GET(request: NextRequest) {
         ...zeroStats
       };
     } else {
-      // Return both datasets separately to avoid double-counting
       combinedData = [...normalizedKeywords, ...normalizedSearchTerms];
       
-      // Calculate summary metrics separately for each type
       const keywordMetrics = {
         total_impressions: normalizedKeywords.reduce((sum, item) => sum + item.impressions, 0),
         total_clicks: normalizedKeywords.reduce((sum, item) => sum + item.clicks, 0),
@@ -295,13 +306,21 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    // Single API completion summary log
+    // Cache with smart TTL
+    const ttl = serverCache.getSmartTTL(endDateStr, ServerCache.TTL.KEYWORDS);
+    serverCache.set(cacheKey, responseData, ttl);
+
     logger.apiComplete('keywords', combinedData.length);
     
-    return createSuccessResponse(responseData, `Retrieved ${combinedData.length} items (${normalizedKeywords.length} keywords, ${normalizedSearchTerms.length} search terms)`);
+    return NextResponse.json({
+      success: true,
+      message: `Retrieved ${combinedData.length} items (${normalizedKeywords.length} keywords, ${normalizedSearchTerms.length} search terms)`,
+      data: responseData,
+      cached: false
+    });
 
   } catch (error: any) {
     logger.error('Keywords API failed', error);
     return handleApiError(error, 'Keywords Data');
   }
-} 
+}

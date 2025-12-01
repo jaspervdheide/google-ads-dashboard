@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
 import { getFormattedDateRange } from '@/utils/dateUtils';
+import { serverCache, ServerCache } from '@/utils/serverCache';
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   const searchParams = request.nextUrl.searchParams;
   const customerId = searchParams.get('customerId');
   const dateRange = searchParams.get('dateRange') || '30';
-  const adId = searchParams.get('adId'); // Required - get asset performance for specific ad
+  const adId = searchParams.get('adId');
 
   if (!customerId) {
     return NextResponse.json({ error: 'Customer ID is required' }, { status: 400 });
@@ -19,10 +20,29 @@ export async function GET(request: NextRequest) {
 
   try {
     const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
+
+    // Generate cache key
+    const cacheKey = serverCache.generateKey('asset-performance', {
+      customerId,
+      adId,
+      startDate: startDateStr,
+      endDate: endDateStr
+    });
+
+    // Check cache first
+    const cachedData = serverCache.get<any>(cacheKey);
+    if (cachedData) {
+      return NextResponse.json({
+        success: true,
+        data: cachedData,
+        cached: true,
+        timing: { total: Date.now() - startTime }
+      });
+    }
+
     const { customer } = createGoogleAdsConnection(customerId);
 
     // Query for asset-level performance data
-    // This gets performance metrics for each headline and description in the RSA
     const assetQuery = `
       SELECT
         ad_group_ad_asset_view.ad_group_ad,
@@ -101,33 +121,40 @@ export async function GET(request: NextRequest) {
         : 0;
     });
 
+    const responseData = {
+      adId,
+      headlines,
+      descriptions,
+      summary: {
+        totalHeadlines: headlines.length,
+        totalDescriptions: descriptions.length,
+        headlineTotalImpressions,
+        descriptionTotalImpressions,
+        bestHeadline: headlines.find(h => h.performanceLabel === 'BEST')?.text || null,
+        bestDescription: descriptions.find(d => d.performanceLabel === 'BEST')?.text || null,
+      },
+      dateRange: {
+        start: startDateStr,
+        end: endDateStr,
+        days: parseInt(dateRange)
+      }
+    };
+
+    // Cache with smart TTL
+    const ttl = serverCache.getSmartTTL(endDateStr, ServerCache.TTL.ADS);
+    serverCache.set(cacheKey, responseData, ttl);
+
     return NextResponse.json({
       success: true,
-      data: {
-        adId,
-        headlines,
-        descriptions,
-        summary: {
-          totalHeadlines: headlines.length,
-          totalDescriptions: descriptions.length,
-          headlineTotalImpressions,
-          descriptionTotalImpressions,
-          bestHeadline: headlines.find(h => h.performanceLabel === 'BEST')?.text || null,
-          bestDescription: descriptions.find(d => d.performanceLabel === 'BEST')?.text || null,
-        },
-        dateRange: {
-          start: startDateStr,
-          end: endDateStr,
-          days: parseInt(dateRange)
-        }
-      },
+      data: responseData,
+      cached: false,
       timing: { total: Date.now() - startTime }
     });
 
   } catch (error: any) {
     console.error('Error fetching asset performance:', error);
     
-    // Return empty data structure if the query fails (some accounts may not have this data)
+    // Return empty data structure if the query fails
     return NextResponse.json({
       success: true,
       data: {
@@ -210,7 +237,7 @@ function mapPerformanceLabel(label: any): string {
   const labelMap: { [key: number]: string } = {
     0: 'UNSPECIFIED',
     1: 'UNKNOWN',
-    2: 'PENDING', // Learning
+    2: 'PENDING',
     3: 'LEARNING',
     4: 'LOW',
     5: 'GOOD',
@@ -236,4 +263,3 @@ function mapPinnedField(pinnedField: any): string | null {
   if (typeof pinnedField === 'string') return pinnedField;
   return pinnedMap[pinnedField] || null;
 }
-

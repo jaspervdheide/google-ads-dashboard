@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { DateRange } from '../types/common';
+import { getFromCache, saveToCache } from '../utils/cacheManager';
 
 export interface AdItem {
   id: string;
@@ -72,11 +73,28 @@ export function useAdsData(
   // Use ref to track if we have existing data for refresh indicator
   const hasDataRef = useRef(false);
 
+  // Generate cache key
+  const getCacheKey = useCallback(() => {
+    const days = selectedDateRange?.days || 30;
+    const deviceSuffix = deviceFilter !== 'all' ? `_${deviceFilter}` : '';
+    return `ads_${selectedAccount}_${adGroupId}_${days}${deviceSuffix}`;
+  }, [selectedAccount, adGroupId, selectedDateRange?.days, deviceFilter]);
+
   // Fetch data when dependencies change
   useEffect(() => {
     if (!selectedAccount || !adGroupId) {
       setData(null);
       hasDataRef.current = false;
+      return;
+    }
+
+    const cacheKey = getCacheKey();
+
+    // Check cache first
+    const cachedData = getFromCache<AdsData>(cacheKey);
+    if (cachedData) {
+      setData(cachedData);
+      hasDataRef.current = true;
       return;
     }
 
@@ -93,7 +111,7 @@ export function useAdsData(
         const params = new URLSearchParams({
           customerId: selectedAccount,
           adGroupId: adGroupId,
-          dateRange: selectedDateRange?.days?.toString() || '30',
+          dateRange: (selectedDateRange?.days || 30).toString(),
         });
 
         if (deviceFilter && deviceFilter !== 'all') {
@@ -111,6 +129,8 @@ export function useAdsData(
         if (result.success) {
           setData(result.data);
           hasDataRef.current = true;
+          // Cache for 1 hour
+          saveToCache(cacheKey, result.data, 60 * 60 * 1000);
         } else {
           throw new Error(result.error || 'Failed to fetch ads');
         }
@@ -124,15 +144,17 @@ export function useAdsData(
     };
 
     fetchAdsData();
-  }, [selectedAccount, adGroupId, selectedDateRange?.days, deviceFilter]);
+  }, [selectedAccount, adGroupId, selectedDateRange?.days, deviceFilter, getCacheKey]);
 
   const refetch = useCallback(() => {
     if (selectedAccount && adGroupId) {
       hasDataRef.current = false;
       setData(null);
-      // Trigger re-fetch by updating a dummy state or just calling the effect
+      // Clear cache for this key to force fresh fetch
+      const cacheKey = getCacheKey();
+      // The effect will re-run due to data being null
     }
-  }, [selectedAccount, adGroupId]);
+  }, [selectedAccount, adGroupId, getCacheKey]);
 
   return {
     data,

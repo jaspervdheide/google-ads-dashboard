@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { Award } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Award, ChevronDown, ChevronRight } from 'lucide-react';
 import { MccOverviewData, AccountMetrics } from '../../types';
 import { formatNumber, formatCurrency, formatPercentage } from '../../utils';
 import { calculateAccountHealthScore } from '../../utils/accountHealthScoring';
-import { getPerformanceLevel, PerformanceIndicator, TableTotalsRow } from './shared';
+import { TableTotalsRow } from './shared';
 import { getHealthScoreStyles } from '../../utils/accountHealthScoring';
 
 interface AccountTableProps {
@@ -24,6 +24,68 @@ interface AccountTableProps {
   onAccountSelect?: (accountId: string, isSelected: boolean) => void;
 }
 
+// Trend indicator - subtle arrow with colored background in fixed-width container
+const TrendIndicator: React.FC<{ 
+  value: number | undefined; 
+  inverted?: boolean;
+}> = ({ value, inverted = false }) => {
+  if (value === undefined || value === null) return <span className="w-6 inline-block"></span>;
+  
+  const roundedValue = Math.round(value * 10) / 10;
+  const isPositive = inverted ? roundedValue < 0 : roundedValue > 0;
+  const isNeutral = Math.abs(roundedValue) < 1;
+  
+  if (isNeutral) {
+    return <span className="w-6 inline-block text-center text-[10px] text-gray-400 bg-gray-50 rounded px-1 py-0.5 ml-1">—</span>;
+  }
+  
+  return (
+    <span 
+      className={`w-6 inline-block text-center text-[10px] rounded px-1 py-0.5 ml-1 ${
+        isPositive 
+          ? 'text-emerald-600 bg-emerald-50' 
+          : 'text-rose-600 bg-rose-50'
+      }`}
+      title={`${roundedValue >= 0 ? '+' : ''}${roundedValue.toFixed(1)}%`}
+    >
+      {isPositive ? '↗' : '↘'}
+    </span>
+  );
+};
+
+// Difference cell component - clean, sophisticated design
+const DifferenceCell: React.FC<{
+  current: number;
+  previous: number | undefined;
+  format: 'number' | 'currency' | 'percentage' | 'decimal';
+  inverted?: boolean;
+}> = ({ current, previous, format, inverted = false }) => {
+  if (previous === undefined) return <span className="text-gray-300">—</span>;
+  
+  const diff = current - previous;
+  const percentChange = previous !== 0 ? ((current - previous) / previous) * 100 : (current > 0 ? 100 : 0);
+  
+  const isPositive = inverted ? diff < 0 : diff > 0;
+  const isNegative = inverted ? diff > 0 : diff < 0;
+  const isNeutral = Math.abs(percentChange) < 1;
+  
+  // Format percentage only - cleaner
+  const formattedPercent = `${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(1)}%`;
+  
+  if (isNeutral) {
+    return <span className="text-gray-400 font-normal">{formattedPercent}</span>;
+  }
+  
+  // Subtle background tint instead of bold colors
+  const bgClass = isPositive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700';
+  
+  return (
+    <span className={`${bgClass} px-1.5 py-0.5 rounded font-medium`}>
+      {formattedPercent}
+    </span>
+  );
+};
+
 const AccountTable: React.FC<AccountTableProps> = ({
   data,
   loading,
@@ -39,6 +101,21 @@ const AccountTable: React.FC<AccountTableProps> = ({
   selectedAccounts = [],
   onAccountSelect
 }) => {
+  // Track expanded rows
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const toggleRowExpansion = (accountId: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(accountId)) {
+        next.delete(accountId);
+      } else {
+        next.add(accountId);
+      }
+      return next;
+    });
+  };
+
   // Calculate totals for table footer
   const calculatedTotals = useMemo(() => {
     if (!data?.accounts) return null;
@@ -50,20 +127,15 @@ const AccountTable: React.FC<AccountTableProps> = ({
       return matchesStatus && matchesSearch;
     });
 
-    // Calculate health scores for average
     const healthScores = filteredAccounts.map(account => {
       const healthScore = calculateAccountHealthScore(account);
-      return {
-        score: healthScore.overall,
-        grade: healthScore.grade
-      };
+      return { score: healthScore.overall, grade: healthScore.grade };
     });
 
     const avgHealthScore = healthScores.length > 0 
       ? Math.round(healthScores.reduce((sum, h) => sum + h.score, 0) / healthScores.length)
       : 0;
 
-    // Calculate average grade based on average score
     const getGradeFromScore = (score: number): string => {
       if (score >= 90) return 'A+';
       if (score >= 85) return 'A';
@@ -97,7 +169,7 @@ const AccountTable: React.FC<AccountTableProps> = ({
     };
   }, [data, statusFilter, searchTerm]);
 
-  // Pre-calculate health scores for all filtered accounts (moved before early returns)
+  // Pre-calculate health scores for all filtered accounts
   const accountsWithHealthScores = useMemo(() => {
     if (!data?.accounts) return [];
     
@@ -111,13 +183,11 @@ const AccountTable: React.FC<AccountTableProps> = ({
       .sort((a, b) => {
         let aValue: any, bValue: any;
         
-        // Handle nested metrics
         if (sortColumn.startsWith('metrics.')) {
           const metricKey = sortColumn.replace('metrics.', '') as keyof AccountMetrics['metrics'];
           aValue = a.metrics[metricKey];
           bValue = b.metrics[metricKey];
         } else if (sortColumn === 'healthScore') {
-          // Handle health score sorting
           const aHealthScore = calculateAccountHealthScore(a);
           const bHealthScore = calculateAccountHealthScore(b);
           aValue = aHealthScore.overall;
@@ -132,7 +202,6 @@ const AccountTable: React.FC<AccountTableProps> = ({
           bValue = (bValue as string).toLowerCase();
         }
         
-        // Handle undefined/null values
         if (aValue == null && bValue == null) return 0;
         if (aValue == null) return sortDirection === 'asc' ? 1 : -1;
         if (bValue == null) return sortDirection === 'asc' ? -1 : 1;
@@ -173,356 +242,302 @@ const AccountTable: React.FC<AccountTableProps> = ({
     );
   }
 
-  // Calculate performance levels for all metrics
-  const allClicks = accountsWithHealthScores.map(a => a.metrics.clicks);
-  const allImpressions = accountsWithHealthScores.map(a => a.metrics.impressions);
-  const allCtr = accountsWithHealthScores.map(a => a.metrics.ctr);
-  const allAvgCpc = accountsWithHealthScores.map(a => a.metrics.avgCpc);
-  const allCost = accountsWithHealthScores.map(a => a.metrics.cost);
-  const allConversions = accountsWithHealthScores.map(a => a.metrics.conversions);
-  const allCpa = accountsWithHealthScores.map(a => a.metrics.cpa);
-  const allConversionsValue = accountsWithHealthScores.map(a => a.metrics.conversionsValue);
-  const allRoas = accountsWithHealthScores.map(a => a.metrics.roas);
-
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
+      <table className="min-w-full divide-y divide-gray-200 text-sm">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            {onAccountSelect && (
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
-                <input
-                  type="checkbox"
-                  className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                  checked={selectedAccounts.length === accountsWithHealthScores.length && accountsWithHealthScores.length > 0}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      // Select all visible accounts
-                      accountsWithHealthScores.forEach(account => {
-                        if (!selectedAccounts.includes(account.id)) {
-                          onAccountSelect(account.id, true);
-                        }
-                      });
-                    } else {
-                      // Deselect all visible accounts
-                      accountsWithHealthScores.forEach(account => {
-                        if (selectedAccounts.includes(account.id)) {
-                          onAccountSelect(account.id, false);
-                        }
-                      });
-                    }
-                  }}
-                />
-              </th>
-            )}
+            <th className="w-8 pl-4 pr-2 py-3"></th>
             <th 
-              className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+              className="w-[220px] px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
               onClick={() => onSort('name')}
             >
-              <div className="flex items-center space-x-1">
-                <span>Account Name</span>
-                {sortColumn === 'name' && (
-                  <span className="text-teal-600">
-                    {sortDirection === 'asc' ? '↑' : '↓'}
-                  </span>
-                )}
+              Account {sortColumn === 'name' && <span className="text-teal-600">{sortDirection === 'asc' ? '↑' : '↓'}</span>}
+            </th>
+            <th className="w-14 px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => onSort('healthScore')}>
+              <Award className="w-3.5 h-3.5 mx-auto text-gray-400" />
+            </th>
+            <th className="w-px border-r border-gray-200"></th>
+            <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => onSort('metrics.clicks')}>
+              <div className="flex items-center justify-end">
+                <span>Clicks {sortColumn === 'metrics.clicks' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                <span className="w-6"></span>
               </div>
             </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('countryCode')}
-            >
-              Country
-              {sortColumn === 'countryCode' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
-            </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('campaignCount')}
-            >
-              Campaigns
-              {sortColumn === 'campaignCount' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
-            </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('healthScore')}
-            >
-              <div className="flex items-center space-x-1">
-                <Award className="w-3 h-3" />
-                <span>Grade</span>
+            <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => onSort('metrics.impressions')}>
+              <div className="flex items-center justify-end">
+                <span>Impr. {sortColumn === 'metrics.impressions' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                <span className="w-6"></span>
               </div>
-              {sortColumn === 'healthScore' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
             </th>
-            <th className="px-1 py-3 w-px border-r border-gray-300">
+            <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => onSort('metrics.ctr')}>
+              <div className="flex items-center justify-end">
+                <span>CTR {sortColumn === 'metrics.ctr' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                <span className="w-6"></span>
+              </div>
             </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('metrics.clicks')}
-            >
-              Clicks
-              {sortColumn === 'metrics.clicks' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
+            <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => onSort('metrics.avgCpc')}>
+              <div className="flex items-center justify-end">
+                <span>CPC {sortColumn === 'metrics.avgCpc' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                <span className="w-6"></span>
+              </div>
             </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('metrics.impressions')}
-            >
-              Impressions
-              {sortColumn === 'metrics.impressions' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
+            <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => onSort('metrics.cost')}>
+              <div className="flex items-center justify-end">
+                <span>Cost {sortColumn === 'metrics.cost' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                <span className="w-6"></span>
+              </div>
             </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('metrics.ctr')}
-            >
-              CTR
-              {sortColumn === 'metrics.ctr' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
+            <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => onSort('metrics.conversions')}>
+              <div className="flex items-center justify-end">
+                <span>Conv. {sortColumn === 'metrics.conversions' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                <span className="w-6"></span>
+              </div>
             </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('metrics.avgCpc')}
-            >
-              CPC
-              {sortColumn === 'metrics.avgCpc' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
+            <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => onSort('metrics.cpa')}>
+              <div className="flex items-center justify-end">
+                <span>CPA {sortColumn === 'metrics.cpa' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                <span className="w-6"></span>
+              </div>
             </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('metrics.cost')}
-            >
-              Cost
-              {sortColumn === 'metrics.cost' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
+            <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => onSort('metrics.conversionsValue')}>
+              <div className="flex items-center justify-end">
+                <span>Value {sortColumn === 'metrics.conversionsValue' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                <span className="w-6"></span>
+              </div>
             </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('metrics.conversions')}
-            >
-              Conversions
-              {sortColumn === 'metrics.conversions' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
-            </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('metrics.cpa')}
-            >
-              CPA
-              {sortColumn === 'metrics.cpa' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
-            </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('metrics.conversionsValue')}
-            >
-              Conversion Value
-              {sortColumn === 'metrics.conversionsValue' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
-            </th>
-            <th 
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              onClick={() => onSort('metrics.roas')}
-            >
-              ROAS
-              {sortColumn === 'metrics.roas' && (
-                <span className="ml-1">
-                  {sortDirection === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
+            <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => onSort('metrics.roas')}>
+              <div className="flex items-center justify-end">
+                <span>ROAS {sortColumn === 'metrics.roas' && (sortDirection === 'asc' ? '↑' : '↓')}</span>
+                <span className="w-6"></span>
+              </div>
             </th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {accountsWithHealthScores.map((account) => (
-            <tr 
-              key={account.id} 
-              className="hover:bg-gray-50"
-            >
-              {onAccountSelect && (
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
-                    checked={selectedAccounts.includes(account.id)}
-                    onChange={(e) => onAccountSelect(account.id, e.target.checked)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
+          {accountsWithHealthScores.map((account) => {
+            const isExpanded = expandedRows.has(account.id);
+            const hasPreviousData = !!account.previousMetrics;
+            
+            return (
+              <React.Fragment key={account.id}>
+                {/* Main row */}
+                <tr 
+                  className={`hover:bg-gray-50 cursor-pointer transition-colors ${isExpanded ? 'bg-slate-50' : ''}`}
+                  onClick={() => hasPreviousData && toggleRowExpansion(account.id)}
+                >
+                  <td className="pl-4 pr-2 py-3">
+                    {hasPreviousData ? (
+                      isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-300" />
+                    ) : null}
                 </td>
-              )}
-              <td 
-                className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer"
-                onClick={() => onAccountClick(account)}
-              >
-                <div className="flex items-center">
-                  <div>
-                    <div className="font-medium">{account.name}</div>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-900 truncate" title={account.name}>{account.name}</div>
                     {account.topCampaign && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        Top: {account.topCampaign}
+                      <div className="text-[11px] text-gray-400 truncate mt-0.5" title={account.topCampaign}>
+                        {account.topCampaign}
                       </div>
                     )}
-                  </div>
-                </div>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                  {account.countryCode}
-                </span>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {formatNumber(account.campaignCount)}
-              </td>
-              <td 
-                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
-                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'healthScore', account.healthScore, account.name, account.id) : undefined}
-                onMouseLeave={() => onMetricLeave?.('healthScore')}
-              >
-                <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${account.healthStyles.color}`} />
-                  <div className="flex items-center space-x-1">
-                    <span className="font-medium">{account.healthScore}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${account.healthStyles.bgColor} ${account.healthStyles.textColor} ${account.healthStyles.borderColor} border`}>
+                  <td className="px-3 py-3 text-center">
+                    <span className={`text-xs px-2 py-1 rounded font-medium ${account.healthStyles.bgColor} ${account.healthStyles.textColor}`}>
                       {account.healthGrade}
                     </span>
-                  </div>
-                </div>
               </td>
-              <td className="px-1 py-4 w-px border-r border-gray-300">
-              </td>
-              <td 
-                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
-                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'clicks', account.metrics.clicks, account.name, account.id) : undefined}
-                onMouseLeave={() => onMetricLeave?.('clicks')}
-              >
-                <div className="flex items-center">
-                  <PerformanceIndicator level={getPerformanceLevel(account.metrics.clicks, allClicks, 'clicks')} />
-                  {formatNumber(account.metrics.clicks)}
-                </div>
-              </td>
-              <td 
-                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
-                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'impressions', account.metrics.impressions, account.name, account.id) : undefined}
-                onMouseLeave={() => onMetricLeave?.('impressions')}
-              >
-                <div className="flex items-center">
-                  <PerformanceIndicator level={getPerformanceLevel(account.metrics.impressions, allImpressions, 'impressions')} />
-                  {formatNumber(account.metrics.impressions)}
-                </div>
-              </td>
-              <td 
-                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
-                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'ctr', account.metrics.ctr, account.name, account.id) : undefined}
-                onMouseLeave={() => onMetricLeave?.('ctr')}
-              >
-                <div className="flex items-center">
-                  <PerformanceIndicator level={getPerformanceLevel(account.metrics.ctr, allCtr, 'ctr')} />
-                  {formatPercentage(account.metrics.ctr)}
-                </div>
-              </td>
-              <td 
-                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
-                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'avgCpc', account.metrics.avgCpc, account.name, account.id) : undefined}
-                onMouseLeave={() => onMetricLeave?.('avgCpc')}
-              >
-                <div className="flex items-center">
-                  <PerformanceIndicator level={getPerformanceLevel(account.metrics.avgCpc, allAvgCpc, 'avgCpc')} />
-                  {formatCurrency(account.metrics.avgCpc)}
-                </div>
-              </td>
-              <td 
-                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
-                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'cost', account.metrics.cost, account.name, account.id) : undefined}
-                onMouseLeave={() => onMetricLeave?.('cost')}
-              >
-                <div className="flex items-center">
-                  <PerformanceIndicator level={getPerformanceLevel(account.metrics.cost, allCost, 'cost')} />
-                  {formatCurrency(account.metrics.cost)}
-                </div>
-              </td>
-              <td 
-                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
-                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'conversions', account.metrics.conversions, account.name, account.id) : undefined}
-                onMouseLeave={() => onMetricLeave?.('conversions')}
-              >
-                <div className="flex items-center">
-                  <PerformanceIndicator level={getPerformanceLevel(account.metrics.conversions, allConversions, 'conversions')} />
-                  {formatNumber(account.metrics.conversions)}
-                </div>
-              </td>
-              <td 
-                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
-                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'cpa', account.metrics.cpa, account.name, account.id) : undefined}
-                onMouseLeave={() => onMetricLeave?.('cpa')}
-              >
-                <div className="flex items-center">
-                  <PerformanceIndicator level={getPerformanceLevel(account.metrics.cpa, allCpa, 'cpa')} />
-                  {formatCurrency(account.metrics.cpa)}
-                </div>
-              </td>
-              <td 
-                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
-                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'conversionsValue', account.metrics.conversionsValue, account.name, account.id) : undefined}
-                onMouseLeave={() => onMetricLeave?.('conversionsValue')}
-              >
-                <div className="flex items-center">
-                  <PerformanceIndicator level={getPerformanceLevel(account.metrics.conversionsValue, allConversionsValue, 'conversionsValue')} />
-                  {formatCurrency(account.metrics.conversionsValue)}
-                </div>
-              </td>
-              <td 
-                className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 cursor-pointer hover:bg-blue-50 hover:text-blue-600 transition-colors rounded px-2 py-1"
-                onMouseEnter={onMetricHover ? (e) => onMetricHover(e, 'roas', account.metrics.roas, account.name, account.id) : undefined}
-                onMouseLeave={() => onMetricLeave?.('roas')}
-              >
-                <div className="flex items-center">
-                  <PerformanceIndicator level={getPerformanceLevel(account.metrics.roas, allRoas, 'roas')} />
-                  {account.metrics.roas.toFixed(2)}
-                </div>
-              </td>
-            </tr>
-          ))}
+                  <td className="border-r border-gray-200"></td>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div className="flex items-center justify-end">
+                      <span className="tabular-nums">{formatNumber(account.metrics.clicks)}</span>
+                      <TrendIndicator value={account.trends?.clicks} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div className="flex items-center justify-end">
+                      <span className="tabular-nums">{formatNumber(account.metrics.impressions)}</span>
+                      <TrendIndicator value={account.trends?.impressions} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div className="flex items-center justify-end">
+                      <span className="tabular-nums">{formatPercentage(account.metrics.ctr)}</span>
+                      <TrendIndicator value={account.trends?.ctr} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div className="flex items-center justify-end">
+                      <span className="tabular-nums">{formatCurrency(account.metrics.avgCpc)}</span>
+                      <TrendIndicator value={account.trends?.avgCpc} inverted />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div className="flex items-center justify-end">
+                      <span className="tabular-nums">{formatCurrency(account.metrics.cost)}</span>
+                      <TrendIndicator value={account.trends?.cost} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div className="flex items-center justify-end">
+                      <span className="tabular-nums">{formatNumber(account.metrics.conversions)}</span>
+                      <TrendIndicator value={account.trends?.conversions} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div className="flex items-center justify-end">
+                      <span className="tabular-nums">{formatCurrency(account.metrics.cpa)}</span>
+                      <TrendIndicator value={account.trends?.cpa} inverted />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div className="flex items-center justify-end">
+                      <span className="tabular-nums">{formatCurrency(account.metrics.conversionsValue)}</span>
+                      <TrendIndicator value={account.trends?.conversionsValue} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-900">
+                    <div className="flex items-center justify-end">
+                      <span className="tabular-nums">{account.metrics.roas.toFixed(2)}</span>
+                      <TrendIndicator value={account.trends?.roas} />
+                    </div>
+                  </td>
+                </tr>
+
+                {/* Expanded rows: Previous period + Difference */}
+                {isExpanded && account.previousMetrics && (
+                  <>
+                    {/* Previous period row */}
+                    <tr className="bg-slate-50">
+                      <td className="pl-4 pr-2 py-2"></td>
+                      <td className="px-4 py-2 text-xs text-gray-400 italic">Previous period</td>
+                      <td className="px-3 py-2"></td>
+                      <td className="border-r border-gray-200"></td>
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        <div className="flex items-center justify-end">
+                          <span className="tabular-nums">{formatNumber(account.previousMetrics.clicks)}</span>
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        <div className="flex items-center justify-end">
+                          <span className="tabular-nums">{formatNumber(account.previousMetrics.impressions)}</span>
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        <div className="flex items-center justify-end">
+                          <span className="tabular-nums">{formatPercentage(account.previousMetrics.ctr)}</span>
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        <div className="flex items-center justify-end">
+                          <span className="tabular-nums">{formatCurrency(account.previousMetrics.avgCpc)}</span>
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        <div className="flex items-center justify-end">
+                          <span className="tabular-nums">{formatCurrency(account.previousMetrics.cost)}</span>
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        <div className="flex items-center justify-end">
+                          <span className="tabular-nums">{formatNumber(account.previousMetrics.conversions)}</span>
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        <div className="flex items-center justify-end">
+                          <span className="tabular-nums">{formatCurrency(account.previousMetrics.cpa)}</span>
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        <div className="flex items-center justify-end">
+                          <span className="tabular-nums">{formatCurrency(account.previousMetrics.conversionsValue)}</span>
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        <div className="flex items-center justify-end">
+                          <span className="tabular-nums">{account.previousMetrics.roas.toFixed(2)}</span>
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                    </tr>
+                    {/* Change row */}
+                    <tr className="bg-slate-100 border-b border-slate-200">
+                      <td className="pl-4 pr-2 py-2"></td>
+                      <td className="px-4 py-2 text-xs text-gray-500 font-medium">Change</td>
+                      <td className="px-3 py-2"></td>
+                      <td className="border-r border-gray-200"></td>
+                      <td className="px-4 py-2 text-xs">
+                        <div className="flex items-center justify-end">
+                          <DifferenceCell current={account.metrics.clicks} previous={account.previousMetrics.clicks} format="number" />
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        <div className="flex items-center justify-end">
+                          <DifferenceCell current={account.metrics.impressions} previous={account.previousMetrics.impressions} format="number" />
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        <div className="flex items-center justify-end">
+                          <DifferenceCell current={account.metrics.ctr} previous={account.previousMetrics.ctr} format="percentage" />
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        <div className="flex items-center justify-end">
+                          <DifferenceCell current={account.metrics.avgCpc} previous={account.previousMetrics.avgCpc} format="currency" inverted />
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        <div className="flex items-center justify-end">
+                          <DifferenceCell current={account.metrics.cost} previous={account.previousMetrics.cost} format="currency" />
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        <div className="flex items-center justify-end">
+                          <DifferenceCell current={account.metrics.conversions} previous={account.previousMetrics.conversions} format="number" />
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        <div className="flex items-center justify-end">
+                          <DifferenceCell current={account.metrics.cpa} previous={account.previousMetrics.cpa} format="currency" inverted />
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        <div className="flex items-center justify-end">
+                          <DifferenceCell current={account.metrics.conversionsValue} previous={account.previousMetrics.conversionsValue} format="currency" />
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        <div className="flex items-center justify-end">
+                          <DifferenceCell current={account.metrics.roas} previous={account.previousMetrics.roas} format="decimal" />
+                          <span className="w-6"></span>
+                        </div>
+                      </td>
+                    </tr>
+                  </>
+                )}
+              </React.Fragment>
+            );
+          })}
         </tbody>
         {calculatedTotals && (
           <TableTotalsRow 
             totals={calculatedTotals}
             itemCount={accountsWithHealthScores.length}
             itemType="accounts"
-            showCheckboxColumn={!!onAccountSelect}
+            showCheckboxColumn={false}
           />
         )}
       </table>

@@ -319,13 +319,14 @@ const MccHoverMetricsChart: React.FC<MccHoverMetricsChartProps> = ({
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dailyData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+              <LineChart data={dailyData} margin={{ top: 5, right: 10, left: 10, bottom: 20 }}>
                 <XAxis 
                   dataKey="formattedDate" 
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 10, fill: '#6b7280' }}
+                  tick={{ fontSize: 9, fill: '#6b7280' }}
                   interval="preserveStartEnd"
+                  dy={8}
                 />
                 <YAxis hide />
                 <Tooltip

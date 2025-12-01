@@ -62,7 +62,8 @@ const useHistoricalData = (
       
       if (result.success) {
         setData(result.data);
-        saveToCache(cacheKey, result.data, 30 * 60 * 1000);
+        // Historical data can be cached longer - 2 hours
+        saveToCache(cacheKey, result.data, 120 * 60 * 1000);
       } else {
         setError(result.message || 'Failed to fetch historical data');
         setData([]);

@@ -2,34 +2,57 @@ import { NextResponse } from 'next/server';
 import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
 import { getFormattedDateRange } from '@/utils/dateUtils';
 import { calculateDerivedMetrics, convertCostFromMicros } from '@/utils/apiHelpers';
+import { serverCache, ServerCache } from '@/utils/serverCache';
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
-    const dateRange = searchParams.get('dateRange') || '30'; // Default to 30 days
+    const dateRange = searchParams.get('dateRange') || '30';
     const includeImpressionShare = searchParams.get('includeImpressionShare') === 'true';
     const includeBiddingStrategy = searchParams.get('includeBiddingStrategy') === 'true';
-    const device = searchParams.get('device'); // 'desktop', 'mobile', 'tablet', or null for all
+    const device = searchParams.get('device');
     
     if (!customerId) {
       return NextResponse.json({
         success: false,
-        message: "❌ Customer ID is required"
+        message: "Customer ID is required"
       }, { status: 400 });
     }
     
+    // Calculate date range using utility
+    const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
+    
+    // Generate cache key
+    const cacheKey = serverCache.generateKey('campaigns', {
+      customerId,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      device,
+      includeImpressionShare,
+      includeBiddingStrategy
+    });
+
+    // Check cache first
+    const cachedData = serverCache.get<any>(cacheKey);
+    if (cachedData) {
+      const response = NextResponse.json({
+        success: true,
+        message: `Retrieved ${cachedData.campaigns.length} campaigns (cached)`,
+        data: cachedData,
+        cached: true
+      });
+      // Add cache headers for browser-level caching
+      response.headers.set('Cache-Control', 'private, max-age=300, stale-while-revalidate=600');
+      return response;
+    }
+
     // Map device filter to Google Ads device enum names
     const deviceMap: Record<string, string> = {
       'desktop': 'DESKTOP',
       'mobile': 'MOBILE',
       'tablet': 'TABLET',
     };
-
-
-    
-    // Calculate date range using utility
-    const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
     
     // Initialize Google Ads client and customer using utility
     const { customer } = createGoogleAdsConnection(customerId);
@@ -74,8 +97,6 @@ export async function GET(request: Request) {
     }
 
     // Build WHERE clause with optional device filter
-    // Fetch both ENABLED and PAUSED campaigns (not REMOVED)
-    // Exclude experiments and drafts - only get BASE campaigns
     let whereClause = `
       FROM campaign
       WHERE campaign.status IN ('ENABLED', 'PAUSED')
@@ -93,7 +114,6 @@ export async function GET(request: Request) {
     `;
     
     query += whereClause;
-
 
     const results = await customer.query(query);
     
@@ -125,7 +145,7 @@ export async function GET(request: Request) {
         const campaignData: any = {
           id: campaignId,
           name: row.campaign.name,
-          status: row.campaign.status === 2 || row.campaign.status === 'ENABLED' ? 'ENABLED' : 'PAUSED', // Convert status to string (handles both numeric and string values)
+          status: row.campaign.status === 2 || row.campaign.status === 'ENABLED' ? 'ENABLED' : 'PAUSED',
           impressions: row.metrics.impressions || 0,
           clicks: row.metrics.clicks || 0,
           costMicros: row.metrics.cost_micros || 0,
@@ -168,19 +188,16 @@ export async function GET(request: Request) {
       const processedCampaign: any = {
         ...campaign,
         ...derivedMetrics,
-        conversionsValue: campaign.conversionsValueMicros // Keep original field name for compatibility
+        conversionsValue: campaign.conversionsValueMicros
       };
 
       // Add formatted impression share data for widgets
       if (includeImpressionShare) {
-        // Convert decimal values to percentages (Google Ads API returns 0.0-1.0, we need 0-100)
         const impressionSharePercent = (campaign.searchImpressionShare || 0) * 100;
         const absoluteTopPercent = (campaign.searchAbsoluteTopImpressionShare || 0) * 100;
         const topImpressionPercent = (campaign.searchTopImpressionShare || 0) * 100;
         const budgetLostPercent = (campaign.searchBudgetLostImpressionShare || 0) * 100;
         const rankLostPercent = (campaign.searchRankLostImpressionShare || 0) * 100;
-        
-
         
         processedCampaign.impressionShare = {
           search_impression_share: impressionSharePercent,
@@ -190,15 +207,14 @@ export async function GET(request: Request) {
           search_rank_lost_impression_share: rankLostPercent,
           lost_budget_share: budgetLostPercent,
           lost_rank_share: rankLostPercent,
-          trend: 'stable', // TODO: Calculate actual trend from historical data
-          trend_value: 0, // TODO: Calculate actual trend value from historical data
+          trend: 'stable',
+          trend_value: 0,
           competitive_strength: impressionSharePercent > 70 ? 'strong' : impressionSharePercent > 40 ? 'moderate' : 'weak'
         };
       }
 
       // Add formatted bidding strategy data
       if (includeBiddingStrategy) {
-        // Map bidding strategy type enum to readable string
         const biddingStrategyTypeMap: { [key: number]: string } = {
           2: 'MANUAL_CPC',
           3: 'MANUAL_CPM',
@@ -218,12 +234,10 @@ export async function GET(request: Request) {
         
         processedCampaign.biddingStrategy = {
           type: biddingStrategyType,
-          targetRoas: campaign.targetRoas, // Already in decimal format from API
+          targetRoas: campaign.targetRoas,
           targetCpaMicros: campaign.targetCpaMicros,
           targetRoasOverride: campaign.maximizeConversionValueTargetRoas
         };
-
-
       }
 
       return processedCampaign;
@@ -251,36 +265,40 @@ export async function GET(request: Request) {
       };
     }
 
-    let message = `✅ Retrieved ${campaigns.length} campaigns for ${dateRange} days`;
-    if (includeImpressionShare) message += ' with impression share data';
-    if (includeBiddingStrategy) message += ' with bidding strategy data';
+    const responseData = {
+      campaigns,
+      totals,
+      dateRange: {
+        days: parseInt(dateRange),
+        startDate: startDateStr,
+        endDate: endDateStr
+      },
+      customerId,
+      includeImpressionShare,
+      includeBiddingStrategy
+    };
 
-
+    // Cache the response with smart TTL
+    const ttl = serverCache.getSmartTTL(endDateStr, ServerCache.TTL.ENTITY_LIST);
+    serverCache.set(cacheKey, responseData, ttl);
     
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      message,
-      data: {
-        campaigns,
-        totals,
-        dateRange: {
-          days: parseInt(dateRange),
-          startDate: startDateStr,
-          endDate: endDateStr
-        },
-        customerId,
-        includeImpressionShare,
-        includeBiddingStrategy
-      }
+      message: `Retrieved ${campaigns.length} campaigns for ${dateRange} days`,
+      data: responseData,
+      cached: false
     });
+    // Add cache headers - shorter for fresh data
+    response.headers.set('Cache-Control', 'private, max-age=300, stale-while-revalidate=600');
+    return response;
 
   } catch (error) {
     console.error('Error fetching campaign performance:', error);
     
     return NextResponse.json({
       success: false,
-      message: "❌ Failed to fetch campaign performance",
+      message: "Failed to fetch campaign performance",
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-} 
+}

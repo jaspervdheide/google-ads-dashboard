@@ -5,6 +5,33 @@
 
 import { DateRangeInfo } from './common';
 
+// Trend data for previous period comparison (percentage changes)
+export interface AccountTrends {
+  impressions: number;
+  clicks: number;
+  cost: number;
+  conversions: number;
+  conversionsValue: number;
+  ctr: number;
+  avgCpc: number;
+  cpa: number;
+  roas: number;
+}
+
+// Previous period raw metrics (actual values)
+export interface PreviousPeriodMetrics {
+  impressions: number;
+  clicks: number;
+  cost: number;
+  conversions: number;
+  conversionsValue: number;
+  ctr: number;
+  avgCpc: number;
+  conversionRate: number;
+  cpa: number;
+  roas: number;
+}
+
 // Core account metrics interface
 export interface AccountMetrics {
   id: string;
@@ -26,6 +53,10 @@ export interface AccountMetrics {
     cpa: number;
     roas: number;
   };
+  // Trend data compared to previous period (percentage changes)
+  trends?: AccountTrends;
+  // Previous period raw metrics (actual values for expandable view)
+  previousMetrics?: PreviousPeriodMetrics;
 }
 
 // Aggregated totals across all accounts

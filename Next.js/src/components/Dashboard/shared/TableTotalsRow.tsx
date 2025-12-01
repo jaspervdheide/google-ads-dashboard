@@ -35,88 +35,132 @@ export const TableTotalsRow: React.FC<TableTotalsRowProps> = ({
   showCheckboxColumn = false 
 }) => (
   <tfoot className="bg-gray-50 border-t-2 border-gray-200">
-    <tr className="font-medium">
+    <tr className="font-medium text-sm">
       {showCheckboxColumn && (
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
+        <td className="px-4 py-3 whitespace-nowrap text-gray-900"></td>
       )}
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-        <div className="flex items-center">
-          <Calculator className="h-4 w-4 text-gray-500 mr-2" />
-          Totals ({totals.campaignCount || totals.adGroupCount || totals.productCount || totals.accountCount || itemCount} {itemType})
-        </div>
-      </td>
+      {itemType === 'accounts' && (
+        <>
+          {/* Expand icon column */}
+          <td className="pl-4 pr-2 py-3"></td>
+          {/* Account name column with totals label */}
+          <td className="px-4 py-3">
+            <div className="flex items-center">
+              <Calculator className="h-4 w-4 text-gray-400 mr-2" />
+              <span className="text-sm text-gray-600">Totals ({totals.accountCount || itemCount} accounts)</span>
+            </div>
+          </td>
+          {/* Health grade */}
+          <td className="px-3 py-3 text-center">
+            {totals.avgHealthGrade && (
+              <span className="text-xs px-2 py-1 rounded font-medium bg-gray-100 text-gray-600">
+                {totals.avgHealthGrade}
+              </span>
+            )}
+          </td>
+          <td className="border-r border-gray-200"></td>
+        </>
+      )}
       {itemType === 'campaigns' && (
-        <td className="px-1 py-4 w-px border-r border-gray-300"></td>
+        <>
+          <td className="px-2 py-2 whitespace-nowrap text-gray-900">
+            <div className="flex items-center">
+              <Calculator className="h-3.5 w-3.5 text-gray-500 mr-1.5" />
+              <span className="text-xs">Totals ({totals.campaignCount || itemCount} {itemType})</span>
+            </div>
+          </td>
+          <td className="w-px border-r border-gray-300"></td>
+        </>
       )}
       {itemType === 'ad groups' && (
         <>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
+          <td className="px-2 py-2 whitespace-nowrap text-gray-900">
+            <div className="flex items-center">
+              <Calculator className="h-3.5 w-3.5 text-gray-500 mr-1.5" />
+              <span className="text-xs">Totals ({totals.adGroupCount || itemCount} {itemType})</span>
+            </div>
+          </td>
+          <td className="px-2 py-2 whitespace-nowrap text-gray-900"></td>
+          <td className="px-2 py-2 whitespace-nowrap text-gray-900"></td>
         </>
       )}
       {itemType === 'products' && (
         <>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
-        </>
-      )}
-      {itemType === 'accounts' && (
-        <>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatNumber(totals.accountCount || itemCount)}</td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatNumber(totals.campaignCount || 0)}</td>
-          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-            {totals.avgHealthScore !== undefined && (
-              <div className="flex items-center space-x-1">
-                <span className="font-medium">{totals.avgHealthScore}</span>
-                {totals.avgHealthGrade && (
-                  <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700 border border-gray-300">
-                    {totals.avgHealthGrade}
-                  </span>
-                )}
-              </div>
-            )}
+          <td className="px-2 py-2 whitespace-nowrap text-gray-900">
+            <div className="flex items-center">
+              <Calculator className="h-3.5 w-3.5 text-gray-500 mr-1.5" />
+              <span className="text-xs">Totals ({totals.productCount || itemCount} {itemType})</span>
+            </div>
           </td>
-          <td className="px-1 py-4 w-px border-r border-gray-300"></td>
+          <td className="px-2 py-2 whitespace-nowrap text-gray-900"></td>
+          <td className="px-2 py-2 whitespace-nowrap text-gray-900"></td>
+          <td className="px-2 py-2 whitespace-nowrap text-gray-900"></td>
+          <td className="px-2 py-2 whitespace-nowrap text-gray-900"></td>
         </>
       )}
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-        {formatNumber(totals.clicks)}
+      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+        <div className="flex items-center justify-end">
+          <span className="tabular-nums">{formatNumber(totals.clicks)}</span>
+          {itemType === 'accounts' && <span className="w-6"></span>}
+        </div>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-        {formatNumber(totals.impressions)}
+      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+        <div className="flex items-center justify-end">
+          <span className="tabular-nums">{formatNumber(totals.impressions)}</span>
+          {itemType === 'accounts' && <span className="w-6"></span>}
+        </div>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-        {formatPercentage(totals.ctr)}
+      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+        <div className="flex items-center justify-end">
+          <span className="tabular-nums">{formatPercentage(totals.ctr)}</span>
+          {itemType === 'accounts' && <span className="w-6"></span>}
+        </div>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-        {formatCurrency(totals.avgCpc)}
+      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+        <div className="flex items-center justify-end">
+          <span className="tabular-nums">{formatCurrency(totals.avgCpc)}</span>
+          {itemType === 'accounts' && <span className="w-6"></span>}
+        </div>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-        {formatCurrency(totals.cost)}
+      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+        <div className="flex items-center justify-end">
+          <span className="tabular-nums">{formatCurrency(totals.cost)}</span>
+          {itemType === 'accounts' && <span className="w-6"></span>}
+        </div>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-        {formatNumber(totals.conversions)}
+      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+        <div className="flex items-center justify-end">
+          <span className="tabular-nums">{formatNumber(totals.conversions)}</span>
+          {itemType === 'accounts' && <span className="w-6"></span>}
+        </div>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-        {formatCurrency(totals.cpa)}
+      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+        <div className="flex items-center justify-end">
+          <span className="tabular-nums">{formatCurrency(totals.cpa)}</span>
+          {itemType === 'accounts' && <span className="w-6"></span>}
+        </div>
       </td>
       {itemType === 'products' && totals.poas !== undefined && (
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+        <td className="px-4 py-3 whitespace-nowrap text-gray-700 text-right tabular-nums">
           {totals.poas.toFixed(2)}
         </td>
       )}
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-        {formatCurrency(totals.conversionsValue)}
+      <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+        <div className="flex items-center justify-end">
+          <span className="tabular-nums">{formatCurrency(totals.conversionsValue)}</span>
+          {itemType === 'accounts' && <span className="w-6"></span>}
+        </div>
       </td>
       {itemType !== 'products' && (
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-          {totals.roas.toFixed(2)}
+        <td className="px-4 py-3 whitespace-nowrap text-gray-700">
+          <div className="flex items-center justify-end">
+            <span className="tabular-nums">{totals.roas.toFixed(2)}</span>
+            {itemType === 'accounts' && <span className="w-6"></span>}
+          </div>
         </td>
       )}
       {showExtraColumns && (
-        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"></td>
+        <td className="px-4 py-3 whitespace-nowrap text-gray-700"></td>
       )}
     </tr>
   </tfoot>

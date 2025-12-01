@@ -1,23 +1,19 @@
-import { NextRequest as _NextRequest } from 'next/server';
+import { NextRequest as _NextRequest, NextResponse } from 'next/server';
 import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
 import { getFormattedDateRange } from '@/utils/dateUtils';
-import { handleValidationError, handleApiError, createSuccessResponse } from '@/utils/errorHandler';
+import { handleValidationError, handleApiError } from '@/utils/errorHandler';
 import { calculateDerivedMetrics, convertCostFromMicros } from '@/utils/apiHelpers';
 import { logger } from '@/utils/logger';
+import { serverCache, ServerCache } from '@/utils/serverCache';
 
 // Helper function to convert complex asset coverage data to percentage
 function calculateAssetCoveragePercentage(actionItems: any): number {
   if (!actionItems || !Array.isArray(actionItems)) {
-    return 85; // Default good coverage percentage
+    return 85;
   }
-  
-  // Simple calculation: fewer action items = better coverage
-  // If no action items, coverage is excellent (95%)
-  // Each action item reduces coverage by ~10%
   const basePercentage = 95;
   const reductionPerItem = 10;
   const coverage = Math.max(30, basePercentage - (actionItems.length * reductionPerItem));
-  
   return Math.round(coverage);
 }
 
@@ -25,8 +21,6 @@ function calculateAssetCoveragePercentage(actionItems: any): number {
 function getAdStrengthText(adStrength: any): string | null {
   if (!adStrength) return null;
   
-  // Google Ads API returns numeric values for ad strength
-  // 2 = Poor, 3 = Average, 4 = Good, 5 = Excellent
   switch (adStrength) {
     case 2:
     case 'AD_STRENGTH_POOR':
@@ -50,10 +44,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('customerId');
     const dateRange = searchParams.get('dateRange') || '30';
-    const groupType = searchParams.get('groupType') || 'all'; // 'all', 'traditional', 'asset'
+    const groupType = searchParams.get('groupType') || 'all';
     const device = searchParams.get('device');
     
-    // Map device filter values to Google Ads API enum names
     const deviceMap: { [key: string]: string } = {
       'desktop': 'DESKTOP',
       'mobile': 'MOBILE',
@@ -65,21 +58,45 @@ export async function GET(request: Request) {
       return handleValidationError('Customer ID is required');
     }
 
-    // Single API summary log instead of verbose logging
-    logger.apiStart('ad-groups', { customerId, dateRange, groupType, device });
-    
     // Calculate date range using utility
     const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
     
-    // Initialize Google Ads client and customer using utility
+    // Generate cache key
+    const cacheKey = serverCache.generateKey('ad-groups', {
+      customerId,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      groupType,
+      device
+    });
+
+    // Check cache first
+    const cachedData = serverCache.get<any>(cacheKey);
+    if (cachedData) {
+      return NextResponse.json({
+        success: true,
+        message: `Retrieved ${cachedData.groups.length} groups (cached)`,
+        data: cachedData,
+        cached: true
+      });
+    }
+
+    logger.apiStart('ad-groups', { customerId, dateRange, groupType, device });
+    
     const { customer } = createGoogleAdsConnection(customerId);
 
     const allGroups: any[] = [];
 
-    // Query for traditional ad groups (non-Performance Max)
+    // Build queries
+    const deviceSelect = deviceApiValue ? ', segments.device' : '';
+    const deviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
+
+    // Prepare all queries to run in parallel
+    const queries: Promise<any>[] = [];
+    const queryTypes: string[] = [];
+
+    // Traditional ad groups query
     if (groupType === 'all' || groupType === 'traditional') {
-      const deviceSelect = deviceApiValue ? ', segments.device' : '';
-      const deviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       const traditionalAdGroupsQuery = `
         SELECT
           ad_group.id,
@@ -104,125 +121,34 @@ export async function GET(request: Request) {
           ${deviceWhere}
         ORDER BY metrics.cost_micros DESC
       `;
+      queries.push(customer.query(traditionalAdGroupsQuery).catch((e: Error) => {
+        console.error('Error fetching traditional ad groups:', e);
+        return [];
+      }));
+      queryTypes.push('traditional');
 
-      try {
-        const traditionalResults = await customer.query(traditionalAdGroupsQuery);
-        
-        // Process traditional ad groups
-        const traditionalGroupMap = new Map();
-        
-        traditionalResults.forEach((row: any) => {
-          const groupId = row.ad_group.id.toString();
-          
-          if (traditionalGroupMap.has(groupId)) {
-            const existing = traditionalGroupMap.get(groupId);
-            existing.impressions += row.metrics?.impressions || 0;
-            existing.clicks += row.metrics?.clicks || 0;
-            existing.costMicros += row.metrics?.cost_micros || 0;
-            existing.conversions += row.metrics?.conversions || 0;
-            existing.conversionsValueMicros += row.metrics?.conversions_value || 0;
-          } else {
-            traditionalGroupMap.set(groupId, {
-              id: groupId,
-              name: row.ad_group.name,
-              status: row.ad_group.status === 2 || row.ad_group.status === 'ENABLED' ? 'ENABLED' : 'PAUSED',
-              campaignId: row.campaign.id.toString(),
-              campaignName: row.campaign.name,
-              campaignType: row.campaign.advertising_channel_type,
-              groupType: 'ad_group',
-              impressions: row.metrics?.impressions || 0,
-              clicks: row.metrics?.clicks || 0,
-              costMicros: row.metrics?.cost_micros || 0,
-              conversions: row.metrics?.conversions || 0,
-              conversionsValueMicros: row.metrics?.conversions_value || 0,
-            });
-          }
-        });
-        
-        const traditionalGroups = Array.from(traditionalGroupMap.values());
-
-        // Fetch Quality Score data for traditional ad groups
-        if (traditionalGroups.length > 0) {
-          // Try a simpler Quality Score query without date filter first
-          const qualityScoreQuery = `
-            SELECT
-              ad_group_criterion.ad_group,
-              ad_group_criterion.quality_info.quality_score,
-              ad_group_criterion.keyword.text
-            FROM ad_group_criterion 
-            WHERE ad_group_criterion.type = 'KEYWORD'
-              AND ad_group_criterion.status IN ('ENABLED', 'PAUSED')
-              AND ad_group_criterion.quality_info.quality_score > 0
-              AND campaign.advertising_channel_type != 'PERFORMANCE_MAX'
-            LIMIT 1000
-          `;
-
-          try {
-            const qualityScoreResults = await customer.query(qualityScoreQuery);
-            
-            // Calculate average Quality Score per ad group
-            const qualityScoreMap = new Map();
-            
-            qualityScoreResults.forEach((row: any, index: number) => {
-              const adGroupId = row.ad_group_criterion?.ad_group?.split('/').pop();
-              const qualityScore = row.ad_group_criterion?.quality_info?.quality_score;
-              const keywordText = row.ad_group_criterion?.keyword?.text;
-              
-              // Log first few results for debugging in development only
-              if (process.env.NODE_ENV === 'development' && index < 3) {
-                logger.debug('Quality Score sample', {
-                  adGroupId,
-                  qualityScore,
-                  keywordText,
-                  fullAdGroupPath: row.ad_group_criterion?.ad_group
-                });
-              }
-              
-              if (adGroupId && qualityScore && qualityScore > 0) {
-                if (!qualityScoreMap.has(adGroupId)) {
-                  qualityScoreMap.set(adGroupId, {
-                    totalScore: 0,
-                    count: 0
-                  });
-                }
-                
-                const data = qualityScoreMap.get(adGroupId);
-                
-                data.totalScore += qualityScore;
-                data.count += 1;
-              }
-            });
-
-            // Add Quality Score to traditional ad groups
-            traditionalGroups.forEach(group => {
-              const qualityData = qualityScoreMap.get(group.id);
-              if (qualityData && qualityData.count > 0) {
-                group.avgQualityScore = Math.round((qualityData.totalScore / qualityData.count) * 10) / 10;
-              } else {
-                group.avgQualityScore = null; // No Quality Score data available
-              }
-            });
-            
-          } catch (error) {
-            console.error('Error fetching Quality Score data:', error);
-            // Add null Quality Score to all groups if query fails
-            traditionalGroups.forEach(group => {
-              group.avgQualityScore = null;
-            });
-          }
-        }
-        
-        allGroups.push(...traditionalGroups);
-        
-      } catch (error) {
-        console.error('Error fetching traditional ad groups:', error);
-      }
+      // Quality Score query (runs in parallel)
+      const qualityScoreQuery = `
+        SELECT
+          ad_group_criterion.ad_group,
+          ad_group_criterion.quality_info.quality_score,
+          ad_group_criterion.keyword.text
+        FROM ad_group_criterion 
+        WHERE ad_group_criterion.type = 'KEYWORD'
+          AND ad_group_criterion.status IN ('ENABLED', 'PAUSED')
+          AND ad_group_criterion.quality_info.quality_score > 0
+          AND campaign.advertising_channel_type != 'PERFORMANCE_MAX'
+        LIMIT 1000
+      `;
+      queries.push(customer.query(qualityScoreQuery).catch((e: Error) => {
+        console.error('Error fetching Quality Score:', e);
+        return [];
+      }));
+      queryTypes.push('qualityScore');
     }
 
-    // Query for Performance Max asset groups
+    // Asset groups query (Performance Max)
     if (groupType === 'all' || groupType === 'asset') {
-      const assetDeviceSelect = deviceApiValue ? ', segments.device' : '';
-      const assetDeviceWhere = deviceApiValue ? `AND segments.device = '${deviceApiValue}'` : '';
       const assetGroupsQuery = `
         SELECT
           asset_group.id,
@@ -241,68 +167,157 @@ export async function GET(request: Request) {
           metrics.conversions_value,
           metrics.ctr,
           metrics.average_cpc
-          ${assetDeviceSelect}
+          ${deviceSelect}
         FROM asset_group
         WHERE segments.date BETWEEN '${startDateStr}' AND '${endDateStr}'
           AND campaign.advertising_channel_type = 'PERFORMANCE_MAX'
           AND asset_group.status IN ('ENABLED', 'PAUSED')
-          ${assetDeviceWhere}
+          ${deviceWhere}
         ORDER BY metrics.cost_micros DESC
       `;
-
-      try {
-        const assetResults = await customer.query(assetGroupsQuery);
-
-        // Process asset groups
-        const assetGroupMap = new Map();
-        
-        assetResults.forEach((row: any) => {
-          const groupId = row.asset_group.id.toString();
-          
-          if (assetGroupMap.has(groupId)) {
-            const existing = assetGroupMap.get(groupId);
-            existing.impressions += row.metrics?.impressions || 0;
-            existing.clicks += row.metrics?.clicks || 0;
-            existing.costMicros += row.metrics?.cost_micros || 0;
-            existing.conversions += row.metrics?.conversions || 0;
-            existing.conversionsValueMicros += row.metrics?.conversions_value || 0;
-            // Update Performance Max fields if not already set
-            if (!existing.adStrength && row.asset_group?.ad_strength) {
-              existing.adStrength = getAdStrengthText(row.asset_group.ad_strength);
-            }
-            if (!existing.assetCoverage && row.asset_group?.asset_coverage?.ad_strength_action_items) {
-              existing.assetCoverage = calculateAssetCoveragePercentage(row.asset_group.asset_coverage.ad_strength_action_items);
-            }
-          } else {
-            assetGroupMap.set(groupId, {
-              id: groupId,
-              name: row.asset_group.name,
-              status: row.asset_group.status === 2 || row.asset_group.status === 'ENABLED' ? 'ENABLED' : 'PAUSED',
-              campaignId: row.campaign.id.toString(),
-              campaignName: row.campaign.name,
-              campaignType: row.campaign.advertising_channel_type,
-              groupType: 'asset_group',
-              impressions: row.metrics?.impressions || 0,
-              clicks: row.metrics?.clicks || 0,
-              costMicros: row.metrics?.cost_micros || 0,
-              conversions: row.metrics?.conversions || 0,
-              conversionsValueMicros: row.metrics?.conversions_value || 0,
-              // Performance Max specific fields from Google Ads API
-              adStrength: getAdStrengthText(row.asset_group?.ad_strength),
-              assetCoverage: calculateAssetCoveragePercentage(row.asset_group?.asset_coverage?.ad_strength_action_items),
-            });
-          }
-        });
-        
-        const assetGroups = Array.from(assetGroupMap.values());
-        allGroups.push(...assetGroups);
-        
-      } catch (error) {
-        console.error('Error fetching Performance Max asset groups:', error);
-      }
+      queries.push(customer.query(assetGroupsQuery).catch((e: Error) => {
+        console.error('Error fetching asset groups:', e);
+        return [];
+      }));
+      queryTypes.push('asset');
     }
 
-    // Calculate derived metrics for all groups using shared utility
+    // Execute all queries in parallel for maximum speed
+    const results = await Promise.all(queries);
+
+    // Process results based on query type
+    let traditionalResults: any[] = [];
+    let qualityScoreResults: any[] = [];
+    let assetResults: any[] = [];
+
+    results.forEach((result, index) => {
+      switch (queryTypes[index]) {
+        case 'traditional':
+          traditionalResults = result;
+          break;
+        case 'qualityScore':
+          qualityScoreResults = result;
+          break;
+        case 'asset':
+          assetResults = result;
+          break;
+      }
+    });
+
+    // Process traditional ad groups
+    if (traditionalResults.length > 0) {
+      const traditionalGroupMap = new Map();
+      
+      traditionalResults.forEach((row: any) => {
+        const groupId = row.ad_group.id.toString();
+        
+        if (traditionalGroupMap.has(groupId)) {
+          const existing = traditionalGroupMap.get(groupId);
+          existing.impressions += row.metrics?.impressions || 0;
+          existing.clicks += row.metrics?.clicks || 0;
+          existing.costMicros += row.metrics?.cost_micros || 0;
+          existing.conversions += row.metrics?.conversions || 0;
+          existing.conversionsValueMicros += row.metrics?.conversions_value || 0;
+        } else {
+          traditionalGroupMap.set(groupId, {
+            id: groupId,
+            name: row.ad_group.name,
+            status: row.ad_group.status === 2 || row.ad_group.status === 'ENABLED' ? 'ENABLED' : 'PAUSED',
+            campaignId: row.campaign.id.toString(),
+            campaignName: row.campaign.name,
+            campaignType: row.campaign.advertising_channel_type,
+            groupType: 'ad_group',
+            impressions: row.metrics?.impressions || 0,
+            clicks: row.metrics?.clicks || 0,
+            costMicros: row.metrics?.cost_micros || 0,
+            conversions: row.metrics?.conversions || 0,
+            conversionsValueMicros: row.metrics?.conversions_value || 0,
+          });
+        }
+      });
+      
+      const traditionalGroups = Array.from(traditionalGroupMap.values());
+
+      // Process Quality Score data
+      if (qualityScoreResults.length > 0) {
+        const qualityScoreMap = new Map();
+        
+        qualityScoreResults.forEach((row: any) => {
+          const adGroupId = row.ad_group_criterion?.ad_group?.split('/').pop();
+          const qualityScore = row.ad_group_criterion?.quality_info?.quality_score;
+          
+          if (adGroupId && qualityScore && qualityScore > 0) {
+            if (!qualityScoreMap.has(adGroupId)) {
+              qualityScoreMap.set(adGroupId, { totalScore: 0, count: 0 });
+            }
+            const data = qualityScoreMap.get(adGroupId);
+            data.totalScore += qualityScore;
+            data.count += 1;
+          }
+        });
+
+        traditionalGroups.forEach(group => {
+          const qualityData = qualityScoreMap.get(group.id);
+          if (qualityData && qualityData.count > 0) {
+            group.avgQualityScore = Math.round((qualityData.totalScore / qualityData.count) * 10) / 10;
+          } else {
+            group.avgQualityScore = null;
+          }
+        });
+      } else {
+        traditionalGroups.forEach(group => {
+          group.avgQualityScore = null;
+        });
+      }
+      
+      allGroups.push(...traditionalGroups);
+    }
+
+    // Process asset groups
+    if (assetResults.length > 0) {
+      const assetGroupMap = new Map();
+      
+      assetResults.forEach((row: any) => {
+        const groupId = row.asset_group.id.toString();
+        
+        if (assetGroupMap.has(groupId)) {
+          const existing = assetGroupMap.get(groupId);
+          existing.impressions += row.metrics?.impressions || 0;
+          existing.clicks += row.metrics?.clicks || 0;
+          existing.costMicros += row.metrics?.cost_micros || 0;
+          existing.conversions += row.metrics?.conversions || 0;
+          existing.conversionsValueMicros += row.metrics?.conversions_value || 0;
+          if (!existing.adStrength && row.asset_group?.ad_strength) {
+            existing.adStrength = getAdStrengthText(row.asset_group.ad_strength);
+          }
+          if (!existing.assetCoverage && row.asset_group?.asset_coverage?.ad_strength_action_items) {
+            existing.assetCoverage = calculateAssetCoveragePercentage(row.asset_group.asset_coverage.ad_strength_action_items);
+          }
+        } else {
+          assetGroupMap.set(groupId, {
+            id: groupId,
+            name: row.asset_group.name,
+            status: row.asset_group.status === 2 || row.asset_group.status === 'ENABLED' ? 'ENABLED' : 'PAUSED',
+            campaignId: row.campaign.id.toString(),
+            campaignName: row.campaign.name,
+            campaignType: row.campaign.advertising_channel_type,
+            groupType: 'asset_group',
+            impressions: row.metrics?.impressions || 0,
+            clicks: row.metrics?.clicks || 0,
+            costMicros: row.metrics?.cost_micros || 0,
+            conversions: row.metrics?.conversions || 0,
+            conversionsValueMicros: row.metrics?.conversions_value || 0,
+            adStrength: getAdStrengthText(row.asset_group?.ad_strength),
+            assetCoverage: calculateAssetCoveragePercentage(row.asset_group?.asset_coverage?.ad_strength_action_items),
+          });
+        }
+      });
+      
+      const assetGroups = Array.from(assetGroupMap.values());
+      allGroups.push(...assetGroups);
+    }
+
+    // Calculate derived metrics for all groups
     const processedGroups = allGroups.map(group => {
       const cost = convertCostFromMicros(group.costMicros);
       const derivedMetrics = calculateDerivedMetrics({
@@ -316,11 +331,11 @@ export async function GET(request: Request) {
       return {
         ...group,
         ...derivedMetrics,
-        conversionsValue: group.conversionsValueMicros // Keep original field name for compatibility
+        conversionsValue: group.conversionsValueMicros
       };
     });
 
-    // Calculate totals using shared utility
+    // Calculate totals
     const rawTotals = {
       impressions: processedGroups.reduce((sum, g) => sum + g.impressions, 0),
       clicks: processedGroups.reduce((sum, g) => sum + g.clicks, 0),
@@ -331,11 +346,9 @@ export async function GET(request: Request) {
     
     const totals = calculateDerivedMetrics(rawTotals);
 
-    // Get type statistics
     const traditionalCount = processedGroups.filter(g => g.groupType === 'ad_group').length;
     const assetCount = processedGroups.filter(g => g.groupType === 'asset_group').length;
 
-    // Single API completion summary log
     logger.apiComplete('ad-groups', processedGroups.length);
     
     const responseData = {
@@ -355,9 +368,18 @@ export async function GET(request: Request) {
       groupType
     };
 
-    return createSuccessResponse(responseData, `Retrieved ${processedGroups.length} groups (${traditionalCount} traditional, ${assetCount} asset)`);
+    // Cache with smart TTL
+    const ttl = serverCache.getSmartTTL(endDateStr, ServerCache.TTL.ENTITY_LIST);
+    serverCache.set(cacheKey, responseData, ttl);
+
+    return NextResponse.json({
+      success: true,
+      message: `Retrieved ${processedGroups.length} groups (${traditionalCount} traditional, ${assetCount} asset)`,
+      data: responseData,
+      cached: false
+    });
 
   } catch (error) {
     return handleApiError(error, 'Ad Groups Data');
   }
-} 
+}

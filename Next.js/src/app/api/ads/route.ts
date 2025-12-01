@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createGoogleAdsConnection } from '@/utils/googleAdsClient';
 import { getFormattedDateRange } from '@/utils/dateUtils';
+import { serverCache, ServerCache } from '@/utils/serverCache';
 
 // Device mapping for filtering
 const deviceMap: { [key: string]: string } = {
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const customerId = searchParams.get('customerId');
   const dateRange = searchParams.get('dateRange') || '30';
-  const adGroupId = searchParams.get('adGroupId'); // Required - get ads for specific ad group
+  const adGroupId = searchParams.get('adGroupId');
   const device = searchParams.get('device');
 
   if (!customerId) {
@@ -27,6 +28,27 @@ export async function GET(request: NextRequest) {
 
   try {
     const { startDateStr, endDateStr } = getFormattedDateRange(parseInt(dateRange));
+
+    // Generate cache key
+    const cacheKey = serverCache.generateKey('ads', {
+      customerId,
+      adGroupId,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      device
+    });
+
+    // Check cache first
+    const cachedData = serverCache.get<any>(cacheKey);
+    if (cachedData) {
+      return NextResponse.json({
+        success: true,
+        data: cachedData,
+        cached: true,
+        timing: { total: Date.now() - startTime }
+      });
+    }
+
     const { customer } = createGoogleAdsConnection(customerId);
 
     // Build device filter clause
@@ -38,7 +60,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Query for Responsive Search Ads with performance metrics
-    // Excludes ad experiments/variations by filtering on ad type
     const adsQuery = `
       SELECT
         ad_group_ad.ad.id,
@@ -191,9 +212,14 @@ export async function GET(request: NextRequest) {
       }
     };
 
+    // Cache with smart TTL
+    const ttl = serverCache.getSmartTTL(endDateStr, ServerCache.TTL.ADS);
+    serverCache.set(cacheKey, responseData, ttl);
+
     return NextResponse.json({
       success: true,
       data: responseData,
+      cached: false,
       timing: { total: Date.now() - startTime }
     });
 

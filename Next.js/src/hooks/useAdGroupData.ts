@@ -123,7 +123,8 @@ export const useAdGroupData = (
         };
         
         // Save to cache with 30 minute TTL
-        saveToCache(cacheKey, transformedData, 30 * 60 * 1000);
+        // Ad group data can be cached for 1 hour
+        saveToCache(cacheKey, transformedData, 60 * 60 * 1000);
         
         setData(transformedData);
       } else {
