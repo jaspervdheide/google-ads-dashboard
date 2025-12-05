@@ -4,6 +4,8 @@ import React from 'react';
 import { 
   LayoutDashboard, 
   Package,
+  Search,
+  Users,
   Settings,
   User
 } from 'lucide-react';
@@ -33,6 +35,8 @@ interface SidebarProps {
 const navigationItems: NavigationItem[] = [
   { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
   { id: 'products', name: 'Products', icon: Package },
+  { id: 'keywords', name: 'Keywords', icon: Search },
+  { id: 'auctions', name: 'Auctions', icon: Users },
   { id: 'settings', name: 'Settings', icon: Settings },
 ];
 

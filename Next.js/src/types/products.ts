@@ -65,12 +65,13 @@ export interface ProductData extends ProductPerformanceData {
   sellingPrice: number;
   
   // Calculated profit metrics
-  cogsTotal: number;         // cogs * conversions
-  grossProfit: number;       // conversionsValue - cogsTotal
+  estimatedRevenue: number;  // For ProfitMetrics accounts: sellingPrice * conversions
+  cogsTotal: number;         // cogs * conversions (or reverse-calculated for ProfitMetrics)
+  grossProfit: number;       // conversionsValue - cogsTotal (or conversionsValue for ProfitMetrics)
   netProfit: number;         // grossProfit - cost
-  grossMargin: number;       // (grossProfit / conversionsValue) * 100
-  netMargin: number;         // (netProfit / conversionsValue) * 100
-  roas: number;              // conversionsValue / cost
+  grossMargin: number;       // (grossProfit / estimatedRevenue) * 100
+  netMargin: number;         // (netProfit / estimatedRevenue) * 100
+  roas: number;              // estimatedRevenue / cost
   poas: number;              // grossProfit / cost
 }
 
@@ -86,6 +87,7 @@ export interface GroupedProductData {
   conversionsValue: number;
   ctr: number;
   avgCpc: number;
+  estimatedRevenue: number;
   cogsTotal: number;
   grossProfit: number;
   netProfit: number;
@@ -118,6 +120,7 @@ export interface ProductsApiResponse {
       cost: number;
       conversions: number;
       conversionsValue: number;
+      estimatedRevenue: number;
       cogsTotal: number;
       grossProfit: number;
       netProfit: number;
@@ -126,6 +129,7 @@ export interface ProductsApiResponse {
       roas: number;
       poas: number;
     };
+    usesProfitMetrics: boolean;
   };
   cached: boolean;
 }
@@ -138,4 +142,5 @@ export interface ProductViewState {
   sortDirection: 'asc' | 'desc';
   searchTerm: string;
 }
+
 

@@ -7,7 +7,7 @@ export { default as useHistoricalData } from './useHistoricalData';
 export { default as useAnomalyData } from './useAnomalyData';
 export { useAdGroupData } from './useAdGroupData';
 export { useProductData } from './useProductData';
-export { useKeywordData } from './useKeywordData';
+export { useKeywordData, useKeywordsViewData } from './useKeywordData';
 export { useMccOverviewData } from './useMccOverviewData';
 export { useAdsData } from './useAdsData';
 

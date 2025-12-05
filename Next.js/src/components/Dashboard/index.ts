@@ -19,6 +19,8 @@ export { default as MccOverviewView } from './MccOverviewView';
 export { default as MccHoverMetricsChart } from './MccHoverMetricsChart';
 export { default as AccountTable } from './AccountTable';
 export { default as ProductsView } from './ProductsView';
+export { default as KeywordsView } from './KeywordsView';
+export { default as AuctionsView } from './AuctionsView';
 export { default as MemoizedAccountTable } from './MemoizedAccountTable';
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as SkeletonLoader, KpiCardSkeleton, ChartSkeleton, TableRowSkeleton } from './SkeletonLoader';

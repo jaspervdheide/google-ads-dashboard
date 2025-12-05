@@ -280,8 +280,6 @@ export default function DashboardView({
       {/* Filter Bar - Below the page header */}
       {filterState && filterActions && (
         <div className="flex items-center space-x-3">
-          <span className="text-sm font-medium text-gray-500">Filters:</span>
-          
           {/* Campaign Filter */}
           <div className="relative" ref={campaignDropdownRef}>
             <button

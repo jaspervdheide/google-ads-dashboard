@@ -3,6 +3,8 @@ import DashboardView from './DashboardView';
 import SettingsView from './SettingsView';
 import MccOverviewView from './MccOverviewView';
 import ProductsView from './ProductsView';
+import KeywordsView from './KeywordsView';
+import AuctionsView from './AuctionsView';
 
 interface PageRouterProps {
   currentPage: string;
@@ -10,6 +12,8 @@ interface PageRouterProps {
   settingsProps: any;
   mccOverviewProps: any;
   productsProps: any;
+  keywordsProps: any;
+  auctionsProps: any;
 }
 
 export default function PageRouter({
@@ -17,7 +21,9 @@ export default function PageRouter({
   dashboardProps,
   settingsProps,
   mccOverviewProps,
-  productsProps
+  productsProps,
+  keywordsProps,
+  auctionsProps
 }: PageRouterProps) {
   switch (currentPage) {
     case 'dashboard':
@@ -25,6 +31,12 @@ export default function PageRouter({
     
     case 'products':
       return <ProductsView {...productsProps} />;
+    
+    case 'keywords':
+      return <KeywordsView {...keywordsProps} />;
+    
+    case 'auctions':
+      return <AuctionsView {...auctionsProps} />;
     
     case 'settings':
       return <SettingsView {...settingsProps} />;

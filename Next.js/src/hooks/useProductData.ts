@@ -3,29 +3,76 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ProductData, GroupedProductData, ProductViewState } from '@/types/products';
 import { DateRange } from '@/types';
-import { getFromCache, saveToCache } from '@/utils/cacheManager';
+
+// Storage key for ProfitMetrics settings (must match SettingsView)
+const PROFIT_METRICS_STORAGE_KEY = 'google-ads-dashboard-profit-metrics-accounts';
+
+// Default ProfitMetrics accounts (fallback)
+const DEFAULT_PROFIT_METRICS_ACCOUNTS = [
+  '1946606314', // DE - Online Fussmatten
+  '7539242704', // FR - Tapis Voiture
+  '5756290882', // NL - Just Carpets
+];
+
+/**
+ * Check if an account uses ProfitMetrics based on localStorage settings
+ */
+function checkProfitMetricsFromSettings(accountId: string): boolean {
+  if (typeof window === 'undefined') {
+    // Server-side: use defaults
+    return DEFAULT_PROFIT_METRICS_ACCOUNTS.includes(accountId);
+  }
+  
+  try {
+    const stored = localStorage.getItem(PROFIT_METRICS_STORAGE_KEY);
+    if (stored) {
+      const accounts = JSON.parse(stored);
+      if (Array.isArray(accounts)) {
+        return accounts.includes(accountId);
+      }
+    }
+  } catch (e) {
+    console.error('Error reading ProfitMetrics settings:', e);
+  }
+  
+  // Fallback to defaults
+  return DEFAULT_PROFIT_METRICS_ACCOUNTS.includes(accountId);
+}
 
 interface UseProductDataProps {
   selectedAccount: string | null;
   selectedDateRange: DateRange | null;
 }
 
+interface ProductTotals {
+  impressions: number;
+  clicks: number;
+  cost: number;
+  conversions: number;
+  conversionsValue: number;
+  estimatedRevenue: number;
+  cogsTotal: number;
+  grossProfit: number;
+  netProfit: number;
+  grossMargin: number;
+  netMargin: number;
+  roas: number;
+  poas: number;
+}
+
+interface ProductTrends {
+  conversionsValue: number;
+  grossProfit: number;
+  netProfit: number;
+  poas: number;
+  cost: number;
+}
+
 interface ProductDataResponse {
   products: ProductData[];
-  totals: {
-    impressions: number;
-    clicks: number;
-    cost: number;
-    conversions: number;
-    conversionsValue: number;
-    cogsTotal: number;
-    grossProfit: number;
-    netProfit: number;
-    grossMargin: number;
-    netMargin: number;
-    roas: number;
-    poas: number;
-  };
+  totals: ProductTotals;
+  trends: ProductTrends;
+  usesProfitMetrics: boolean;
   loading: boolean;
   error: string | null;
   refetch: () => void;
@@ -33,12 +80,13 @@ interface ProductDataResponse {
 
 export function useProductData({ selectedAccount, selectedDateRange }: UseProductDataProps): ProductDataResponse {
   const [products, setProducts] = useState<ProductData[]>([]);
-  const [totals, setTotals] = useState<ProductDataResponse['totals']>({
+  const [totals, setTotals] = useState<ProductTotals>({
     impressions: 0,
     clicks: 0,
     cost: 0,
     conversions: 0,
     conversionsValue: 0,
+    estimatedRevenue: 0,
     cogsTotal: 0,
     grossProfit: 0,
     netProfit: 0,
@@ -47,6 +95,14 @@ export function useProductData({ selectedAccount, selectedDateRange }: UseProduc
     roas: 0,
     poas: 0
   });
+  const [trends, setTrends] = useState<ProductTrends>({
+    conversionsValue: 0,
+    grossProfit: 0,
+    netProfit: 0,
+    poas: 0,
+    cost: 0
+  });
+  const [usesProfitMetrics, setUsesProfitMetrics] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,22 +113,16 @@ export function useProductData({ selectedAccount, selectedDateRange }: UseProduc
     }
 
     const dateRange = selectedDateRange?.apiDays || 30;
-    const cacheKey = `products-${selectedAccount}-${dateRange}`;
-
-    // Check client-side cache
-    const cached = getFromCache(cacheKey);
-    if (cached) {
-      setProducts(cached.products);
-      setTotals(cached.totals);
-      return;
-    }
+    
+    // Check localStorage for ProfitMetrics setting
+    const isProfitMetrics = checkProfitMetricsFromSettings(selectedAccount);
 
     setLoading(true);
     setError(null);
 
     try {
       const response = await fetch(
-        `/api/products?customerId=${selectedAccount}&dateRange=${dateRange}`
+        `/api/products?customerId=${selectedAccount}&dateRange=${dateRange}&profitMetrics=${isProfitMetrics}`
       );
 
       if (!response.ok) {
@@ -84,9 +134,8 @@ export function useProductData({ selectedAccount, selectedDateRange }: UseProduc
       if (data.success) {
         setProducts(data.data.products);
         setTotals(data.data.totals);
-
-        // Cache the response
-        saveToCache(cacheKey, data.data, 5 * 60 * 1000); // 5 minutes
+        setTrends(data.data.trends || { conversionsValue: 0, grossProfit: 0, netProfit: 0, poas: 0, cost: 0 });
+        setUsesProfitMetrics(data.data.usesProfitMetrics || false);
       } else {
         throw new Error(data.message || 'Failed to fetch product data');
       }
@@ -106,6 +155,8 @@ export function useProductData({ selectedAccount, selectedDateRange }: UseProduc
   return {
     products,
     totals,
+    trends,
+    usesProfitMetrics,
     loading,
     error,
     refetch: fetchProducts
@@ -117,7 +168,8 @@ export function useProductData({ selectedAccount, selectedDateRange }: UseProduc
  */
 export function useGroupedProducts(
   products: ProductData[],
-  groupBy: ProductViewState['groupBy']
+  groupBy: ProductViewState['groupBy'],
+  usesProfitMetrics: boolean = false
 ): GroupedProductData[] {
   return useMemo(() => {
     if (!products.length) return [];
@@ -154,6 +206,7 @@ export function useGroupedProducts(
         group.cost += product.cost;
         group.conversions += product.conversions;
         group.conversionsValue += product.conversionsValue;
+        group.estimatedRevenue += product.estimatedRevenue || 0;
         group.cogsTotal += product.cogsTotal;
         group.grossProfit += product.grossProfit;
         group.netProfit += product.netProfit;
@@ -167,6 +220,7 @@ export function useGroupedProducts(
           cost: product.cost,
           conversions: product.conversions,
           conversionsValue: product.conversionsValue,
+          estimatedRevenue: product.estimatedRevenue || 0,
           ctr: 0,
           avgCpc: 0,
           cogsTotal: product.cogsTotal,
@@ -185,13 +239,16 @@ export function useGroupedProducts(
     for (const group of groups) {
       group.ctr = group.impressions > 0 ? (group.clicks / group.impressions) * 100 : 0;
       group.avgCpc = group.clicks > 0 ? group.cost / group.clicks : 0;
-      group.grossMargin = group.conversionsValue > 0 ? (group.grossProfit / group.conversionsValue) * 100 : 0;
-      group.netMargin = group.conversionsValue > 0 ? (group.netProfit / group.conversionsValue) * 100 : 0;
-      group.roas = group.cost > 0 ? group.conversionsValue / group.cost : 0;
+      
+      // Use estimatedRevenue for margin calculations (important for ProfitMetrics accounts)
+      const revenueBase = usesProfitMetrics ? group.estimatedRevenue : group.conversionsValue;
+      group.grossMargin = revenueBase > 0 ? (group.grossProfit / revenueBase) * 100 : 0;
+      group.netMargin = revenueBase > 0 ? (group.netProfit / revenueBase) * 100 : 0;
+      group.roas = group.cost > 0 ? revenueBase / group.cost : 0;
       group.poas = group.cost > 0 ? group.grossProfit / group.cost : 0;
     }
 
-    // Sort by revenue descending
+    // Sort by revenue/profit descending
     return groups.sort((a, b) => b.conversionsValue - a.conversionsValue);
-  }, [products, groupBy]);
+  }, [products, groupBy, usesProfitMetrics]);
 }

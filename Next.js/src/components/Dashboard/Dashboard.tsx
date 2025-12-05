@@ -497,7 +497,8 @@ export default function Dashboard() {
 
   const settingsProps = {
     chartType: chartState.chartType,
-    setChartType: chartState.handleChartTypeChange
+    setChartType: chartState.handleChartTypeChange,
+    accounts: accountState.allAccounts
   };
 
   const mccOverviewProps = {
@@ -517,7 +518,80 @@ export default function Dashboard() {
     chartType: chartState.chartType,
     setChartType: chartState.handleChartTypeChange,
     dateGranularity: chartState.dateGranularity,
-    setDateGranularity: chartState.handleDateGranularityChange
+    setDateGranularity: chartState.handleDateGranularityChange,
+    // Pass filter states (same as keywordsProps)
+    campaigns: campaignsForFilter,
+    adGroups: adGroupsForFilter,
+    filterState: {
+      selectedCampaigns: filterState.selectedCampaigns,
+      selectedAdGroups: filterState.selectedAdGroups,
+      deviceFilter: filterState.deviceFilter,
+      campaignDropdownOpen: filterState.campaignDropdownOpen,
+      adGroupDropdownOpen: filterState.adGroupDropdownOpen,
+      deviceDropdownOpen: filterState.deviceDropdownOpen,
+    },
+    filterActions: {
+      onToggleCampaign: filterState.toggleCampaign,
+      onClearCampaigns: () => filterState.setSelectedCampaigns([]),
+      onSetCampaignDropdownOpen: filterState.setCampaignDropdownOpen,
+      onToggleAdGroup: filterState.toggleAdGroup,
+      onClearAdGroups: () => filterState.setSelectedAdGroups([]),
+      onSetAdGroupDropdownOpen: filterState.setAdGroupDropdownOpen,
+      onDeviceFilterChange: filterState.setDeviceFilter,
+      onSetDeviceDropdownOpen: filterState.setDeviceDropdownOpen,
+    }
+  };
+
+  const keywordsProps = {
+    selectedAccount: accountState.selectedAccount,
+    selectedDateRange: dateState.selectedDateRange,
+    // Pass filter states
+    campaigns: campaignsForFilter,
+    adGroups: adGroupsForFilter,
+    filterState: {
+      selectedCampaigns: filterState.selectedCampaigns,
+      selectedAdGroups: filterState.selectedAdGroups,
+      deviceFilter: filterState.deviceFilter,
+      campaignDropdownOpen: filterState.campaignDropdownOpen,
+      adGroupDropdownOpen: filterState.adGroupDropdownOpen,
+      deviceDropdownOpen: filterState.deviceDropdownOpen,
+    },
+    filterActions: {
+      onToggleCampaign: filterState.toggleCampaign,
+      onClearCampaigns: () => filterState.setSelectedCampaigns([]),
+      onSetCampaignDropdownOpen: filterState.setCampaignDropdownOpen,
+      onToggleAdGroup: filterState.toggleAdGroup,
+      onClearAdGroups: () => filterState.setSelectedAdGroups([]),
+      onSetAdGroupDropdownOpen: filterState.setAdGroupDropdownOpen,
+      onDeviceFilterChange: filterState.setDeviceFilter,
+      onSetDeviceDropdownOpen: filterState.setDeviceDropdownOpen,
+    }
+  };
+
+  const auctionsProps = {
+    selectedAccount: accountState.selectedAccount,
+    selectedDateRange: dateState.selectedDateRange,
+    // Pass filter states
+    campaigns: campaignsForFilter,
+    adGroups: adGroupsForFilter,
+    filterState: {
+      selectedCampaigns: filterState.selectedCampaigns,
+      selectedAdGroups: filterState.selectedAdGroups,
+      deviceFilter: filterState.deviceFilter,
+      campaignDropdownOpen: filterState.campaignDropdownOpen,
+      adGroupDropdownOpen: filterState.adGroupDropdownOpen,
+      deviceDropdownOpen: filterState.deviceDropdownOpen,
+    },
+    filterActions: {
+      onToggleCampaign: filterState.toggleCampaign,
+      onClearCampaigns: () => filterState.setSelectedCampaigns([]),
+      onSetCampaignDropdownOpen: filterState.setCampaignDropdownOpen,
+      onToggleAdGroup: filterState.toggleAdGroup,
+      onClearAdGroups: () => filterState.setSelectedAdGroups([]),
+      onSetAdGroupDropdownOpen: filterState.setAdGroupDropdownOpen,
+      onDeviceFilterChange: filterState.setDeviceFilter,
+      onSetDeviceDropdownOpen: filterState.setDeviceDropdownOpen,
+    }
   };
 
   // Loading and error states
@@ -557,6 +631,8 @@ export default function Dashboard() {
         settingsProps={settingsProps}
         mccOverviewProps={mccOverviewProps}
         productsProps={productsProps}
+        keywordsProps={keywordsProps}
+        auctionsProps={auctionsProps}
       />
     </DashboardLayout>
   );

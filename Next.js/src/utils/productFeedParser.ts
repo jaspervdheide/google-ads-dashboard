@@ -21,21 +21,58 @@ const CACHE_TTL = 3600; // 1 hour
  * Fetch and parse the JSON lookup feed (Make/Model/Material)
  */
 export async function fetchProductLookup(): Promise<Map<string, ProductLookup>> {
-  // Check cache
-  const cached = serverCache.get<Map<string, ProductLookup>>(CACHE_KEY_LOOKUP);
-  if (cached) return cached;
+  // Check cache - store as object, convert back to Map
+  const cachedObj = serverCache.get<Record<string, ProductLookup>>(CACHE_KEY_LOOKUP);
+  if (cachedObj) {
+    console.log('Product Lookup Feed: Returning cached data');
+    return new Map(Object.entries(cachedObj));
+  }
 
+  console.log('Product Lookup Feed: Fetching from URL:', LOOKUP_FEED_URL);
+  
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
     const response = await fetch(LOOKUP_FEED_URL, {
-      next: { revalidate: CACHE_TTL }
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+      cache: 'no-store',
+      signal: controller.signal
     });
     
+    clearTimeout(timeoutId);
+    
+    console.log(`Product Lookup Feed: Response status ${response.status}`);
+    
     if (!response.ok) {
-      throw new Error(`Failed to fetch lookup feed: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`Failed to fetch lookup feed: ${response.status} - ${errorText.slice(0, 200)}`);
     }
     
-    const data = await response.json();
+    const text = await response.text();
+    console.log(`Product Lookup Feed: Received ${text.length} bytes`);
+    
+    // Log preview for debugging
+    console.log('Product Lookup Feed: Preview:', text.slice(0, 300));
+    
+    const data = JSON.parse(text);
+    console.log(`Product Lookup Feed: Parsed ${Array.isArray(data) ? data.length : 0} items`);
+    
+    // Log first item for debugging
+    if (Array.isArray(data) && data.length > 0) {
+      console.log('Product Lookup Feed: First item keys:', Object.keys(data[0]));
+    }
+    
     const lookupMap = new Map<string, ProductLookup>();
+    const lookupObj: Record<string, ProductLookup> = {};
+    
+    if (!Array.isArray(data)) {
+      console.error('Product Lookup Feed: Data is not an array');
+      return lookupMap;
+    }
     
     for (const item of data) {
       const sku = item.SKU;
@@ -43,7 +80,7 @@ export async function fetchProductLookup(): Promise<Map<string, ProductLookup>> 
       
       const category = sku.startsWith('TM') ? 'TM' : 'CM';
       
-      lookupMap.set(sku, {
+      const lookupItem: ProductLookup = {
         sku,
         make: item.Make || '',
         model: item.Model || '',
@@ -52,17 +89,22 @@ export async function fetchProductLookup(): Promise<Map<string, ProductLookup>> 
         parentSku: item['Parent SKU'] || '',
         category: category as 'CM' | 'TM',
         categoryName: category === 'CM' ? 'Car Mats' : 'Trunk Mats'
-      });
+      };
+      
+      lookupMap.set(sku, lookupItem);
+      lookupObj[sku] = lookupItem;
     }
     
-    // Cache the result
-    serverCache.set(CACHE_KEY_LOOKUP, lookupMap, CACHE_TTL);
+    // Cache as object (Maps don't serialize)
+    if (lookupMap.size > 0) {
+      serverCache.set(CACHE_KEY_LOOKUP, lookupObj, CACHE_TTL);
+    }
     
     console.log(`Product Lookup Feed: Loaded ${lookupMap.size} products`);
     return lookupMap;
     
-  } catch (error) {
-    console.error('Error fetching product lookup feed:', error);
+  } catch (error: any) {
+    console.error('Error fetching product lookup feed:', error?.message || error);
     return new Map();
   }
 }
@@ -71,60 +113,95 @@ export async function fetchProductLookup(): Promise<Map<string, ProductLookup>> 
  * Fetch and parse the XML COGS feed
  */
 export async function fetchProductCogs(): Promise<Map<string, ProductCogs>> {
-  // Check cache
-  const cached = serverCache.get<Map<string, ProductCogs>>(CACHE_KEY_COGS);
-  if (cached) return cached;
+  // Check cache - store as object, convert back to Map
+  const cachedObj = serverCache.get<Record<string, ProductCogs>>(CACHE_KEY_COGS);
+  if (cachedObj) {
+    console.log('Product COGS Feed: Returning cached data');
+    return new Map(Object.entries(cachedObj));
+  }
 
+  console.log('Product COGS Feed: Fetching from URL:', COGS_FEED_URL);
+  
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
     const response = await fetch(COGS_FEED_URL, {
-      next: { revalidate: CACHE_TTL }
+      cache: 'no-store',
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
+    
+    console.log(`Product COGS Feed: Response status ${response.status}`);
     
     if (!response.ok) {
       throw new Error(`Failed to fetch COGS feed: ${response.status}`);
     }
     
     const xml = await response.text();
+    console.log(`Product COGS Feed: Received ${xml.length} bytes`);
+    
+    // Log first 500 chars for debugging
+    console.log('Product COGS Feed: XML preview:', xml.slice(0, 500));
+    
     const parsed = await parseStringPromise(xml, {
       explicitArray: false,
-      ignoreAttrs: true
+      ignoreAttrs: false, // Keep attributes to debug
+      tagNameProcessors: [(name) => name.replace(/:/g, '_')] // Replace : with _ for namespaces
     });
     
     const cogsMap = new Map<string, ProductCogs>();
+    const cogsObj: Record<string, ProductCogs> = {};
     
     // Handle the RSS structure
     const items = parsed?.rss?.channel?.item;
     if (!items) {
-      console.warn('No items found in COGS feed');
+      console.warn('No items found in COGS feed. Parsed structure:', JSON.stringify(Object.keys(parsed || {})));
       return cogsMap;
     }
     
     // Handle single item or array
     const itemArray = Array.isArray(items) ? items : [items];
+    console.log(`Product COGS Feed: Parsing ${itemArray.length} items from XML`);
     
-    for (const item of itemArray) {
-      // The XML has namespaced keys like 'pm:sku', 'pm:price_buy', 'g:price'
-      const sku = item['pm:sku'] || item['g:id'];
-      if (!sku) continue;
-      
-      const cogs = parseFloat(item['pm:price_buy'] || '0');
-      const sellingPrice = parseFloat(item['g:price'] || '0');
-      
-      cogsMap.set(sku, {
-        sku,
-        cogs,
-        sellingPrice
-      });
+    // Log first item keys for debugging
+    if (itemArray.length > 0) {
+      console.log('Product COGS Feed: First item keys:', Object.keys(itemArray[0]));
     }
     
-    // Cache the result
-    serverCache.set(CACHE_KEY_COGS, cogsMap, CACHE_TTL);
+    for (const item of itemArray) {
+      // Try different namespace patterns
+      const sku = item['pm_sku'] || item['g_id'] || item['pm:sku'] || item['g:id'] || item['id'];
+      if (!sku) continue;
+      
+      // Parse price (might be "12.99 EUR" format)
+      const priceBuyStr = item['pm_price_buy'] || item['pm:price_buy'] || item['price_buy'] || '0';
+      const priceStr = item['g_price'] || item['g:price'] || item['price'] || '0';
+      
+      const cogs = parseFloat(String(priceBuyStr).replace(/[^0-9.]/g, '')) || 0;
+      const sellingPrice = parseFloat(String(priceStr).replace(/[^0-9.]/g, '')) || 0;
+      
+      const cogsItem: ProductCogs = {
+        sku: String(sku),
+        cogs,
+        sellingPrice
+      };
+      
+      cogsMap.set(String(sku), cogsItem);
+      cogsObj[String(sku)] = cogsItem;
+    }
+    
+    // Cache as object (Maps don't serialize)
+    if (cogsMap.size > 0) {
+      serverCache.set(CACHE_KEY_COGS, cogsObj, CACHE_TTL);
+    }
     
     console.log(`Product COGS Feed: Loaded ${cogsMap.size} products`);
     return cogsMap;
     
-  } catch (error) {
-    console.error('Error fetching product COGS feed:', error);
+  } catch (error: any) {
+    console.error('Error fetching product COGS feed:', error?.message || error);
     return new Map();
   }
 }
@@ -133,11 +210,11 @@ export async function fetchProductCogs(): Promise<Map<string, ProductCogs>> {
  * Get merged product master data (lookup + COGS)
  */
 export async function getProductMasterData(): Promise<Map<string, ProductMasterData>> {
-  // Check cache
-  const cached = serverCache.get<Map<string, ProductMasterData>>(CACHE_KEY_MASTER);
-  if (cached) {
+  // Check cache - store as object, convert back to Map
+  const cachedObj = serverCache.get<Record<string, ProductMasterData>>(CACHE_KEY_MASTER);
+  if (cachedObj) {
     console.log('Product Master Data: Returning cached data');
-    return cached;
+    return new Map(Object.entries(cachedObj));
   }
 
   console.log('Product Master Data: Fetching from feeds...');
@@ -148,8 +225,11 @@ export async function getProductMasterData(): Promise<Map<string, ProductMasterD
     fetchProductCogs()
   ]);
   
+  console.log(`Product Master Data: Lookup has ${lookupMap.size}, COGS has ${cogsMap.size} products`);
+  
   // Merge by SKU
   const masterData = new Map<string, ProductMasterData>();
+  const masterObj: Record<string, ProductMasterData> = {};
   
   for (const [sku, lookup] of lookupMap) {
     const cogs = cogsMap.get(sku);
@@ -157,14 +237,17 @@ export async function getProductMasterData(): Promise<Map<string, ProductMasterD
     const sellingPrice = cogs?.sellingPrice || 0;
     const cogsAmount = cogs?.cogs || 0;
     
-    masterData.set(sku, {
+    const masterItem: ProductMasterData = {
       ...lookup,
       cogs: cogsAmount,
       sellingPrice,
       theoreticalMargin: sellingPrice > 0 && cogsAmount > 0
         ? ((sellingPrice - cogsAmount) / sellingPrice) * 100
         : 0
-    });
+    };
+    
+    masterData.set(sku, masterItem);
+    masterObj[sku] = masterItem;
   }
   
   // Also add any SKUs that are in COGS but not in lookup (fallback)
@@ -172,7 +255,7 @@ export async function getProductMasterData(): Promise<Map<string, ProductMasterD
     if (!masterData.has(sku)) {
       const category = sku.startsWith('TM') ? 'TM' : 'CM';
       
-      masterData.set(sku, {
+      const masterItem: ProductMasterData = {
         sku,
         category: category as 'CM' | 'TM',
         categoryName: category === 'CM' ? 'Car Mats' : 'Trunk Mats',
@@ -186,12 +269,15 @@ export async function getProductMasterData(): Promise<Map<string, ProductMasterD
         theoreticalMargin: cogsData.sellingPrice > 0 && cogsData.cogs > 0
           ? ((cogsData.sellingPrice - cogsData.cogs) / cogsData.sellingPrice) * 100
           : 0
-      });
+      };
+      
+      masterData.set(sku, masterItem);
+      masterObj[sku] = masterItem;
     }
   }
   
-  // Cache the merged result
-  serverCache.set(CACHE_KEY_MASTER, masterData, CACHE_TTL);
+  // Cache as object (Maps don't serialize)
+  serverCache.set(CACHE_KEY_MASTER, masterObj, CACHE_TTL);
   
   console.log(`Product Master Data: Merged ${masterData.size} products`);
   return masterData;

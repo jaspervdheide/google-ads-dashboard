@@ -490,6 +490,64 @@ export async function getCachedFeed() {
 
 ---
 
+## Phase 1.5: Keywords Insights Tab ✅ COMPLETED
+
+### 1.5.1 Feature Description
+
+A dedicated "Keywords" tab in the sidebar providing:
+- **Search Volume Insights**: Estimated total search volume based on impression share
+- **Opportunity Analysis**: Identify keywords with high volume but low share
+- **Performance Metrics**: CTR, conversions, ROAS per keyword
+- **Match Type Analysis**: Performance by exact, phrase, broad match
+
+### 1.5.2 Data Sources
+
+| Data Point | Source | Field |
+|------------|--------|-------|
+| Keyword Text | Google Ads API | `ad_group_criterion.keyword.text` |
+| Match Type | Google Ads API | `ad_group_criterion.keyword.match_type` |
+| Search Impression Share | Google Ads API | `metrics.search_impression_share` |
+| Performance Metrics | Google Ads API | `metrics.*` |
+
+### 1.5.3 Key Metrics
+
+| Metric | Formula | Description |
+|--------|---------|-------------|
+| Search Impression Share | From API | Your share of total searches |
+| Est. Search Volume | `impressions / impression_share` | Total market searches |
+| Missed Impressions | `est_volume - impressions` | Opportunity gap |
+| Opportunity Score | `(1 - share) * log(volume) * 25` | 0-100 priority score |
+
+### 1.5.4 Implementation (Completed)
+
+**Files Created:**
+```
+/src/app/api/keywords/route.ts           # Keyword insights API (with search volume)
+/src/app/api/keywords-dashboard/route.ts # Dashboard drill-down keywords
+/src/components/Dashboard/KeywordsView.tsx
+/src/hooks/useKeywordData.ts             # useKeywordsViewData hook
+/src/types/keywords.ts
+```
+
+**Files Modified:**
+```
+/src/components/Dashboard/Sidebar.tsx    # Added Keywords tab
+/src/components/Dashboard/PageRouter.tsx # Added keywords route
+/src/components/Dashboard/Dashboard.tsx  # Added keywordsProps
+```
+
+### 1.5.5 Features Delivered
+
+- ✅ Search volume estimation from impression share
+- ✅ Opportunity scoring algorithm
+- ✅ Quick filters: All, High Opportunity, Low Share, Top Performers
+- ✅ Bar, dual metric, and pie chart views
+- ✅ Column picker and pagination
+- ✅ CSV export
+- ✅ Period comparison trends on KPIs
+
+---
+
 ## Phase 2: Market Share & Revenue Tracking (Priority: MEDIUM)
 
 ### 2.1 Feature Description
@@ -691,11 +749,13 @@ WHERE segments.date DURING LAST_30_DAYS
 │                    IMPLEMENTATION ROADMAP                    │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  Week 1-3:  [████████████████████] Phase 1: Products Tab    │
+│  Week 1-3:  [████████████████████] Phase 1: Products Tab  ✅│
 │                                                             │
-│  Week 4-7:  [████████████████████] Phase 2: Market Share    │
+│  Week 3:    [██████████] Phase 1.5: Keywords Insights     ✅│
 │                                                             │
-│  Week 8-9:  [██████████] Phase 3: Competitor Insights       │
+│  Week 4-7:  [░░░░░░░░░░░░░░░░░░░░] Phase 2: Market Share    │
+│                                                             │
+│  Week 8-9:  [░░░░░░░░░░] Phase 3: Competitor Insights       │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -754,31 +814,49 @@ MYSQL_DATABASE=
 
 ---
 
+## Important: ProfitMetrics Integration
+
+**Some accounts use ProfitMetrics**, which means `conversion_value` from Google Ads is **already profit** (Revenue - COGS), not revenue.
+
+### ProfitMetrics Accounts (conversion_value = Profit)
+- **DE - Online Fussmatten** (ID: 1946606314)
+- **FR - Tapis Voiture** (ID: 7539242704)
+- **NL - Just Carpets** (ID: 5756290882)
+
+### Normal Accounts (conversion_value = Revenue)
+- All other accounts
+
+The Products Tab automatically detects this and adjusts calculations:
+- **ProfitMetrics**: POAS = conversion_value / cost (profit on ad spend)
+- **Normal**: Gross Profit = conversion_value - COGS, then POAS = gross_profit / cost
+
+---
+
 ## Next Steps
 
 ### Phase 1 Implementation Order (DRY Approach)
 
 1. ✅ Create this roadmap document
 
-2. 🔲 **Step 1: Sidebar & Navigation**
+2. ✅ **Step 1: Sidebar & Navigation**
    - Add "Products" to sidebar with Package icon
    - Remove "MCC Overview" from sidebar
    - Add route to PageRouter
 
-3. 🔲 **Step 2: Feed Parser Utility**
+3. ✅ **Step 2: Feed Parser Utility**
    - Install `xml2js` package for XML parsing
    - Create `/src/utils/productFeedParser.ts` (fetches both feeds, merges by SKU)
    - Cache merged data in serverCache
 
-4. 🔲 **Step 3: Google Ads Product API**
+4. ✅ **Step 3: Google Ads Product API**
    - Create `/api/products/route.ts` with `shopping_performance_view` query
    - Accept `customerId` and `dateRange` params (from header selectors)
    - Merge with Channable data
    - Calculate profit metrics
 
-5. 🔲 **Step 4: Products UI (RE-USE existing components)**
+5. ✅ **Step 4: Products UI (RE-USE existing components)**
    - Create `ProductsView.tsx`
-   - RE-USE `Charts.tsx` for performance chart
+   - RE-USE chart patterns (recharts AreaChart/BarChart)
    - RE-USE table patterns from `CampaignTable.tsx`
    - RE-USE toggle patterns, KPI card patterns
    - Add Revenue/Profit/Margin toggle
@@ -789,6 +867,7 @@ MYSQL_DATABASE=
    - Test with different date ranges
    - CSV export
    - Loading states (re-use existing)
+   - Verify COGS data matching
 
 ---
 
